@@ -3,7 +3,6 @@ package main
 import "core:encoding/json"
 import "core:fmt"
 import "core:strings"
-import "core:sort"
 import "core:slice"
 import "core:container/queue"
 import "core:c"
@@ -30,127 +29,157 @@ load_config :: proc(config: string, events: ^[dynamic]Event, name_intern: ^strin
 		duration  := ev["dur"].(i64) or_return
 		timestamp := ev["ts"].(i64) or_return
 		tid       := ev["tid"].(i64) or_return
+		pid       := ev["pid"].(i64) or_return
 
 		interned_name, _ := strings.intern_get(name_intern, name)
-		append(events, Event{interned_name, u64(duration), u64(timestamp), u64(tid), 0})
+		append(events, Event{
+			name = interned_name, 
+			duration = u64(duration), 
+			timestamp = u64(timestamp), 
+			thread_id = u64(tid), 
+			process_id = u64(pid), 
+		})
 	}
 	fmt.printf("Ingested config\n")
 
 	return true
 }
 
-process_events :: proc(events: []Event) -> ([]Timeline, u64, u64, int) {
-	threads := make([dynamic]Timeline)
-	thread_map := make(map[u64]int, 0, context.temp_allocator)
-	event_map := make(map[u64][dynamic]Event, 0, context.temp_allocator)
+process_events :: proc(events: []Event) -> ([]Process, u64, u64, int) {
+	processes := make([dynamic]Process)
 
-	for event, idx in events {
-		tm_idx, ok := thread_map[event.thread_id]
-		if !ok {
-			append(&threads, Timeline{
+	process_map := make(map[u64]int, 0, context.temp_allocator)
+
+	for event, _ in events {
+		p_idx, ok1 := process_map[event.process_id]
+		if !ok1 {
+			append(&processes, Process{
 				min_time = c.UINT64_MAX, 
-				max_time = 0, 
 				min_duration = c.UINT64_MAX, 
-				max_duration = 0, 
-				total_duration = 0,
-				thread_id = event.thread_id,
+				process_id = event.process_id,
+				threads = make([dynamic]Thread),
+				thread_map = make(map[u64]int, 0, context.temp_allocator),
 			})
-			tm_idx = len(threads) - 1
-			thread_map[event.thread_id] = tm_idx
-
-			sub_events := make([dynamic]Event)
-			event_map[event.thread_id] = sub_events
+			p_idx = len(processes) - 1
+			process_map[event.process_id] = p_idx
 		}
 
-		tm := &threads[tm_idx]
-		tm.min_time = min(tm.min_time, event.timestamp)
-		tm.max_time = max(tm.max_time, event.timestamp + event.duration)
-		tm.min_duration = min(tm.min_duration, event.duration)
-		tm.max_duration = max(tm.max_duration, event.duration)
-		tm.total_duration += event.duration
+		t_idx, ok2 := processes[p_idx].thread_map[event.thread_id]
+		if !ok2 {
+			threads := &processes[p_idx].threads
 
-		sub_events := &event_map[event.thread_id]
-		append(sub_events, event)
+			append(threads, Thread{ 
+				min_time = c.UINT64_MAX, 
+				min_duration = c.UINT64_MAX, 
+				thread_id = event.thread_id,
+				events = make([dynamic]Event),
+			})
+
+			t_idx = len(threads) - 1
+			processes[p_idx].thread_map[event.thread_id] = t_idx
+		}
+
+		p := &processes[p_idx]
+		p.min_time = min(p.min_time, event.timestamp)
+		p.max_time = max(p.max_time, event.timestamp + event.duration)
+		p.min_duration = min(p.min_duration, event.duration)
+		p.max_duration = max(p.max_duration, event.duration)
+		p.total_duration += event.duration
+
+		t := &p.threads[t_idx]
+		t.min_time = min(t.min_time, event.timestamp)
+		t.max_time = max(t.max_time, event.timestamp + event.duration)
+		t.min_duration = min(t.min_duration, event.duration)
+		t.max_duration = max(t.max_duration, event.duration)
+		t.total_duration += event.duration
+
+		append(&t.events, event)
 	}
 
 	total_min_time : u64 = c.UINT64_MAX
 	total_max_time : u64 = 0
-	for k, v in thread_map {
-		tm := &threads[v]
-		tm.events = event_map[k][:]
-
-		event_sort_proc :: proc(a, b: Event) -> int {
-			switch {
-			case a.timestamp < b.timestamp: return -1
-			case a.timestamp > b.timestamp: return +1
-			}
-			return 0
-		}
-		sort.quick_sort_proc(tm.events, event_sort_proc)
-
-		total_max_time = max(total_max_time, tm.max_time)
-		total_min_time = min(total_min_time, tm.min_time)
-	}
-
-	
-	thread_sort_proc :: proc(a, b: Timeline) -> int {
-		switch {
-		case a.min_time < b.min_time: return -1
-		case a.min_time > b.min_time: return +1
-		}
-		return 0
-	}
-	sort.quick_sort_proc(threads[:], thread_sort_proc)
-
-	// generate depth mapping
 	total_max_depth := 0
-	for tm, t_idx in &threads {
-		ev_stack: queue.Queue(int)
-		queue.init(&ev_stack, 0, context.temp_allocator)
+	for pid, proc_idx in process_map {
+		process := &processes[proc_idx]
 
-		for event, e_idx in &tm.events {
-			cur_start := event.timestamp
-			cur_end   := event.timestamp + event.duration
-			if queue.len(ev_stack) == 0 {
-				queue.push_back(&ev_stack, e_idx)
-			} else {
-				prev_e_idx := queue.get(&ev_stack, queue.len(ev_stack) - 1)
-				prev_ev := tm.events[prev_e_idx]
+		for tm in &process.threads {
+			event_sort_proc :: proc(a, b: Event) -> bool {
+				if a.timestamp < b.timestamp {
+					return true
+				}
+				return false
+			}
+			slice.sort_by(tm.events[:], event_sort_proc)
 
-				prev_start := prev_ev.timestamp
-				prev_end   := prev_ev.timestamp + prev_ev.duration
+			total_max_time = max(total_max_time, process.max_time)
+			total_min_time = min(total_min_time, process.min_time)
+		}
+		
+		tid_sort_proc :: proc(a, b: Thread) -> bool {
+			if a.min_time < b.min_time {
+				return true
+			}
+			return false
+		}
+		slice.sort_by(process.threads[:], tid_sort_proc)
 
-				// if it fits within the parent
-				if cur_start >= prev_start && cur_end <= prev_end {
+		// generate depth mapping
+		for tm in &process.threads {
+			ev_stack: queue.Queue(int)
+			queue.init(&ev_stack, 0, context.temp_allocator)
+
+			for event, e_idx in &tm.events {
+				cur_start := event.timestamp
+				cur_end   := event.timestamp + event.duration
+				if queue.len(ev_stack) == 0 {
 					queue.push_back(&ev_stack, e_idx)
 				} else {
+					prev_e_idx := queue.get(&ev_stack, queue.len(ev_stack) - 1)
+					prev_ev := tm.events[prev_e_idx]
 
-					// while it doesn't overlap the parent
-					for queue.len(ev_stack) > 0 {
-						prev_e_idx = queue.get(&ev_stack, queue.len(ev_stack) - 1)
-						prev_ev = tm.events[prev_e_idx]
+					prev_start := prev_ev.timestamp
+					prev_end   := prev_ev.timestamp + prev_ev.duration
 
-						prev_start = prev_ev.timestamp
-						prev_end   = prev_ev.timestamp + prev_ev.duration
+					// if it fits within the parent
+					if cur_start >= prev_start && cur_end <= prev_end {
+						queue.push_back(&ev_stack, e_idx)
+					} else {
 
-						if cur_start >= prev_start && cur_end >= prev_end {
-							queue.pop_back(&ev_stack)
-						} else {
-							break;
+						// while it doesn't overlap the parent
+						for queue.len(ev_stack) > 0 {
+							prev_e_idx = queue.get(&ev_stack, queue.len(ev_stack) - 1)
+							prev_ev = tm.events[prev_e_idx]
+
+							prev_start = prev_ev.timestamp
+							prev_end   = prev_ev.timestamp + prev_ev.duration
+
+							if cur_start >= prev_start && cur_end >= prev_end {
+								queue.pop_back(&ev_stack)
+							} else {
+								break;
+							}
 						}
+						queue.push_back(&ev_stack, e_idx)
 					}
-					queue.push_back(&ev_stack, e_idx)
 				}
+
+				event.depth = queue.len(ev_stack)
+				tm.max_depth = max(tm.max_depth, event.depth)
 			}
 
-			event.depth = queue.len(ev_stack)
-			tm.max_depth = max(tm.max_depth, event.depth)
+			total_max_depth = max(total_max_depth, tm.max_depth)
 		}
-
-		total_max_depth = max(total_max_depth, tm.max_depth)
 	}
 
-	return threads[:], total_max_time, total_min_time, total_max_depth
+	pid_sort_proc :: proc(a, b: Process) -> bool {
+		if a.min_time < b.min_time {
+			return true
+		}
+		return false
+	}
+	slice.sort_by(processes[:], pid_sort_proc)
+
+	return processes[:], total_max_time, total_min_time, total_max_depth
 }
 
 // default config courtesy of NeGate

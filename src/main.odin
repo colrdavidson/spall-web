@@ -30,7 +30,13 @@ default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,san
 monospace_font := `monospace`
 icon_font      := `FontAwesome`
 
-selected_event := Vec2{-1, -1}
+EventID :: struct {
+	pid: i64,
+	tid: i64,
+	eid: i64,
+}
+
+selected_event := EventID{-1, -1, -1}
 
 scale: f32 = 1
 
@@ -67,7 +73,7 @@ trace_config : string
 
 events: [dynamic]Event
 color_choices: [dynamic]Vec3
-threads: []Timeline
+processes: []Process
 total_max_time: u64
 total_min_time: u64
 total_max_depth: int
@@ -132,7 +138,7 @@ init :: proc() {
 			fmt.printf("Failed to load config!\n")
 			trap()
 		}
-		threads, total_max_time, total_min_time, total_max_depth = process_events(events[:])
+		processes, total_max_time, total_min_time, total_max_depth = process_events(events[:])
 
 		color_choices = make([dynamic]Vec3)
 		for i := 0; i < total_max_depth; i += 1 {
@@ -252,69 +258,80 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// Render flamegraphs
 	clicked_on_rect := false
-	for tm, t_idx in threads {
-		row_text := fmt.tprintf("TID: %d", tm.thread_id)
-		header_text_height := get_text_height(1.25, default_font)
-		draw_text(row_text, Vec2{start_x + 5, cur_y}, 1.25, default_font, text_color)
-		cur_y += header_text_height + (header_text_height / 2)
-
-		if cur_y > info_pane_y {
-			continue
+	for proc_v, p_idx in processes {
+		if len(processes) > 1 {
+			row_text := fmt.tprintf("PID: %d", proc_v.process_id)
+			header_text_height := get_text_height(1.25, default_font)
+			draw_text(row_text, Vec2{start_x + 5, cur_y}, 1.25, default_font, text_color)
+			cur_y += header_text_height + (header_text_height / 2)
 		}
 
-		for event, e_idx in tm.events {
-			cur_start := event.timestamp
-			cur_end   := event.timestamp + event.duration
+		for tm, t_idx in proc_v.threads {
+			row_text := fmt.tprintf("TID: %d", tm.thread_id)
+			header_text_height := get_text_height(1.0625, default_font)
+			draw_text(row_text, Vec2{start_x + 5, cur_y}, 1.0625, default_font, text_color)
+			cur_y += header_text_height + (header_text_height / 2)
 
-			rect_x := rescale(f32(cur_start), f32(start_time), f32(end_time), 0, display_width)
-			rect_end := rescale(f32(cur_end), f32(start_time), f32(end_time), 0, display_width)
-			rect_width := rect_end - rect_x
-
-			y := cur_y + (rect_height * f32(event.depth - 1))
-
-			entry_rect := rect(start_x + rect_x + pan.x, y, rect_width, rect_height)
-			if (entry_rect.pos.y + entry_rect.size.y) < graph_start_y + header_height || 
-				entry_rect.pos.x > (display_width + x_pad_size) ||
-				entry_rect.pos.x + entry_rect.size.x < x_pad_size {
+			if cur_y > info_pane_y {
 				continue
 			}
 
-			rect_color := color_choices[event.depth - 1]
-			if pt_in_rect(mouse_pos, entry_rect) {
-				set_cursor("pointer")
-				if clicked {
-					selected_event = {f32(t_idx), f32(e_idx)}
-					clicked_on_rect = true
-				}
-			}
-			if int(selected_event.x) == t_idx && int(selected_event.y) == e_idx {
-				rect_color.x += 30
-				rect_color.y += 30
-				rect_color.z += 30
-			}
-			draw_rect(entry_rect, 0, rect_color)
+			for event, e_idx in tm.events {
+				cur_start := event.timestamp
+				cur_end   := event.timestamp + event.duration
 
-			text_pad : f32 = 10
-			max_chars := max(0, min(len(event.name), int(math.floor((rect_width - (text_pad * 2)) / ch_width))))
-			name_str := event.name[:max_chars]
+				rect_x := rescale(f32(cur_start), f32(start_time), f32(end_time), 0, display_width)
+				rect_end := rescale(f32(cur_end), f32(start_time), f32(end_time), 0, display_width)
+				rect_width := rect_end - rect_x
 
-			if len(name_str) > 4 || max_chars == len(event.name) {
-				if max_chars != len(event.name) {
-					name_str = fmt.tprintf("%s...", event.name[:max_chars-3])
+				y := cur_y + (rect_height * f32(event.depth - 1))
+
+				entry_rect := rect(start_x + rect_x + pan.x, y, rect_width, rect_height)
+				if (entry_rect.pos.y + entry_rect.size.y) < graph_start_y + header_height || 
+					entry_rect.pos.x > (display_width + x_pad_size) ||
+					entry_rect.pos.x + entry_rect.size.x < x_pad_size {
+					continue
 				}
 
-				ev_width := measure_text(name_str, 1, monospace_font)
-				ev_height := get_text_height(1, monospace_font)
-				draw_text(name_str, Vec2{(start_x + rect_x + pan.x) + (rect_width / 2) - (ev_width / 2), y + (rect_height / 2) - (ev_height / 2)}, 1, monospace_font, text_color3)
+				rect_color := color_choices[event.depth - 1]
+				if pt_in_rect(mouse_pos, entry_rect) {
+					set_cursor("pointer")
+					if clicked {
+						selected_event = {i64(p_idx), i64(t_idx), i64(e_idx)}
+						clicked_on_rect = true
+					}
+				}
+				if int(selected_event.pid) == p_idx && 
+				   int(selected_event.tid) == t_idx && 
+				   int(selected_event.eid) == e_idx {
+					rect_color.x += 30
+					rect_color.y += 30
+					rect_color.z += 30
+				}
+				draw_rect(entry_rect, 0, rect_color)
+
+				text_pad : f32 = 10
+				max_chars := max(0, min(len(event.name), int(math.floor((rect_width - (text_pad * 2)) / ch_width))))
+				name_str := event.name[:max_chars]
+
+				if len(name_str) > 4 || max_chars == len(event.name) {
+					if max_chars != len(event.name) {
+						name_str = fmt.tprintf("%s...", event.name[:max_chars-3])
+					}
+
+					ev_width := measure_text(name_str, 1, monospace_font)
+					ev_height := get_text_height(1, monospace_font)
+					draw_text(name_str, Vec2{(start_x + rect_x + pan.x) + (rect_width / 2) - (ev_width / 2), y + (rect_height / 2) - (ev_height / 2)}, 1, monospace_font, text_color3)
+				}
+
 			}
 
+			cur_y += ((f32(tm.max_depth) * rect_height) + thread_gap)
 		}
-
-		cur_y += ((f32(tm.max_depth) * rect_height) + thread_gap)
 	}
 
 	if clicked && !clicked_on_rect {
-		selected_event = {-1, -1}
+		selected_event = {-1, -1, -1}
 	}
 
 
@@ -348,9 +365,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	info_pane_y += y_pad_size
 
-	if selected_event.x != -1 && selected_event.y != -1 {
-		t_idx := int(selected_event.x)
-		e_idx := int(selected_event.y)
+	if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.eid != -1 {
+		p_idx := int(selected_event.pid)
+		t_idx := int(selected_event.tid)
+		e_idx := int(selected_event.eid)
 
 		y := info_pane_y
 		next_line := proc(y: ^f32) -> f32 {
@@ -367,7 +385,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			}
 		}
 
-		event := threads[t_idx].events[e_idx]
+		event := processes[p_idx].threads[t_idx].events[e_idx]
 		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
 		draw_text(fmt.tprintf("start time: %s ", time_fmt(event.timestamp)), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
 
