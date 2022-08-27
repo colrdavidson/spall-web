@@ -31,12 +31,14 @@ monospace_font := `monospace`
 icon_font      := `FontAwesome`
 
 scale: f32 = 1
+scroll_y: f32 = 0
 
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
 pan            := Vec2{}
 scroll_velocity: f32 = 0
+zoom_velocity: f32 = 0
 
 is_mouse_down := false
 clicked       := false
@@ -61,9 +63,11 @@ text_height    : f32 = 0
 line_gap       : f32 = 0
 
 events: [dynamic]Event
+color_choices: [dynamic]Vec3
 threads: []Timeline
 total_max_time: u64
 total_min_time: u64
+total_max_depth: int
 
 @export
 set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
@@ -72,7 +76,7 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 		bg_color2     = Vec3{0,     0,   0}
 		text_color    = Vec3{255, 255, 255}
 		text_color2   = Vec3{180, 180, 180}
-		text_color3   = Vec3{180, 180, 180}
+		text_color3   = Vec3{0,     0,   0}
 		button_color  = Vec3{40,   40,  40}
 		button_color2 = Vec3{20,   20,  20}
 		line_color    = Vec3{100, 100, 100}
@@ -83,7 +87,7 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 		bg_color2     = Vec3{255, 255, 255}
 		text_color    = Vec3{0,     0,   0}
 		text_color2   = Vec3{80,   80,  80}
-		text_color3   = Vec3{250, 250, 250}
+		text_color3   = Vec3{0, 0, 0}
 		button_color  = Vec3{141, 119, 104}
 		button_color2 = Vec3{191, 169, 154}
 		line_color    = Vec3{150, 150, 150}
@@ -114,10 +118,19 @@ main :: proc() {
 		fmt.printf("Failed to load config!\n")
 		trap()
 	}
-	threads, total_max_time, total_min_time = process_events(events[:])
+	threads, total_max_time, total_min_time, total_max_depth = process_events(events[:])
 
 	// clear memory consumed by json parser
 	free_all(context.temp_allocator)
+
+	color_choices = make([dynamic]Vec3)
+	for i := 0; i < total_max_depth; i += 1 {
+		r := f32(205 + rand_int(0, 50))
+		g := f32(0 + rand_int(0, 230))
+		b := f32(0 + rand_int(0, 55))
+
+		append(&color_choices, Vec3{r, g, b})
+	}
 
 	t = 0
 	frame_count = 0
@@ -144,16 +157,23 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		clicked = false
 	}
 	defer scroll_velocity = 0
+	defer zoom_velocity = 0
 	defer is_hovering = false
 
     t += dt
 
-	// compute render scale
+	// compute scale + scroll
 	MIN_SCALE :: 0.1
 	MAX_SCALE :: 386
+
+	MIN_SCROLL :: 0
+	MAX_SCROLL :: 10000 // cheating
 	if pt_in_rect(mouse_pos, rect(0, toolbar_height, width, height - toolbar_height)) {
-		scale *= 1 + (0.05 * scroll_velocity * dt)
+		scale *= 1 + (0.1 * zoom_velocity * dt)
 		scale = min(max(scale, MIN_SCALE), MAX_SCALE)
+
+		scroll_y += 50 * scroll_velocity * dt
+		scroll_y = min(max(scroll_y, MIN_SCROLL), MAX_SCROLL)
 	}
 
     canvas_clear()
@@ -162,27 +182,32 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(0, toolbar_height, width, height), 0, bg_color2)
 
 	// Render flamegraph
+	header_pad : f32 = 10
+	top_line_gap : f32 = 7
+	thread_gap : f32 = 8
+	normal_text_height := get_text_height(1, default_font)
+	rect_height := normal_text_height + 5
+
 	start_x := pad_size
 	start_y := toolbar_height + pad_size
 	end_x := width - pad_size
 	end_y := height - pad_size
 
-	graph_start_y := start_y + pad_size
-
-	cur_y := graph_start_y
+	graph_start_y := start_y
+	header_height := top_line_gap + normal_text_height
+	cur_y := graph_start_y + header_height + header_pad - scroll_y
 	max_x := width - pad_size
 	display_width := width - (pad_size * 2)
 
-	thread_gap : f32 = 8
-	rect_height : f32 = 18
+	ch_width := measure_text("a", 1, monospace_font)
 
 	start_time := f32(total_min_time) / scale
 	end_time   := f32(total_max_time) / scale
 	for tm, t_idx in threads {
 		row_text := fmt.tprintf("TID: %d", tm.thread_id)
-		text_height := get_text_height(1.25, default_font)
+		header_text_height := get_text_height(1.25, default_font)
 		draw_text(row_text, Vec2{start_x + 5, cur_y}, 1.25, default_font, text_color)
-		cur_y += text_height + (text_height / 2)
+		cur_y += header_text_height + (header_text_height / 2)
 
 		for event, e_idx in tm.events {
 			cur_start := event.timestamp
@@ -191,10 +216,20 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			rect_x := rescale(f32(cur_start), f32(start_time), f32(end_time), 0, display_width)
 			rect_end := rescale(f32(cur_end), f32(start_time), f32(end_time), 0, display_width)
 			rect_width := rect_end - rect_x
-			color := f32(((event.depth + 1) * 25) %% 255)
+
 
 			y := cur_y + (rect_height * f32(event.depth - 1))
-			draw_rect(rect(start_x + rect_x, y, rect_width, rect_height), 0, Vec3{30, color, 30})
+
+			draw_rect(rect(start_x + rect_x, y, rect_width, rect_height), 0, color_choices[event.depth - 1])
+
+			max_chars := min(len(event.name), int(math.floor(rect_width / ch_width)))
+			name_str := event.name[0:max_chars]
+
+			if len(name_str) > 10 || max_chars == len(event.name) {
+				ev_width := measure_text(name_str, 1, monospace_font)
+				ev_height := get_text_height(1, monospace_font)
+				draw_text(name_str, Vec2{(start_x + rect_x) + (rect_width / 2) - (ev_width / 2), y + (rect_height / 2) - (ev_height / 2)}, 1, monospace_font, text_color3)
+			}
 
 		}
 
@@ -205,19 +240,26 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(0, toolbar_height, pad_size, height), 0, bg_color2)
     draw_rect(rect(max_x, toolbar_height, width, height), 0, bg_color2)
     draw_rect(rect(0, height - pad_size, width, height), 0, bg_color2)
+    draw_rect(rect(0, toolbar_height, width, pad_size + header_height), 0, bg_color2)
 
-	//max_displayed_time := total_max_time / end_time
-	top_offset : f32 = 7
 	slice_count := 5
-	for i := 0; i < slice_count; i += 1 {
+	max_time := rescale(f32(slice_count), 0, f32(slice_count), start_time, end_time)
+	for i := 0; i <= slice_count; i += 1 {
 		off_x := f32(i) * (f32(display_width) / f32(slice_count))
-		cur_time :=  f32(i) * (end_time / f32(slice_count))
 
-		time_str := fmt.tprintf("%f ms", cur_time)
+		cur_time := rescale(f32(i), 0, f32(slice_count), start_time, end_time)
+
+		time_str: string
+		if max_time < 5000 {
+			time_str = fmt.tprintf("%.1f μs", cur_time)
+		} else {
+			cur_time = cur_time / 1000
+			time_str = fmt.tprintf("%.1f ms", cur_time)
+		}
+
 		text_width := measure_text(time_str, 1, default_font)
-		text_height := get_text_height(1, default_font)
-		draw_text(time_str, Vec2{start_x + off_x - (text_width / 2), graph_start_y - top_offset - text_height}, 1, default_font, text_color)
-		draw_line(Vec2{start_x + off_x, graph_start_y}, Vec2{start_x + off_x, end_y}, 1, line_color)
+		draw_text(time_str, Vec2{start_x + off_x - (text_width / 2), graph_start_y}, 1, default_font, text_color)
+		draw_line(Vec2{start_x + off_x, graph_start_y + header_height}, Vec2{start_x + off_x, end_y}, 1, line_color)
 	}
 
 	// Render toolbar background
@@ -274,12 +316,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// Render debug info
 	seed_str := fmt.tprintf("Seed: 0x%X", random_seed)
 	seed_width := measure_text(seed_str, 1, monospace_font)
+	text_height := get_text_height(1, monospace_font)
 	draw_text(seed_str, Vec2{width - seed_width - 10, height - text_height - 24}, 1, monospace_font, text_color2)
 
 	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
 	hash_width := measure_text(hash_str, 1, monospace_font)
 	draw_text(hash_str, Vec2{width - hash_width - 10, height - text_height - 10}, 1, monospace_font, text_color2)
-    return false
+    return true
 }
 
 pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {

@@ -30,7 +30,7 @@ load_config :: proc(config: string, events: ^[dynamic]Event) -> bool {
 	return true
 }
 
-process_events :: proc(events: []Event) -> ([]Timeline, u64, u64) {
+process_events :: proc(events: []Event) -> ([]Timeline, u64, u64, int) {
 	threads := make([dynamic]Timeline)
 	thread_map := make(map[u64]int, 0, context.temp_allocator)
 	event_map := make(map[u64][dynamic]Event, 0, context.temp_allocator)
@@ -94,11 +94,11 @@ process_events :: proc(events: []Event) -> ([]Timeline, u64, u64) {
 	sort.quick_sort_proc(threads[:], thread_sort_proc)
 
 	// generate depth mapping
+	total_max_depth := 0
 	for tm, t_idx in &threads {
 		ev_stack: queue.Queue(int)
 		queue.init(&ev_stack, 0, context.temp_allocator)
 
-		max_depth := 0
 		for event, e_idx in &tm.events {
 			cur_start := event.timestamp
 			cur_end   := event.timestamp + event.duration
@@ -137,9 +137,11 @@ process_events :: proc(events: []Event) -> ([]Timeline, u64, u64) {
 			event.depth = queue.len(ev_stack)
 			tm.max_depth = max(tm.max_depth, event.depth)
 		}
+
+		total_max_depth = max(total_max_depth, tm.max_depth)
 	}
 
-	return threads[:], total_max_time, total_min_time
+	return threads[:], total_max_time, total_min_time, total_max_depth
 }
 
 // courtesy of NeGate

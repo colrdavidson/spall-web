@@ -4,6 +4,8 @@ import "core:mem"
 import "core:runtime"
 import "core:fmt"
 
+shift_down := false
+
 @export
 set_text_height :: proc "contextless" (height: f32) {
 	text_height = height
@@ -35,19 +37,33 @@ mouse_up :: proc "contextless" (x, y: f32) {
 
 @export
 scroll :: proc "contextless" (x, y: f32) {
-	scroll_velocity = y
+	if shift_down {
+		zoom_velocity = y
+	} else {
+		scroll_velocity = y
+	}
 }
 
 @export
 zoom :: proc "contextless" (x, y: f32) {
-	scroll_velocity = y
+	zoom_velocity = y
 }
 
 @export
-key_down :: proc "contextless" (key: int) { }
+key_down :: proc "contextless" (key: int) { 
+	switch key {
+	case 1: // left-shift
+		shift_down = true
+	}
+}
 
 @export
-key_up :: proc "contextless" (key: int) { }
+key_up :: proc "contextless" (key: int) {
+	switch key {
+	case 1: // left-shift
+		shift_down = false
+	}
+}
 
 @export
 text_input :: proc "contextless" (key, code: string) { }
