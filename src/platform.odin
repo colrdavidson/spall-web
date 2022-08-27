@@ -37,11 +37,7 @@ mouse_up :: proc "contextless" (x, y: f32) {
 
 @export
 scroll :: proc "contextless" (x, y: f32) {
-	if shift_down {
-		zoom_velocity = y
-	} else {
-		scroll_velocity = y
-	}
+	zoom_velocity = y
 }
 
 @export
@@ -50,20 +46,10 @@ zoom :: proc "contextless" (x, y: f32) {
 }
 
 @export
-key_down :: proc "contextless" (key: int) { 
-	switch key {
-	case 1: // left-shift
-		shift_down = true
-	}
-}
+key_down :: proc "contextless" (key: int) { }
 
 @export
-key_up :: proc "contextless" (key: int) {
-	switch key {
-	case 1: // left-shift
-		shift_down = false
-	}
-}
+key_up :: proc "contextless" (key: int) { }
 
 @export
 text_input :: proc "contextless" (key, code: string) { }
@@ -80,10 +66,6 @@ temp_allocate :: proc(n: int) -> rawptr {
 // This is gross..
 @export
 loaded_session_result :: proc "contextless" (key, val: string) {
-	switch key {
-	case "muted":
-		muted = (val == "true")
-	}
 }
 
 @export

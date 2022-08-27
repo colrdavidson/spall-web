@@ -49,8 +49,7 @@ is_hovering   := false
 hash := 0
 
 first_frame := true
-muted := false
-running := false
+config_updated := false
 colormode := ColorMode.Dark
 
 ColorMode :: enum {
@@ -63,6 +62,8 @@ pad_size       : f32 = 40
 toolbar_height : f32 = 40
 text_height    : f32 = 0
 line_gap       : f32 = 0
+
+trace_config : string
 
 events: [dynamic]Event
 color_choices: [dynamic]Vec3
@@ -104,6 +105,49 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 	}
 }
 
+@export
+update_config :: proc "contextless" (data: string) {
+	context = wasmContext
+
+	trace_config = data
+	config_updated = true
+
+	fmt.printf("Got a config!\n")
+	reset_everything()
+}
+
+reset_everything :: proc() {
+	free_all(context.allocator)
+	free_all(context.temp_allocator)
+	init()
+}
+
+init :: proc() {
+	events = make([dynamic]Event)	
+
+	if config_updated {
+		if ok := load_config(trace_config, &events); !ok {
+			fmt.printf("Failed to load config!\n")
+			trap()
+		}
+		threads, total_max_time, total_min_time, total_max_depth = process_events(events[:])
+
+		color_choices = make([dynamic]Vec3)
+		for i := 0; i < total_max_depth; i += 1 {
+			r := f32(205 + rand_int(0, 50))
+			g := f32(0 + rand_int(0, 230))
+			b := f32(0 + rand_int(0, 55))
+
+			append(&color_choices, Vec3{r, g, b})
+		}
+
+		config_updated = false
+	}
+
+	t = 0
+	frame_count = 0
+}
+
 main :: proc() {
 	global_data, _ := js.page_alloc(1000)
 	temp_data, _ := js.page_alloc(1000)
@@ -115,27 +159,7 @@ main :: proc() {
 
     context = wasmContext
 
-	events = make([dynamic]Event)	
-	if ok := load_config(trace_config, &events); !ok {
-		fmt.printf("Failed to load config!\n")
-		trap()
-	}
-	threads, total_max_time, total_min_time, total_max_depth = process_events(events[:])
-
-	// clear memory consumed by json parser
-	free_all(context.temp_allocator)
-
-	color_choices = make([dynamic]Vec3)
-	for i := 0; i < total_max_depth; i += 1 {
-		r := f32(205 + rand_int(0, 50))
-		g := f32(0 + rand_int(0, 230))
-		b := f32(0 + rand_int(0, 55))
-
-		append(&color_choices, Vec3{r, g, b})
-	}
-
-	t = 0
-	frame_count = 0
+	init()
 }
 
 random_seed: u64

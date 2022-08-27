@@ -424,6 +424,25 @@
 				window.wasm.scroll(x, y);
 				wakeUp();
 			}, { passive: false });
+			canvas.addEventListener('dragover', e => {
+				e.preventDefault();
+			});
+			canvas.addEventListener('drop', e => {
+				e.preventDefault();
+
+				if (e.dataTransfer.items) {
+					[...e.dataTransfer.items].forEach((item, i) => {
+						if (item.kind === "file") {
+							let file = item.getAsFile();
+							let file_text_prom = file.text()
+							Promise.resolve(file_text_prom).then((v) => {
+								let file_str = str(v);
+								window.wasm.update_config(...file_str);
+							});
+						}
+					});
+				}
+			});
 			window.addEventListener('blur', () => {
 				window.wasm.blur();
 				wakeUp();
