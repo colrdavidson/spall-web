@@ -217,10 +217,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// compute scale + scroll
 	MIN_SCALE :: 0.1
-	MAX_SCALE :: 386
-
-	MIN_SCROLL :: 0
-	MAX_SCROLL :: 10000 // cheating
+	MAX_SCALE :: 1000
 	if pt_in_rect(mouse_pos, rect(0, toolbar_height, width, height - toolbar_height)) {
 		scale *= 1 + (0.1 * zoom_velocity * dt)
 		scale = min(max(scale, MIN_SCALE), MAX_SCALE)
@@ -292,10 +289,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			}
 			draw_rect(entry_rect, 0, rect_color)
 
-			max_chars := min(len(event.name), int(math.floor(rect_width / ch_width)))
-			name_str := event.name[0:max_chars]
+			text_pad : f32 = 10
+			max_chars := max(0, min(len(event.name), int(math.floor((rect_width - (text_pad * 2)) / ch_width))))
+			name_str := event.name[:max_chars]
 
-			if len(name_str) > 10 || max_chars == len(event.name) {
+			if len(name_str) > 4 || max_chars == len(event.name) {
+				if max_chars != len(event.name) {
+					name_str = fmt.tprintf("%s...", event.name[:max_chars-3])
+				}
+
 				ev_width := measure_text(name_str, 1, monospace_font)
 				ev_height := get_text_height(1, monospace_font)
 				draw_text(name_str, Vec2{(start_x + rect_x + pan.x) + (rect_width / 2) - (ev_width / 2), y + (rect_height / 2) - (ev_height / 2)}, 1, monospace_font, text_color3)

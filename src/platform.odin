@@ -52,12 +52,12 @@ mouse_up :: proc "contextless" (x, y: f32) {
 
 @export
 scroll :: proc "contextless" (x, y: f32) {
-	zoom_velocity = y
+	zoom_velocity += y
 }
 
 @export
 zoom :: proc "contextless" (x, y: f32) {
-	zoom_velocity = y
+	zoom_velocity += y
 }
 
 @export
