@@ -1,0 +1,58 @@
+{
+    "version": "2.0.0",
+    // "windows": {
+    //     "options": {
+    //         "shell": {
+    //             "executable": "cmd.exe",
+    //             "args": [
+    //                 "/C", "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\Tools\\VsDevCmd.bat\"",
+    //                 "&&"
+    //             ]
+    //         }
+    //     }
+    // },
+    "tasks": [
+        {
+            "label": "Build App",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "build.py"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Build App (Release)",
+            "group": {
+                "kind": "build"
+            },
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "build.py", "release"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
+        },
+        {
+            "label": "Launch Server",
+            "type": "process",
+            "command": "python",
+            "args": [
+                "-m",
+                "http.server", "8000"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/build/dist"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
