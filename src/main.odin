@@ -30,6 +30,8 @@ default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,san
 monospace_font := `monospace`
 icon_font      := `FontAwesome`
 
+selected_event := Vec2{-1, -1}
+
 scale: f32 = 1
 scroll_y: f32 = 0
 
@@ -203,6 +205,16 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	start_time := f32(total_min_time) / scale
 	end_time   := f32(total_max_time) / scale
+
+	// draw lines for time markings
+	slice_count := 10
+	max_time := rescale(f32(slice_count), 0, f32(slice_count), start_time, end_time)
+	for i := 0; i <= slice_count; i += 1 {
+		off_x := f32(i) * (f32(display_width) / f32(slice_count))
+		draw_line(Vec2{start_x + off_x, graph_start_y + header_height}, Vec2{start_x + off_x, end_y}, 0.5, line_color)
+	}
+
+	clicked_on_rect := false
 	for tm, t_idx in threads {
 		row_text := fmt.tprintf("TID: %d", tm.thread_id)
 		header_text_height := get_text_height(1.25, default_font)
@@ -217,10 +229,25 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			rect_end := rescale(f32(cur_end), f32(start_time), f32(end_time), 0, display_width)
 			rect_width := rect_end - rect_x
 
-
 			y := cur_y + (rect_height * f32(event.depth - 1))
 
-			draw_rect(rect(start_x + rect_x, y, rect_width, rect_height), 0, color_choices[event.depth - 1])
+			entry_rect := rect(start_x + rect_x, y, rect_width, rect_height)
+			rect_color := color_choices[event.depth - 1]
+			if pt_in_rect(mouse_pos, entry_rect) {
+				set_cursor("pointer")
+				if clicked {
+					selected_event = {f32(t_idx), f32(e_idx)}
+					clicked_on_rect = true
+				}
+			}
+
+			if int(selected_event.x) == t_idx && int(selected_event.y) == e_idx {
+				rect_color.x += 30
+				rect_color.y += 30
+				rect_color.z += 30
+			}
+
+			draw_rect(entry_rect, 0, rect_color)
 
 			max_chars := min(len(event.name), int(math.floor(rect_width / ch_width)))
 			name_str := event.name[0:max_chars]
@@ -235,15 +262,19 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		cur_y += ((f32(tm.max_depth) * rect_height) + thread_gap)
 	}
+	if clicked && !clicked_on_rect {
+		selected_event = {-1, -1}
+	}
+
+	info_pane_height : f32 = 100
+	info_pane_y := height - pad_size - info_pane_height
 
 	// Chop sides of screen
-    draw_rect(rect(0, toolbar_height, pad_size, height), 0, bg_color2)
-    draw_rect(rect(max_x, toolbar_height, width, height), 0, bg_color2)
-    draw_rect(rect(0, height - pad_size, width, height), 0, bg_color2)
-    draw_rect(rect(0, toolbar_height, width, pad_size + header_height), 0, bg_color2)
+    draw_rect(rect(0, toolbar_height, width, pad_size + header_height), 0, bg_color2) // top
+    draw_rect(rect(max_x, toolbar_height, width, height), 0, bg_color2) // right
+    draw_rect(rect(0, toolbar_height, pad_size, height), 0, bg_color2) // left
+    draw_rect(rect(0, info_pane_y - pad_size, width, height), 0, bg_color2) // bottom
 
-	slice_count := 5
-	max_time := rescale(f32(slice_count), 0, f32(slice_count), start_time, end_time)
 	for i := 0; i <= slice_count; i += 1 {
 		off_x := f32(i) * (f32(display_width) / f32(slice_count))
 
@@ -259,7 +290,37 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		text_width := measure_text(time_str, 1, default_font)
 		draw_text(time_str, Vec2{start_x + off_x - (text_width / 2), graph_start_y}, 1, default_font, text_color)
-		draw_line(Vec2{start_x + off_x, graph_start_y + header_height}, Vec2{start_x + off_x, end_y}, 1, line_color)
+	}
+
+	// Render info pane
+	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
+
+	info_pane_y += pad_size
+
+	if selected_event.x != -1 && selected_event.y != -1 {
+		t_idx := int(selected_event.x)
+		e_idx := int(selected_event.y)
+
+		y := info_pane_y
+		next_line := proc(y: ^f32) -> f32 {
+			res := y^
+			y^ += text_height + line_gap
+			return res
+		}
+
+		time_fmt :: proc(time: u64) -> string {
+			if time < 1000 {
+				return fmt.tprintf("%d μs", time)
+			} else {
+				return fmt.tprintf("%.1f ms", f32(time) / 1000)
+			}
+		}
+
+		event := threads[t_idx].events[e_idx]
+		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
+		draw_text(fmt.tprintf("start time: %s ", time_fmt(event.timestamp)), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
+
+		draw_text(fmt.tprintf("duration: %s", time_fmt(event.duration)), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
 	}
 
 	// Render toolbar background
@@ -346,30 +407,5 @@ button :: proc(in_rect: Rect, text: string, font: string) -> bool {
 			return true
 		}
 	}
-	return false
-}
-
-tab :: proc(in_rect: Rect, text: string, font: string, selected: bool) -> bool {
-	text_width := measure_text(text, 1, font)
-	text_height = get_text_height(1, font)
-
-	if selected {
-		draw_rect(in_rect, 0, button_color)
-		draw_rect_outline(in_rect, 1, button_color)
-		draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, 1, font, text_color3)
-	} else {
-		draw_rect(in_rect, 0, button_color2)
-		draw_rect_outline(in_rect, 1, button_color2)
-		draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, 1, font, text_color)
-	}
-
-
-	if pt_in_rect(mouse_pos, in_rect) && !selected {
-		set_cursor("pointer")
-		if clicked {
-			return true
-		}
-	}
-
 	return false
 }
