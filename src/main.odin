@@ -294,6 +294,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
+    draw_rect(rect(0, info_pane_y, width, height), 0, bg_color) // bottom
 
 	info_pane_y += pad_size
 
