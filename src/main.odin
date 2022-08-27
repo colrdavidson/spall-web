@@ -270,7 +270,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			y := cur_y + (rect_height * f32(event.depth - 1))
 
 			entry_rect := rect(start_x + rect_x + pan.x, y, rect_width, rect_height)
-			if entry_rect.pos.x > (display_width + pad_size) {
+			if (entry_rect.pos.y + entry_rect.size.y) < graph_start_y + header_height || 
+				entry_rect.pos.x > (display_width + pad_size) ||
+				entry_rect.pos.x + entry_rect.size.x < pad_size {
 				continue
 			}
 
@@ -307,6 +309,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		cur_y += ((f32(tm.max_depth) * rect_height) + thread_gap)
 	}
+
 	if clicked && !clicked_on_rect {
 		selected_event = {-1, -1}
 	}
