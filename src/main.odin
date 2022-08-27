@@ -33,7 +33,6 @@ icon_font      := `FontAwesome`
 selected_event := Vec2{-1, -1}
 
 scale: f32 = 1
-scroll_y: f32 = 0
 
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
@@ -188,26 +187,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     t += dt
 
-	// compute scale + scroll
-	MIN_SCALE :: 0.1
-	MAX_SCALE :: 386
-
-	MIN_SCROLL :: 0
-	MAX_SCROLL :: 10000 // cheating
-	if pt_in_rect(mouse_pos, rect(0, toolbar_height, width, height - toolbar_height)) {
-		scale *= 1 + (0.1 * zoom_velocity * dt)
-		scale = min(max(scale, MIN_SCALE), MAX_SCALE)
-
-		scroll_y += 50 * scroll_velocity * dt
-		scroll_y = min(max(scroll_y, MIN_SCROLL), MAX_SCROLL)
-	}
-
-    canvas_clear()
-
-	// Render background
-    draw_rect(rect(0, toolbar_height, width, height), 0, bg_color2)
-
-	// Render flamegraph
 	header_pad : f32 = 10
 	top_line_gap : f32 = 7
 	thread_gap : f32 = 8
@@ -224,7 +203,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	graph_start_y := start_y
 	header_height := top_line_gap + normal_text_height
-	cur_y := graph_start_y + header_height + header_pad - scroll_y
+	cur_y := graph_start_y + header_height + header_pad - pan.y
 	max_x := width - pad_size
 	display_width := width - (pad_size * 2)
 
@@ -232,6 +211,33 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	start_time := f32(total_min_time) / scale
 	end_time   := f32(total_max_time) / scale
+
+	// compute scale + scroll
+	MIN_SCALE :: 0.1
+	MAX_SCALE :: 386
+
+	MIN_SCROLL :: 0
+	MAX_SCROLL :: 10000 // cheating
+	if pt_in_rect(mouse_pos, rect(0, toolbar_height, width, height - toolbar_height)) {
+		scale *= 1 + (0.1 * zoom_velocity * dt)
+		scale = min(max(scale, MIN_SCALE), MAX_SCALE)
+	}
+
+	// compute pan
+	pan_delta := Vec2{}
+	if is_mouse_down {
+		if pt_in_rect(clicked_pos, rect(0, toolbar_height, display_width, info_pane_y)) {
+			pan_delta = mouse_pos - last_mouse_pos
+		}
+		last_mouse_pos = mouse_pos
+	}
+	pan.x += pan_delta.x
+	pan.y -= pan_delta.y
+
+    canvas_clear()
+
+	// Render background
+    draw_rect(rect(0, toolbar_height, width, height), 0, bg_color2)
 
 	// draw lines for time markings
 	slice_count := 10
@@ -241,6 +247,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		draw_line(Vec2{start_x + off_x, graph_start_y + header_height}, Vec2{start_x + off_x, end_y}, 0.5, line_color)
 	}
 
+	// Render flamegraphs
 	clicked_on_rect := false
 	for tm, t_idx in threads {
 		row_text := fmt.tprintf("TID: %d", tm.thread_id)
@@ -262,7 +269,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			y := cur_y + (rect_height * f32(event.depth - 1))
 
-			entry_rect := rect(start_x + rect_x, y, rect_width, rect_height)
+			entry_rect := rect(start_x + rect_x + pan.x, y, rect_width, rect_height)
 			if entry_rect.pos.x > display_width {
 				continue
 			}
@@ -288,7 +295,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			if len(name_str) > 10 || max_chars == len(event.name) {
 				ev_width := measure_text(name_str, 1, monospace_font)
 				ev_height := get_text_height(1, monospace_font)
-				draw_text(name_str, Vec2{(start_x + rect_x) + (rect_width / 2) - (ev_width / 2), y + (rect_height / 2) - (ev_height / 2)}, 1, monospace_font, text_color3)
+				draw_text(name_str, Vec2{(start_x + rect_x + pan.x) + (rect_width / 2) - (ev_width / 2), y + (rect_height / 2) - (ev_height / 2)}, 1, monospace_font, text_color3)
 			}
 
 		}
@@ -309,7 +316,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	for i := 0; i <= slice_count; i += 1 {
 		off_x := f32(i) * (f32(display_width) / f32(slice_count))
 
-		cur_time := rescale(f32(i), 0, f32(slice_count), start_time, end_time)
+		time_off := rescale(pan.x, 0, display_width, f32(total_min_time), f32(total_max_time))
+		cur_time := rescale(f32(i), 0, f32(slice_count), start_time, end_time) - (time_off / scale)
 
 		time_str: string
 		if max_time < 5000 {
