@@ -158,6 +158,9 @@ main :: proc() {
 
     context = wasmContext
 
+	trace_config = default_config
+	config_updated = true
+
 	init()
 }
 
@@ -270,7 +273,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			y := cur_y + (rect_height * f32(event.depth - 1))
 
 			entry_rect := rect(start_x + rect_x + pan.x, y, rect_width, rect_height)
-			if entry_rect.pos.x > display_width {
+			if entry_rect.pos.x > (display_width + pad_size) {
 				continue
 			}
 
