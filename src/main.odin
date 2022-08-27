@@ -214,6 +214,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	normal_text_height := get_text_height(1, default_font)
 	rect_height := normal_text_height + 5
 
+	info_pane_height : f32 = 100
+	info_pane_y := height - pad_size - info_pane_height
+
 	start_x := pad_size
 	start_y := toolbar_height + pad_size
 	end_x := width - pad_size
@@ -245,6 +248,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		draw_text(row_text, Vec2{start_x + 5, cur_y}, 1.25, default_font, text_color)
 		cur_y += header_text_height + (header_text_height / 2)
 
+		if cur_y > info_pane_y {
+			continue
+		}
+
 		for event, e_idx in tm.events {
 			cur_start := event.timestamp
 			cur_end   := event.timestamp + event.duration
@@ -253,13 +260,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			rect_end := rescale(f32(cur_end), f32(start_time), f32(end_time), 0, display_width)
 			rect_width := rect_end - rect_x
 
-			if rect_x > display_width {
-				continue
-			}
-
 			y := cur_y + (rect_height * f32(event.depth - 1))
 
 			entry_rect := rect(start_x + rect_x, y, rect_width, rect_height)
+			if entry_rect.pos.x > display_width {
+				continue
+			}
+
 			rect_color := color_choices[event.depth - 1]
 			if pt_in_rect(mouse_pos, entry_rect) {
 				set_cursor("pointer")
@@ -268,13 +275,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					clicked_on_rect = true
 				}
 			}
-
 			if int(selected_event.x) == t_idx && int(selected_event.y) == e_idx {
 				rect_color.x += 30
 				rect_color.y += 30
 				rect_color.z += 30
 			}
-
 			draw_rect(entry_rect, 0, rect_color)
 
 			max_chars := min(len(event.name), int(math.floor(rect_width / ch_width)))
@@ -294,8 +299,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		selected_event = {-1, -1}
 	}
 
-	info_pane_height : f32 = 100
-	info_pane_y := height - pad_size - info_pane_height
 
 	// Chop sides of screen
     draw_rect(rect(0, toolbar_height, width, pad_size + header_height), 0, bg_color2) // top
