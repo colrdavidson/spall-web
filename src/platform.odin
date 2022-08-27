@@ -12,9 +12,16 @@ set_text_height :: proc "contextless" (height: f32) {
 	line_gap = height + (height * (3/4))
 }
 
+// eww, this is not a good way to do it
+last_frame_count := 0
+
 @export
 mouse_move :: proc "contextless" (x, y: f32) {
-	last_mouse_pos = mouse_pos
+	if frame_count != last_frame_count {
+		last_mouse_pos = mouse_pos
+		last_frame_count = frame_count
+	}
+
 	mouse_pos = Vec2{x, y}
 }
 
@@ -22,7 +29,11 @@ mouse_move :: proc "contextless" (x, y: f32) {
 mouse_down :: proc "contextless" (x, y: f32) {
 	is_mouse_down = true
 	mouse_pos = Vec2{x, y}
-	last_mouse_pos = mouse_pos
+
+	if frame_count != last_frame_count {
+		last_mouse_pos = mouse_pos
+		last_frame_count = frame_count
+	}
 
 	clicked = true
 	clicked_pos = mouse_pos
@@ -31,7 +42,11 @@ mouse_down :: proc "contextless" (x, y: f32) {
 @export
 mouse_up :: proc "contextless" (x, y: f32) {
 	is_mouse_down = false
-	last_mouse_pos = mouse_pos
+
+	if frame_count != last_frame_count {
+		last_mouse_pos = mouse_pos
+		last_frame_count = frame_count
+	}
 	mouse_pos = Vec2{x, y}
 }
 
