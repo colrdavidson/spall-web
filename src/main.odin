@@ -57,7 +57,8 @@ ColorMode :: enum {
 	Auto
 }
 
-pad_size       : f32 = 40
+y_pad_size     : f32 = 20
+x_pad_size     : f32 = 40
 toolbar_height : f32 = 40
 text_height    : f32 = 0
 line_gap       : f32 = 0
@@ -123,9 +124,11 @@ reset_everything :: proc() {
 
 init :: proc() {
 	events = make([dynamic]Event)	
+	intern := strings.Intern{}
+	strings.intern_init(&intern)
 
 	if config_updated {
-		if ok := load_config(trace_config, &events); !ok {
+		if ok := load_config(trace_config, &events, &intern); !ok {
 			fmt.printf("Failed to load config!\n")
 			trap()
 		}
@@ -148,8 +151,10 @@ init :: proc() {
 }
 
 main :: proc() {
-	global_data, _ := js.page_alloc(1000)
-	temp_data, _ := js.page_alloc(1000)
+	PAGE_SIZE :: 64
+	ONE_GB :: 1000000 / PAGE_SIZE
+	temp_data, _ := js.page_alloc(ONE_GB / 4)
+	global_data, _ := js.page_alloc(ONE_GB)
     arena_init(&global_arena, global_data)
     arena_init(&temp_arena, temp_data)
 
@@ -197,18 +202,16 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	rect_height := normal_text_height + 5
 
 	info_pane_height : f32 = 100
-	info_pane_y := height - pad_size - info_pane_height
+	info_pane_y := height - info_pane_height
 
-	start_x := pad_size
-	start_y := toolbar_height + pad_size
-	end_x := width - pad_size
-	end_y := height - pad_size
+	start_x := x_pad_size
+	start_y := toolbar_height + y_pad_size
 
 	graph_start_y := start_y
 	header_height := top_line_gap + normal_text_height
 	cur_y := graph_start_y + header_height + header_pad - pan.y
-	max_x := width - pad_size
-	display_width := width - (pad_size * 2)
+	max_x := width - x_pad_size
+	display_width := width - (x_pad_size * 2)
 
 	ch_width := measure_text("a", 1, monospace_font)
 
@@ -226,7 +229,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// compute pan
 	pan_delta := Vec2{}
 	if is_mouse_down {
-		if pt_in_rect(clicked_pos, rect(0, toolbar_height, display_width, info_pane_y)) {
+		if pt_in_rect(clicked_pos, rect(0, toolbar_height, width, info_pane_y)) {
 			pan_delta = mouse_pos - last_mouse_pos
 		}
 		last_mouse_pos = mouse_pos
@@ -244,7 +247,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	max_time := rescale(f32(slice_count), 0, f32(slice_count), start_time, end_time)
 	for i := 0; i <= slice_count; i += 1 {
 		off_x := f32(i) * (f32(display_width) / f32(slice_count))
-		draw_line(Vec2{start_x + off_x, graph_start_y + header_height}, Vec2{start_x + off_x, end_y}, 0.5, line_color)
+		draw_line(Vec2{start_x + off_x, graph_start_y + header_height}, Vec2{start_x + off_x, info_pane_y}, 0.5, line_color)
 	}
 
 	// Render flamegraphs
@@ -271,8 +274,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			entry_rect := rect(start_x + rect_x + pan.x, y, rect_width, rect_height)
 			if (entry_rect.pos.y + entry_rect.size.y) < graph_start_y + header_height || 
-				entry_rect.pos.x > (display_width + pad_size) ||
-				entry_rect.pos.x + entry_rect.size.x < pad_size {
+				entry_rect.pos.x > (display_width + x_pad_size) ||
+				entry_rect.pos.x + entry_rect.size.x < x_pad_size {
 				continue
 			}
 
@@ -316,10 +319,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 
 	// Chop sides of screen
-    draw_rect(rect(0, toolbar_height, width, pad_size + header_height), 0, bg_color2) // top
+    draw_rect(rect(0, toolbar_height, width, y_pad_size + header_height), 0, bg_color2) // top
     draw_rect(rect(max_x, toolbar_height, width, height), 0, bg_color2) // right
-    draw_rect(rect(0, toolbar_height, pad_size, height), 0, bg_color2) // left
-    draw_rect(rect(0, info_pane_y - pad_size, width, height), 0, bg_color2) // bottom
+    draw_rect(rect(0, toolbar_height, x_pad_size, height), 0, bg_color2) // left
+    draw_rect(rect(0, info_pane_y, width, height), 0, bg_color2) // bottom
 
 	for i := 0; i <= slice_count; i += 1 {
 		off_x := f32(i) * (f32(display_width) / f32(slice_count))
@@ -343,7 +346,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
     draw_rect(rect(0, info_pane_y, width, height), 0, bg_color) // bottom
 
-	info_pane_y += pad_size
+	info_pane_y += y_pad_size
 
 	if selected_event.x != -1 && selected_event.y != -1 {
 		t_idx := int(selected_event.x)

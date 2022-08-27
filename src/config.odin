@@ -6,26 +6,35 @@ import "core:strings"
 import "core:sort"
 import "core:slice"
 import "core:container/queue"
+import "core:c"
 
-load_config :: proc(config: string, events: ^[dynamic]Event) -> bool {
+load_config :: proc(config: string, events: ^[dynamic]Event, name_intern: ^strings.Intern) -> bool {
 	blah, err := json.parse(transmute([]u8)config, json.DEFAULT_SPECIFICATION, true)
 	if err != nil {
 		fmt.printf("%s\n", err)
 		return false
 	}
+	fmt.printf("Parsed config\n")
+
 	obj_map := blah.(json.Object) or_return
 
 	events_arr := obj_map["traceEvents"].(json.Array) or_return
 	for v in events_arr {
 		ev := v.(json.Object) or_return
 
+		if tmp, ok := ev["dur"]; !ok {
+			continue
+		}
+
 		name      := ev["name"].(string) or_return
 		duration  := ev["dur"].(i64) or_return
 		timestamp := ev["ts"].(i64) or_return
 		tid       := ev["tid"].(i64) or_return
 
-		append(events, Event{strings.clone(name), u64(duration), u64(timestamp), u64(tid), 0})
+		interned_name, _ := strings.intern_get(name_intern, name)
+		append(events, Event{interned_name, u64(duration), u64(timestamp), u64(tid), 0})
 	}
+	fmt.printf("Ingested config\n")
 
 	return true
 }
@@ -39,9 +48,9 @@ process_events :: proc(events: []Event) -> ([]Timeline, u64, u64, int) {
 		tm_idx, ok := thread_map[event.thread_id]
 		if !ok {
 			append(&threads, Timeline{
-				min_time = 1000000, 
+				min_time = c.UINT64_MAX, 
 				max_time = 0, 
-				min_duration = 1000000, 
+				min_duration = c.UINT64_MAX, 
 				max_duration = 0, 
 				total_duration = 0,
 				thread_id = event.thread_id,
@@ -64,7 +73,7 @@ process_events :: proc(events: []Event) -> ([]Timeline, u64, u64, int) {
 		append(sub_events, event)
 	}
 
-	total_min_time : u64 = 10000000
+	total_min_time : u64 = c.UINT64_MAX
 	total_max_time : u64 = 0
 	for k, v in thread_map {
 		tm := &threads[v]
