@@ -1,45 +1,87 @@
 package main
 
-import "core:encoding/json"
 import "core:fmt"
 import "core:strings"
 import "core:slice"
 import "core:container/queue"
 import "core:c"
+import "core:time"
+
+start_time: u64
+start_mem: u64
+start_bench :: proc(name: string) {
+	start_time = u64(get_time())
+	arena := cast(^Arena)context.allocator.data
+	start_mem = u64(arena.offset)
+}
+stop_bench :: proc(name: string) {
+	end_time := u64(get_time())
+	arena := cast(^Arena)context.allocator.data
+	end_mem := u64(arena.offset)
+
+	time_range := end_time - start_time
+	mem_range := end_mem - start_mem
+	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f32(mem_range) / 1024 / 1024)
+}
 
 load_config :: proc(config: string, events: ^[dynamic]Event, name_intern: ^strings.Intern) -> bool {
-	blah, err := json.parse(transmute([]u8)config, json.DEFAULT_SPECIFICATION, true)
+	fmt.printf("config is %f MB\n", f32(len(config)) / 1024 / 1024)
+
+	start_bench("parse config")
+	tokens, err := parse_json(config)
 	if err != nil {
-		fmt.printf("%s\n", err)
 		return false
 	}
-	fmt.printf("Parsed config\n")
+	stop_bench("parse config")
 
-	obj_map := blah.(json.Object) or_return
+	start_bench("generate events")
+	if len(tokens) < 1 || tokens[0].type != .Object {
+		fmt.printf("Invalid JSON file!\n")
+		trap()
+	}
 
-	events_arr := obj_map["traceEvents"].(json.Array) or_return
-	for v in events_arr {
-		ev := v.(json.Object) or_return
+	obj_map := make(map[string]int)
 
-		if tmp, ok := ev["dur"]; !ok {
+	map_object(0, tokens, config, &obj_map)
+	idx := obj_map["traceEvents"] or_return
+	clear_map(&obj_map)
+
+	event_arr := &tokens[idx]
+	if event_arr.type != .Array {
+		fmt.printf("Invalid JSON file!\n")
+		trap()
+	}
+	idx += 1
+
+	for j := 0; j < int(event_arr.children); j += 1 {
+		idx = map_object(idx, tokens, config, &obj_map)
+		defer clear_map(&obj_map)
+
+		duration, ok := get_i64("dur", tokens, config, &obj_map)
+		if !ok {
 			continue
 		}
 
-		name      := ev["name"].(string) or_return
-		duration  := ev["dur"].(i64) or_return
-		timestamp := ev["ts"].(i64) or_return
-		tid       := ev["tid"].(i64) or_return
-		pid       := ev["pid"].(i64) or_return
+		name       := get_string("name", tokens, config, &obj_map) or_return
+		timestamp  := get_i64("ts", tokens, config, &obj_map) or_return
+		tid := get_i64("tid", tokens, config, &obj_map) or_return
+		pid := get_i64("pid", tokens, config, &obj_map) or_return
 
-		interned_name, _ := strings.intern_get(name_intern, name)
+		interned_name, err := strings.intern_get(name_intern, name) 
+		if err != nil {
+			fmt.printf("OOM?\n")
+			return false
+		}
+
 		append(events, Event{
-			name = interned_name, 
+			name = interned_name,
 			duration = u64(duration), 
 			timestamp = u64(timestamp), 
 			thread_id = u64(tid), 
 			process_id = u64(pid), 
 		})
 	}
+	stop_bench("generate events")
 	fmt.printf("Ingested config\n")
 
 	return true

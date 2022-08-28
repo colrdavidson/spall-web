@@ -159,7 +159,7 @@ init :: proc() {
 main :: proc() {
 	PAGE_SIZE :: 64
 	ONE_GB :: 1000000 / PAGE_SIZE
-	temp_data, _ := js.page_alloc(ONE_GB / 4)
+	temp_data, _ := js.page_alloc(ONE_GB / 2)
 	global_data, _ := js.page_alloc(ONE_GB)
     arena_init(&global_arena, global_data)
     arena_init(&temp_arena, temp_data)
