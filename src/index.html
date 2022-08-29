@@ -49,6 +49,13 @@
 			window.wasm.odinMem.loadBytes(p, len).set(bytes);
 			return [p, len];
 		}
+		function bytes(b) {
+			const len = b.byteLength;
+			const p = window.wasm.temp_allocate(len);
+			let _b = window.wasm.odinMem.loadBytes(p, len)
+			_b.set(new Uint8Array(b));
+			return [p, len];
+		}
 
 		function dumpMem8(mem) {
 			console.log(new Uint8Array(mem.buffer));
@@ -89,6 +96,8 @@
 		let cached_cursor = "";
 		let cached_size = 0;
 		let cached_height = 0;
+
+		let loading_file = null;
 
 		function updateFont(size, font, forced = false) {
 			let font_str = `${14 * dpr * size}px ${font}`;
@@ -233,9 +242,27 @@
 					},
 					get_system_color() {
 						return get_system_colormode()
+					},
+					get_chunk(offset, size) {
+						_get_chunk(offset, size)
 					}
 				},
 			});
+
+
+			let _get_chunk = function(_offset, _size) {
+				let r = new FileReader();
+				let blob = loading_file.slice(_offset, _offset + _size);
+				r.onload = (e) => {
+					if (e.target.error != null) {
+						console.log("Failed to read file: " + e.target.error);
+						return;
+					}
+
+					window.wasm.load_config_chunk(_offset, loading_file.size, ...bytes(e.target.result));
+				};
+				r.readAsArrayBuffer(blob);
+			}
 
 			let awake = false;
 			function wakeUp() {
@@ -424,21 +451,22 @@
 				window.wasm.scroll(x, y);
 				wakeUp();
 			}, { passive: false });
+
+
 			canvas.addEventListener('dragover', e => {
 				e.preventDefault();
 			});
 			canvas.addEventListener('drop', e => {
 				e.preventDefault();
 
+				let initial_chunk_size = 1024 * 1024;
 				if (e.dataTransfer.items) {
 					[...e.dataTransfer.items].forEach((item, i) => {
 						if (item.kind === "file") {
 							let file = item.getAsFile();
-							let file_text_prom = file.text()
-							Promise.resolve(file_text_prom).then((v) => {
-								let file_str = str(v);
-								window.wasm.update_config(...file_str);
-							});
+
+							loading_file = file;
+							_get_chunk(0, initial_chunk_size);
 						}
 					});
 				}

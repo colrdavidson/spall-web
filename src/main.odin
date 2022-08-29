@@ -55,6 +55,7 @@ hash := 0
 
 first_frame := true
 config_updated := false
+loading_config := true
 colormode := ColorMode.Dark
 
 ColorMode :: enum {
@@ -111,30 +112,11 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 	}
 }
 
-@export
-update_config :: proc "contextless" (data: string) {
-	context = wasmContext
-
-	trace_config = data
-	config_updated = true
-
-	fmt.printf("Got a config!\n")
-	reset_everything()
-}
-
-reset_everything :: proc() {
-	free_all(context.allocator)
-	free_all(context.temp_allocator)
-	init()
-}
-
 init :: proc() {
 	events = make([dynamic]Event)	
-	intern := strings.Intern{}
-	strings.intern_init(&intern)
 
 	if config_updated {
-		if ok := load_config(trace_config, &events, &intern); !ok {
+		if ok := load_config(p.tokens[:], &events); !ok {
 			fmt.printf("Failed to load config!\n")
 			trap()
 		}
@@ -159,8 +141,9 @@ init :: proc() {
 main :: proc() {
 	PAGE_SIZE :: 64
 	ONE_GB :: 1000000 / PAGE_SIZE
-	temp_data, _ := js.page_alloc(ONE_GB / 2)
-	global_data, _ := js.page_alloc(ONE_GB)
+	ONE_MB :: 1000 / PAGE_SIZE
+	temp_data, _ := js.page_alloc(ONE_MB * 2)
+	global_data, _ := js.page_alloc((ONE_GB * 2) + (ONE_MB * 101))
     arena_init(&global_arena, global_data)
     arena_init(&temp_arena, temp_data)
 
@@ -169,10 +152,7 @@ main :: proc() {
 
     context = wasmContext
 
-	trace_config = default_config
-	config_updated = true
-
-	init()
+	load_config_chunk(0, len(default_config), transmute([]u8)default_config)
 }
 
 random_seed: u64
@@ -180,7 +160,6 @@ random_seed: u64
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
-	defer free_all(context.temp_allocator)
 	defer frame_count += 1
 
 	// This is nasty code that allows me to do load-time things once the wasm context is init
@@ -191,6 +170,38 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		rand.set_global_seed(random_seed)
 		first_frame = false
 	}
+
+	if loading_config {
+		// render loading screen
+
+		canvas_clear()
+
+		// Render background
+		draw_rect(rect(0, 0, width, height), 0, bg_color)
+
+		pad_size : f32 = 3
+		chunk_size : f32 = 10
+
+		load_box := rect(0, 0, 100, 100)
+		load_box = rect((width / 2) - (load_box.size.x / 2) - pad_size, (height / 2) - (load_box.size.y / 2) - pad_size, load_box.size.x + pad_size, load_box.size.y + pad_size)
+
+		draw_rect(load_box, 1, Vec3{0, 0, 0})
+
+		chunk_count := int(rescale(f32(p.offset), 0, f32(p.total_size), 0, 100))
+
+		chunk := rect(0, 0, chunk_size, chunk_size)
+		start_x := load_box.pos.x + pad_size
+		start_y := load_box.pos.y + pad_size
+		for i := chunk_count; i >= 0; i -= 1 {
+			cur_x := f32(i %% int(chunk_size))
+			cur_y := f32(i /  int(chunk_size))
+			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), 1, Vec3{0, 255, 0})
+		}
+		
+		return true
+	}
+
+	defer free_all(context.temp_allocator)
 
 	defer if clicked {
 		clicked = false
@@ -452,7 +463,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
 	hash_width := measure_text(hash_str, 1, monospace_font)
 	draw_text(hash_str, Vec2{width - hash_width - 10, height - text_height - 10}, 1, monospace_font, text_color2)
-    return true
+
+	// allow for scroll/zoom motion to settle, but otherwise, save the frames
+	if scroll_velocity != 0 || zoom_velocity != 0 {
+		return true
+	}
+    return false
 }
 
 pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {

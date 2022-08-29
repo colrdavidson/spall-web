@@ -88,6 +88,48 @@ load_build_hash :: proc "contextless" (_hash: int) {
 	hash = _hash
 }
 
+CHUNK_SIZE :: 1024 * 1024
+
+p: Parser
+@export
+load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) -> bool {
+	context = wasmContext
+
+	if start == 0 {
+		loading_config = true
+		free_all(context.allocator)
+
+		start_bench("parse config")
+		p = init_parser(total_size)
+	}
+
+	old_pos := p.pos
+	err := parse_json(&p, string(chunk), start)
+	if err == .InvalidToken {
+		fmt.printf("%s\n", err)
+		trap()
+	}
+	// I don't currently care about trying to grab a larger chunk of the file if parse fails
+	assert(p.pos != old_pos)
+
+	new_start := p.pos - start
+	//fmt.printf("currently at %d of %d, ate %d bytes, head at %d\n", p.pos, total_size, new_start, p.pos)
+
+	free_all(context.temp_allocator)
+
+	if err == .PartialRead {
+		get_chunk(p.pos, CHUNK_SIZE)
+		return true
+	}
+	stop_bench("parse config")
+
+	config_updated = true
+	init()
+	loading_config = false
+
+	return true
+}
+
 foreign import "js"
 
 foreign js {
@@ -110,6 +152,8 @@ foreign js {
 	get_time :: proc() -> f64 ---
 	change_cursor :: proc(cursor: string) ---
 	get_system_color :: proc() -> bool ---
+
+	get_chunk :: proc(offset: int, size: int) ---
 }
 
 draw_rect :: proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {

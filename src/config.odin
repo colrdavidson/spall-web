@@ -24,16 +24,7 @@ stop_bench :: proc(name: string) {
 	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f32(mem_range) / 1024 / 1024)
 }
 
-load_config :: proc(config: string, events: ^[dynamic]Event, name_intern: ^strings.Intern) -> bool {
-	fmt.printf("config is %f MB\n", f32(len(config)) / 1024 / 1024)
-
-	start_bench("parse config")
-	tokens, err := parse_json(config)
-	if err != nil {
-		return false
-	}
-	stop_bench("parse config")
-
+load_config :: proc(tokens: []Token, events: ^[dynamic]Event) -> bool {
 	start_bench("generate events")
 	if len(tokens) < 1 || tokens[0].type != .Object {
 		fmt.printf("Invalid JSON file!\n")
@@ -42,7 +33,7 @@ load_config :: proc(config: string, events: ^[dynamic]Event, name_intern: ^strin
 
 	obj_map := make(map[string]int)
 
-	map_object(0, tokens, config, &obj_map)
+	map_object(0, tokens, &obj_map)
 	idx := obj_map["traceEvents"] or_return
 	clear_map(&obj_map)
 
@@ -54,27 +45,21 @@ load_config :: proc(config: string, events: ^[dynamic]Event, name_intern: ^strin
 	idx += 1
 
 	for j := 0; j < int(event_arr.children); j += 1 {
-		idx = map_object(idx, tokens, config, &obj_map)
+		idx = map_object(idx, tokens, &obj_map)
 		defer clear_map(&obj_map)
 
-		duration, ok := get_i64("dur", tokens, config, &obj_map)
+		duration, ok := get_i64("dur", tokens, &obj_map)
 		if !ok {
 			continue
 		}
 
-		name       := get_string("name", tokens, config, &obj_map) or_return
-		timestamp  := get_i64("ts", tokens, config, &obj_map) or_return
-		tid := get_i64("tid", tokens, config, &obj_map) or_return
-		pid := get_i64("pid", tokens, config, &obj_map) or_return
-
-		interned_name, err := strings.intern_get(name_intern, name) 
-		if err != nil {
-			fmt.printf("OOM?\n")
-			return false
-		}
+		name       := get_string("name", tokens, &obj_map) or_return
+		timestamp  := get_i64("ts", tokens, &obj_map) or_return
+		tid := get_i64("tid", tokens, &obj_map) or_return
+		pid := get_i64("pid", tokens, &obj_map) or_return
 
 		append(events, Event{
-			name = interned_name,
+			name = name,
 			duration = u64(duration), 
 			timestamp = u64(timestamp), 
 			thread_id = u64(tid), 
