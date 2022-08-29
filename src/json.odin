@@ -31,10 +31,14 @@ import "core:strings"
  * SOFTWARE.
  */
 
-JSONError :: enum {
-	Success,
+JSONState :: enum {
+	Finished,
 	InvalidToken,
 	PartialRead,
+
+	ScopeEntered,
+	ScopeExited,
+	TokenDone,
 }
 
 TokenType :: enum u8 {
@@ -62,7 +66,6 @@ Parser :: struct {
 
 	tokens: [dynamic]Token,
 	data: string,
-	intern: strings.Intern,
 	total_size: int,
 }
 
@@ -79,12 +82,6 @@ alloc_token :: proc(p: ^Parser) -> ^Token {
 
 fill_token :: proc(p: ^Parser, token: ^Token, type: TokenType, start, end, parent: int) {
 	token.type = type
-	if type == .String || type == .Primitive {
-		str, err := strings.intern_get(&p.intern, p.data[start-p.offset:end-p.offset])
-		assert(err == nil)
-
-		token.s = str
-	}
 
 	token.start = i32(start)
 	token.end = i32(end)
@@ -205,12 +202,12 @@ print_token :: proc(idx: int, tokens: []Token, depth := 0) -> int {
 real_pos :: proc(p: ^Parser) -> int { return p.pos }
 chunk_pos :: proc(p: ^Parser) -> int { return p.pos - p.offset }
 
-parse_primitive :: proc(p: ^Parser, data: string) -> JSONError {
+parse_primitive :: proc(p: ^Parser) -> JSONState {
 	start := real_pos(p)
 
 	found := false
-	top_loop: for ; chunk_pos(p) < len(data); p.pos += 1 {
-		ch := data[chunk_pos(p)]
+	top_loop: for ; chunk_pos(p) < len(p.data); p.pos += 1 {
+		ch := p.data[chunk_pos(p)]
 
 		switch ch {
 		case ':': fallthrough
@@ -242,26 +239,26 @@ parse_primitive :: proc(p: ^Parser, data: string) -> JSONError {
 	token := alloc_token(p)
 	fill_token(p, token, .Primitive, start, real_pos(p), p.super)
 	p.pos -= 1
-	return .Success
+	return .TokenDone
 }
 
 
-parse_string :: proc(p: ^Parser, data: string) -> JSONError {
+parse_string :: proc(p: ^Parser) -> JSONState {
 	start := real_pos(p)
 	p.pos += 1
 
-	for ; chunk_pos(p) < len(data); p.pos += 1 {
-		ch := data[chunk_pos(p)]
+	for ; chunk_pos(p) < len(p.data); p.pos += 1 {
+		ch := p.data[chunk_pos(p)]
 
 		if ch == '\"' {
 			token := alloc_token(p)
 			fill_token(p, token, .String, start + 1, real_pos(p), p.super)
-			return .Success
+			return .TokenDone
 		}
 
-		if ch == '\\' && (chunk_pos(p) + 1) < len(data) {
+		if ch == '\\' && (chunk_pos(p) + 1) < len(p.data) {
 			p.pos += 1
-			switch data[chunk_pos(p)] {
+			switch p.data[chunk_pos(p)] {
 			case '\"': fallthrough
 			case '/': fallthrough
 			case '\\': fallthrough
@@ -273,10 +270,10 @@ parse_string :: proc(p: ^Parser, data: string) -> JSONError {
 
 			case 'u':
 				p.pos += 1
-				for i := 0; i < 4 && chunk_pos(p) < len(data); i += 1 {
-					if (!((data[chunk_pos(p)] >= 48 && data[chunk_pos(p)] <= 57) ||
-					   (data[chunk_pos(p)] >= 65 && data[p.pos] <= 70) ||
-					   (data[chunk_pos(p)] >= 97 && data[chunk_pos(p)] <= 102))) {
+				for i := 0; i < 4 && chunk_pos(p) < len(p.data); i += 1 {
+					if (!((p.data[chunk_pos(p)] >= 48 && p.data[chunk_pos(p)] <= 57) ||
+					   (p.data[chunk_pos(p)] >= 65 && p.data[p.pos] <= 70) ||
+					   (p.data[chunk_pos(p)] >= 97 && p.data[chunk_pos(p)] <= 102))) {
 						p.pos = start
 						fmt.printf("Failed to parse token! 3\n")
 						return .InvalidToken
@@ -304,20 +301,17 @@ init_parser :: proc(total_size: int) -> Parser {
 	p.offset = 0
 	p.total_size = total_size
 
-	strings.intern_init(&p.intern)
-
 	return p
 }
 
-parse_json :: proc(p: ^Parser, data: string, offset: int) -> JSONError {
+get_next_token :: proc(p: ^Parser, data: []u8, offset: int) -> (^Token, JSONState) {
 	p.offset = offset
-	p.data = data
+	p.data = string(data)
 
 	token: ^Token
 	for ; chunk_pos(p) < len(data); p.pos += 1 {
 
 		ch := data[chunk_pos(p)]
-
 		switch ch {
 		case '{': fallthrough
 		case '[':
@@ -328,7 +322,7 @@ parse_json :: proc(p: ^Parser, data: string, offset: int) -> JSONError {
 				if parent.type == .Object {
 					fmt.printf("Expected token Array parent, got %s\n", parent.type)
 					fmt.printf("token: %#v, parent %#v\n", token, parent)
-					return .InvalidToken
+					return nil, .InvalidToken
 				}
 				parent.children += 1
 				token.parent = i32(p.super)
@@ -336,19 +330,22 @@ parse_json :: proc(p: ^Parser, data: string, offset: int) -> JSONError {
 			token.type = (ch == '{') ? TokenType.Object : TokenType.Array
 			token.start = i32(real_pos(p))
 			p.super = len(p.tokens) - 1
+
+			p.pos += 1
+			return token, .ScopeEntered
 		case '}': fallthrough
 		case ']':
 			type := (ch == '}') ? TokenType.Object : TokenType.Array
 			if len(p.tokens) < 1 {
 				fmt.printf("Failed to parse token! 7\n")
-				return .InvalidToken
+				return nil, .InvalidToken
 			}
 			token = &p.tokens[len(p.tokens) - 1]
 			inner_loop: for {
 				if token.start != -1 && token.end == -1 {
 					if token.type != type {
 						fmt.printf("Failed to parse token! 8\n")
-						return .InvalidToken
+						return nil, .InvalidToken
 					}
 					token.end = i32(real_pos(p) + 1)
 					p.super = int(token.parent)
@@ -358,22 +355,29 @@ parse_json :: proc(p: ^Parser, data: string, offset: int) -> JSONError {
 				if token.parent == -1 {
 					if token.type != type || p.super == -1 {
 						fmt.printf("Failed to parse token! 9\n")
-						return .InvalidToken
+						return nil, .InvalidToken
 					}
 					break inner_loop
 				}
 
 				token = &p.tokens[token.parent]
 			}
+
+			p.pos += 1
+			return token, .ScopeExited
 		case '\"':
-			err := parse_string(p, data)
-			if err != nil {
-				return err
+			state := parse_string(p)
+			if state != .TokenDone {
+				return nil, state
 			}
 
 			if p.super != -1 {
 				p.tokens[p.super].children += 1
 			}
+
+			token = &p.tokens[len(p.tokens)-1]
+			p.pos += 1
+			return token, state
 		case '\t': fallthrough
 		case '\r': fallthrough
 		case '\n': fallthrough
@@ -395,29 +399,34 @@ parse_json :: proc(p: ^Parser, data: string, offset: int) -> JSONError {
 				parent := &p.tokens[p.super]
 				if parent.type == .Object || (parent.type == .String && parent.children != 0) {
 					fmt.printf("Failed to parse token! 11\n")
-					return .InvalidToken
+					return nil, .InvalidToken
 				}
 			}
 
-			err := parse_primitive(p, data)
-			if err != nil {
-				return err
+			state := parse_primitive(p)
+			if state != .TokenDone {
+				return nil, state
 			}
 
 			if p.super != -1 {
 				p.tokens[p.super].children += 1
 			}
+
+			token = &p.tokens[len(p.tokens)-1]
+			p.pos += 1
+			return token, state
 		case:
 			fmt.printf("Failed to parse token! 13\n")
-			return .InvalidToken
+			return nil, .InvalidToken
 		}
 	}
 
+	// this is dumb
 	for i := len(p.tokens) - 1; i >= 0; i -= 1 {
 		if p.tokens[i].start != -1 && p.tokens[i].end == -1 {
-			return .PartialRead
+			return nil, .PartialRead
 		}
 	}
 
-	return .Success
+	return nil, .Finished
 }

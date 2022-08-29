@@ -103,25 +103,29 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) ->
 		p = init_parser(total_size)
 	}
 
-	old_pos := p.pos
-	err := parse_json(&p, string(chunk), start)
-	if err == .InvalidToken {
-		fmt.printf("%s\n", err)
-		trap()
+	defer free_all(context.temp_allocator)
+
+	hot_loop: for {
+		tok, state := get_next_token(&p, chunk[chunk_pos(&p):], start+chunk_pos(&p))
+		#partial switch state {
+		case .PartialRead:
+			get_chunk(p.pos, CHUNK_SIZE)
+			return true
+		case .InvalidToken:
+			return false
+		case .Finished:
+			break hot_loop
+		}
+
+		if tok.type == .Primitive || tok.type == .String {
+			//str := string(chunk[int(tok.start):int(tok.end)])
+			//fmt.printf("Got %s\n", str)
+		}
 	}
-	// I don't currently care about trying to grab a larger chunk of the file if parse fails
-	assert(p.pos != old_pos)
 
-	new_start := p.pos - start
-	//fmt.printf("currently at %d of %d, ate %d bytes, head at %d\n", p.pos, total_size, new_start, p.pos)
-
-	free_all(context.temp_allocator)
-
-	if err == .PartialRead {
-		get_chunk(p.pos, CHUNK_SIZE)
-		return true
-	}
 	stop_bench("tokenize config")
+
+	trap()
 
 	config_updated = true
 	init()
