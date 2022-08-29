@@ -290,6 +290,10 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 				rect_end := rescale(f32(cur_end), f32(start_time), f32(end_time), 0, display_width)
 				rect_width := rect_end - rect_x
 
+				if rect_width < 0.1 {
+					continue
+				}
+
 				y := cur_y + (rect_height * f32(event.depth - 1))
 
 				entry_rect := rect(start_x + rect_x + pan.x, y, rect_width, rect_height)

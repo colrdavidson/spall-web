@@ -68,6 +68,7 @@ load_config :: proc(tokens: []Token, events: ^[dynamic]Event) -> bool {
 	}
 	stop_bench("generate events")
 	fmt.printf("Ingested config\n")
+	fmt.printf("generated %d events\n", len(events))
 
 	return true
 }

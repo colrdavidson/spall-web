@@ -49,7 +49,7 @@ Token :: struct #packed {
 	type: TokenType,
 	start: i32,
 	end: i32,
-	children: i16,
+	children: i32,
 	parent: i32,
 
 	s: string,
