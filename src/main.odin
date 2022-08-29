@@ -137,6 +137,8 @@ init :: proc() {
 
 	t = 0
 	frame_count = 0
+	scale = 1
+	pan = Vec2{}
 }
 
 main :: proc() {
@@ -230,8 +232,8 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	end_time   := f64(time_range) / scale
 
 	// compute scale + scroll
-	MIN_SCALE :: 0.1
-	MAX_SCALE :: 1000
+	MIN_SCALE :: 0.01
+	MAX_SCALE :: 100000
 	if pt_in_rect(mouse_pos, rect(0, toolbar_height, width, height - toolbar_height)) {
 		scale *= 1 + (0.1 * zoom_velocity * dt)
 		scale = min(max(scale, MIN_SCALE), MAX_SCALE)
