@@ -90,7 +90,6 @@ load_build_hash :: proc "contextless" (_hash: int) {
 
 CHUNK_SIZE :: 1024 * 1024
 
-p: Parser
 @export
 load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) -> bool {
 	context = wasmContext
@@ -99,7 +98,8 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) ->
 		loading_config = true
 		free_all(context.allocator)
 
-		start_bench("parse config")
+		fmt.printf("Loading a %.1f MB config\n", f32(total_size) / 1024 / 1024)
+		start_bench("tokenize config")
 		p = init_parser(total_size)
 	}
 
@@ -121,7 +121,7 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) ->
 		get_chunk(p.pos, CHUNK_SIZE)
 		return true
 	}
-	stop_bench("parse config")
+	stop_bench("tokenize config")
 
 	config_updated = true
 	init()

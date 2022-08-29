@@ -44,7 +44,6 @@ last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
 pan            := Vec2{}
-scroll_velocity: f32 = 0
 zoom_velocity: f32 = 0
 
 is_mouse_down := false
@@ -52,6 +51,8 @@ clicked       := false
 is_hovering   := false
 
 hash := 0
+
+p: Parser
 
 first_frame := true
 config_updated := false
@@ -171,21 +172,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		first_frame = false
 	}
 
+	// render loading screen
 	if loading_config {
-		// render loading screen
-
-		canvas_clear()
-
-		// Render background
-		draw_rect(rect(0, 0, width, height), 0, bg_color)
-
 		pad_size : f32 = 3
 		chunk_size : f32 = 10
 
 		load_box := rect(0, 0, 100, 100)
 		load_box = rect((width / 2) - (load_box.size.x / 2) - pad_size, (height / 2) - (load_box.size.y / 2) - pad_size, load_box.size.x + pad_size, load_box.size.y + pad_size)
 
-		draw_rect(load_box, 1, Vec3{0, 0, 0})
+		draw_rect(load_box, 3, Vec3{50, 50, 50})
 
 		chunk_count := int(rescale(f32(p.offset), 0, f32(p.total_size), 0, 100))
 
@@ -195,7 +190,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		for i := chunk_count; i >= 0; i -= 1 {
 			cur_x := f32(i %% int(chunk_size))
 			cur_y := f32(i /  int(chunk_size))
-			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), 1, Vec3{0, 255, 0})
+			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), 0, Vec3{0, 255, 0})
 		}
 		
 		return true
@@ -206,8 +201,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	defer if clicked {
 		clicked = false
 	}
-	defer scroll_velocity = 0
-	defer zoom_velocity = 0
 	defer is_hovering = false
 
     t += dt
@@ -242,6 +235,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		scale *= 1 + (0.1 * zoom_velocity * dt)
 		scale = min(max(scale, MIN_SCALE), MAX_SCALE)
 	}
+	zoom_velocity = 0
 
 	// compute pan
 	pan_delta := Vec2{}
@@ -464,11 +458,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	hash_width := measure_text(hash_str, 1, monospace_font)
 	draw_text(hash_str, Vec2{width - hash_width - 10, height - text_height - 10}, 1, monospace_font, text_color2)
 
-	// allow for scroll/zoom motion to settle, but otherwise, save the frames
-	if scroll_velocity != 0 || zoom_velocity != 0 {
-		return true
-	}
-    return false
+    return true
 }
 
 pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
