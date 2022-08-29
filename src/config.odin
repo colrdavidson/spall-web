@@ -31,7 +31,7 @@ load_config :: proc(tokens: []Token, events: ^[dynamic]Event) -> bool {
 		trap()
 	}
 
-	obj_map := make(map[string]int)
+	obj_map := make(map[string]int, 0, context.temp_allocator)
 
 	map_object(0, tokens, &obj_map)
 	idx := obj_map["traceEvents"] or_return

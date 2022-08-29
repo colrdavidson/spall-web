@@ -51,12 +51,12 @@ mouse_up :: proc "contextless" (x, y: f32) {
 }
 
 @export
-scroll :: proc "contextless" (x, y: f32) {
+scroll :: proc "contextless" (x, y: f64) {
 	zoom_velocity += y
 }
 
 @export
-zoom :: proc "contextless" (x, y: f32) {
+zoom :: proc "contextless" (x, y: f64) {
 	zoom_velocity += y
 }
 

@@ -12,7 +12,7 @@ temp_arena := Arena{}
 
 wasmContext := runtime.default_context()
 
-t           : f32
+t           : f64
 frame_count : int
 
 bg_color      := Vec3{}
@@ -38,13 +38,13 @@ EventID :: struct {
 
 selected_event := EventID{-1, -1, -1}
 
-scale: f32 = 1
+scale: f64 = 1
 
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
 pan            := Vec2{}
-zoom_velocity: f32 = 0
+zoom_velocity: f64 = 0
 
 is_mouse_down := false
 clicked       := false
@@ -159,7 +159,7 @@ main :: proc() {
 random_seed: u64
 
 @export
-frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
+frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
     context = wasmContext
 	defer frame_count += 1
 
@@ -225,8 +225,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	ch_width := measure_text("a", 1, monospace_font)
 
-	start_time := f32(total_min_time) / scale
-	end_time   := f32(total_max_time) / scale
+	time_range := total_max_time - total_min_time
+	start_time := f64(0)
+	end_time   := f64(time_range) / scale
 
 	// compute scale + scroll
 	MIN_SCALE :: 0.1
@@ -255,7 +256,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// draw lines for time markings
 	slice_count := 10
-	max_time := rescale(f32(slice_count), 0, f32(slice_count), start_time, end_time)
+	max_time := rescale(f64(slice_count), 0, f64(slice_count), start_time, end_time)
 	for i := 0; i <= slice_count; i += 1 {
 		off_x := f32(i) * (f32(display_width) / f32(slice_count))
 		draw_line(Vec2{start_x + off_x, graph_start_y + header_height}, Vec2{start_x + off_x, info_pane_y}, 0.5, line_color)
@@ -282,8 +283,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			}
 
 			for event, e_idx in tm.events {
-				cur_start := event.timestamp
-				cur_end   := event.timestamp + event.duration
+				cur_start := event.timestamp - total_min_time
+				cur_end   := cur_start + event.duration
 
 				rect_x := rescale(f32(cur_start), f32(start_time), f32(end_time), 0, display_width)
 				rect_end := rescale(f32(cur_end), f32(start_time), f32(end_time), 0, display_width)
@@ -349,8 +350,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	for i := 0; i <= slice_count; i += 1 {
 		off_x := f32(i) * (f32(display_width) / f32(slice_count))
 
-		time_off := rescale(pan.x, 0, display_width, f32(total_min_time), f32(total_max_time))
-		cur_time := rescale(f32(i), 0, f32(slice_count), start_time, end_time) - (time_off / scale)
+		time_off := rescale(f64(pan.x), 0, f64(display_width), start_time, end_time)
+		reranged_i := rescale(f64(i), 0, f64(slice_count), start_time, end_time)  
+		cur_time := reranged_i - time_off
 
 		time_str: string
 		if max_time < 5000 {
@@ -392,7 +394,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		event := processes[p_idx].threads[t_idx].events[e_idx]
 		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
-		draw_text(fmt.tprintf("start time: %s ", time_fmt(event.timestamp)), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
+		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
+		draw_text(fmt.tprintf("start timestamp: %d", event.timestamp), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
 
 		draw_text(fmt.tprintf("duration: %s", time_fmt(event.duration)), Vec2{start_x, next_line(&y)}, 1, default_font, text_color)
 	}
