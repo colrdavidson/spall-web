@@ -116,10 +116,18 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 init :: proc() {
 	events = make([dynamic]Event)	
 
+	defer {
+		t = 0
+		frame_count = 0
+		scale = 1
+		pan = Vec2{}
+	}
+
 	if config_updated {
 		if ok := load_config(p.tokens[:], &events); !ok {
 			fmt.printf("Failed to load config!\n")
-			trap()
+			config_updated = false
+			return
 		}
 		processes, total_max_time, total_min_time, total_max_depth = process_events(events[:])
 
@@ -134,11 +142,6 @@ init :: proc() {
 
 		config_updated = false
 	}
-
-	t = 0
-	frame_count = 0
-	scale = 1
-	pan = Vec2{}
 }
 
 main :: proc() {
