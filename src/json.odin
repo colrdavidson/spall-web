@@ -68,6 +68,8 @@ Parser :: struct {
 	chunk_start: int,
 	total_size: int,
 	tok_count: int,
+
+	intern: strings.Intern,
 }
 
 init_token :: proc(p: ^Parser) -> Token {
@@ -215,6 +217,7 @@ init_parser :: proc(total_size: int) -> Parser {
 	p.offset = 0
 	p.total_size = total_size
 	queue.init(&p.parent_stack)
+	strings.intern_init(&p.intern)
 
 	return p
 }

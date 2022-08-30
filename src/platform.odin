@@ -243,7 +243,12 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) ->
 			value := get_token_str(&p, tok)
 
 			if key == "name" {
-				cur_event.name = strings.clone(value)
+				str, err := strings.intern_get(&p.intern, value)
+				if err != nil {
+					return false
+				}
+
+				cur_event.name = str
 			}
 
 			switch parent_map[parent.id] {
