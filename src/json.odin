@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:unicode/utf8"
 import "core:strconv"
 import "core:strings"
+import "core:container/queue"
 
 // This is barely JSMN anymore, but it was definitely a strong reference
 /*
@@ -32,16 +33,16 @@ import "core:strings"
  */
 
 JSONState :: enum {
-	Finished,
 	InvalidToken,
 	PartialRead,
+	Finished,
 
 	ScopeEntered,
 	ScopeExited,
 	TokenDone,
 }
 
-TokenType :: enum u8 {
+TokenType :: enum {
 	Nil       = 0,
 	Object    = 1,
 	Array     = 2,
@@ -49,160 +50,66 @@ TokenType :: enum u8 {
 	Primitive = 8,
 }
 
-Token :: struct #packed {
+Token :: struct {
 	type: TokenType,
 	start: i32,
 	end: i32,
-	children: i32,
-	parent: i32,
 
-	s: string,
+	id: int,
 }
 
 Parser :: struct {
 	pos: int,
-	super: int,
 	offset: int,
 
-	tokens: [dynamic]Token,
+	parent_stack: queue.Queue(Token),
 	data: string,
+	full_chunk: string,
+	chunk_start: int,
 	total_size: int,
+	tok_count: int,
 }
 
-alloc_token :: proc(p: ^Parser) -> ^Token {
-	append(&p.tokens, Token{})
-	tok := &p.tokens[len(p.tokens)-1]
-
+init_token :: proc(p: ^Parser) -> Token {
+	tok := Token{}
 	tok.start = -1
 	tok.end = -1
-	tok.parent = -1
-	tok.children = 0
+	tok.id = p.tok_count
+	p.tok_count += 1
+
 	return tok
 }
 
-fill_token :: proc(p: ^Parser, token: ^Token, type: TokenType, start, end, parent: int) {
+fill_token :: proc(token: ^Token, type: TokenType, start, end: int) {
 	token.type = type
-
 	token.start = i32(start)
 	token.end = i32(end)
-	token.parent = i32(parent)
-	token.children = 0
-}
-
-label_to_string :: proc(token: ^Token, data: string) -> string {
-	return string(data[token.start:token.end])
-}
-
-key_eq :: proc(token: ^Token, data, key: string) -> bool {
-	tok_str := label_to_string(token, data)
-	return (token.type == .String) && (strings.compare(tok_str, key) == 0)
-}
-
-count_children :: proc(idx: int, tokens: []Token) -> int {
-	token := &tokens[idx]
-
-	off := 1
-	#partial switch token.type {
-	case .Object:
-		for i := 0; i < int(token.children); i += 1 {
-			off += count_children(idx + off, tokens)
-			off += count_children(idx + off, tokens)
-		}
-	case .Array:
-		for i := 0; i < int(token.children); i += 1 {
-			off += count_children(idx + off, tokens)
-		}
-	}
-	return off
-}
-
-map_object :: proc(idx: int, tokens: []Token, obj: ^map[string]int) -> int {
-	token := &tokens[idx]
-	assert(token.type == .Object)
-
-	cur_idx := idx + 1
-	for i := 0; i < int(token.children); i += 1 {
-		cur_token := &tokens[cur_idx]
-		key := cur_token.s; cur_idx += 1
-
-		obj[key] = cur_idx
-		cur_idx += count_children(cur_idx, tokens)
-	}
-
-	return cur_idx
-}
-
-get_i64 :: proc(key: string, tokens: []Token, obj: ^map[string]int) -> (val: i64, ok: bool) {
-	idx := obj[key] or_return
-	tok := &tokens[idx]
-	if tok.type != .Primitive {
-		return 0, false
-	}
-
-	val = strconv.parse_i64(tok.s) or_return
-
-	return val, true
-}
-
-get_string :: proc(key: string, tokens: []Token, obj: ^map[string]int) -> (val: string, ok: bool) {
-	idx := obj[key] or_return
-	tok := &tokens[idx]
-	if tok.type != .String {
-		return "", false
-	}
-
-	return tok.s, true
-}
-
-print_token :: proc(idx: int, tokens: []Token, depth := 0) -> int {
-	token := &tokens[idx]
-
-	off := 1
-	switch token.type {
-	case .Nil:
-		fmt.printf("(nil)")
-	case .String:
-		fmt.printf("\"%s\"", token.s)
-	case .Primitive:
-		fmt.printf("%s", token.s)
-	case .Object:
-		fmt.printf("{{")
-
-		for i := 0; i < int(token.children); i += 1 {
-			off += print_token(idx + off, tokens, depth + 1)
-			fmt.printf(": ")
-			off += print_token(idx + off, tokens, depth + 1)
-
-			if (i + 1) < int(token.children) {
-				fmt.printf(", ")
-			}
-		}
-
-		fmt.printf("}}")
-	case .Array:
-		fmt.printf("[")
-
-		for i := 0; i < int(token.children); i += 1 {
-			off += print_token(idx + off, tokens, depth + 1)
-			if (i + 1) < int(token.children) {
-				fmt.printf(", ")
-			}
-		}
-
-		fmt.printf("]")
-	}
-
-	if depth == 0 {
-		fmt.printf("\n")
-	}
-
-	return off
 }
 
 real_pos :: proc(p: ^Parser) -> int { return p.pos }
 chunk_pos :: proc(p: ^Parser) -> int { return p.pos - p.offset }
 
-parse_primitive :: proc(p: ^Parser) -> JSONState {
+pop_wrap :: proc(p: ^Parser, loc := #caller_location) -> Token {
+	tok := queue.pop_back(&p.parent_stack)
+/*
+	fmt.printf("Popped: %#v || %s ----------\n", tok, loc)
+	print_queue(&p.parent_stack)
+	fmt.printf("-----------\n")
+*/
+	return tok
+}
+
+push_wrap :: proc(p: ^Parser, tok: Token, loc := #caller_location) {
+	queue.push_back(&p.parent_stack, tok)
+
+/*
+	fmt.printf("Pushed: %#v || %s -----------\n", tok, loc)
+	print_queue(&p.parent_stack)
+	fmt.printf("-----------\n")
+*/
+}
+
+parse_primitive :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 	start := real_pos(p)
 
 	found := false
@@ -227,23 +134,26 @@ parse_primitive :: proc(p: ^Parser) -> JSONState {
 			p.pos = start
 
 			fmt.printf("Failed to parse token! 1\n")
-			return .InvalidToken
+			return
 		}
 	}
 
 	if !found {
 		p.pos = start
-		return .PartialRead
+		state = .PartialRead
+		return
 	}
 
-	token := alloc_token(p)
-	fill_token(p, token, .Primitive, start, real_pos(p), p.super)
+	token = init_token(p)
+	fill_token(&token, .Primitive, start, real_pos(p))
 	p.pos -= 1
-	return .TokenDone
+
+	state = .TokenDone
+	return
 }
 
 
-parse_string :: proc(p: ^Parser) -> JSONState {
+parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 	start := real_pos(p)
 	p.pos += 1
 
@@ -251,9 +161,11 @@ parse_string :: proc(p: ^Parser) -> JSONState {
 		ch := p.data[chunk_pos(p)]
 
 		if ch == '\"' {
-			token := alloc_token(p)
-			fill_token(p, token, .String, start + 1, real_pos(p), p.super)
-			return .TokenDone
+			token = init_token(p)
+			fill_token(&token, .String, start + 1, real_pos(p))
+
+			state = .TokenDone
+			return
 		}
 
 		if ch == '\\' && (chunk_pos(p) + 1) < len(p.data) {
@@ -276,7 +188,8 @@ parse_string :: proc(p: ^Parser) -> JSONState {
 					   (p.data[chunk_pos(p)] >= 97 && p.data[chunk_pos(p)] <= 102))) {
 						p.pos = start
 						fmt.printf("Failed to parse token! 3\n")
-						return .InvalidToken
+
+						return
 					}
 					p.pos += 1
 				}
@@ -284,149 +197,143 @@ parse_string :: proc(p: ^Parser) -> JSONState {
 			case:
 				p.pos = start
 				fmt.printf("Failed to parse token! 4\n")
-				return .InvalidToken
+
+				return
 			}
 		}
 	}
 
 	p.pos = start
-	return .PartialRead
+	state = .PartialRead
+	return
 }
+
 
 init_parser :: proc(total_size: int) -> Parser {
 	p := Parser{}
-	p.tokens = make([dynamic]Token)
 	p.pos    = 0
-	p.super  = -1
 	p.offset = 0
 	p.total_size = total_size
+	queue.init(&p.parent_stack)
 
 	return p
 }
 
-get_next_token :: proc(p: ^Parser, data: []u8, offset: int) -> (^Token, JSONState) {
+get_next_token :: proc(p: ^Parser, chunk_start: int, full_chunk: []u8, data: []u8, offset: int) -> (token: Token, state: JSONState) {
 	p.offset = offset
 	p.data = string(data)
+	p.full_chunk = string(full_chunk)
+	p.chunk_start = chunk_start
 
-	token: ^Token
 	for ; chunk_pos(p) < len(data); p.pos += 1 {
-
 		ch := data[chunk_pos(p)]
+
 		switch ch {
 		case '{': fallthrough
 		case '[':
-			token = alloc_token(p)
+			token = init_token(p)
 
-			if p.super != -1 {
-				parent := &p.tokens[p.super]
-				if parent.type == .Object {
-					fmt.printf("Expected token Array parent, got %s\n", parent.type)
-					fmt.printf("token: %#v, parent %#v\n", token, parent)
-					return nil, .InvalidToken
-				}
-				parent.children += 1
-				token.parent = i32(p.super)
-			}
 			token.type = (ch == '{') ? TokenType.Object : TokenType.Array
 			token.start = i32(real_pos(p))
-			p.super = len(p.tokens) - 1
+			push_wrap(p, token)
 
 			p.pos += 1
-			return token, .ScopeEntered
+			state = .ScopeEntered
+			return
 		case '}': fallthrough
 		case ']':
 			type := (ch == '}') ? TokenType.Object : TokenType.Array
-			if len(p.tokens) < 1 {
-				fmt.printf("Failed to parse token! 7\n")
-				return nil, .InvalidToken
+
+			depth := queue.len(p.parent_stack)
+			if depth == 0 {
+				fmt.printf("Expected first {{, got %c\n", ch)
+				return
 			}
-			token = &p.tokens[len(p.tokens) - 1]
-			inner_loop: for {
+
+			loop: for {
+				token = pop_wrap(p)
 				if token.start != -1 && token.end == -1 {
 					if token.type != type {
-						fmt.printf("Failed to parse token! 8\n")
-						return nil, .InvalidToken
+						fmt.printf("Got an unexpected scope close? Got %s, expected %s\n", token.type, type)
+						return
 					}
+
 					token.end = i32(real_pos(p) + 1)
-					p.super = int(token.parent)
-					break inner_loop
+					p.pos += 1
+					state = .ScopeExited
+					return
 				}
 
-				if token.parent == -1 {
-					if token.type != type || p.super == -1 {
-						fmt.printf("Failed to parse token! 9\n")
-						return nil, .InvalidToken
-					}
-					break inner_loop
+				depth = queue.len(p.parent_stack)
+				if depth == 0 {
+					fmt.printf("unable to find closing %c\n", type)
+					return
 				}
-
-				token = &p.tokens[token.parent]
 			}
 
-			p.pos += 1
-			return token, .ScopeExited
-		case '\"':
-			state := parse_string(p)
-			if state != .TokenDone {
-				return nil, state
-			}
-
-			if p.super != -1 {
-				p.tokens[p.super].children += 1
-			}
-
-			token = &p.tokens[len(p.tokens)-1]
-			p.pos += 1
-			return token, state
+			fmt.printf("how am I here?\n")
+			return
+		// spaces are nops
 		case '\t': fallthrough
-		case '\r': fallthrough
 		case '\n': fallthrough
 		case ' ':
+
 		case ':':
-			p.super = len(p.tokens) - 1
 		case ',':
-			if p.super != -1 &&
-			   p.tokens[p.super].type != .Array &&
-			   p.tokens[p.super].type != .Object {
-				p.super = int(p.tokens[p.super].parent)
+			depth := queue.len(p.parent_stack)
+			if depth == 0 {
+				fmt.printf("Expected first {{, got %c\n", ch)
+				return
 			}
+			parent := queue.peek_back(&p.parent_stack)
+
+			if parent.type != .Array && parent.type != .Object {
+				pop_wrap(p)
+			}
+		case '\"':
+			token, state = parse_string(p)
+			if state != .TokenDone {
+				return
+			}
+
+			parent := queue.peek_back(&p.parent_stack)
+			if parent.type == .Object {
+				push_wrap(p, token)
+			}
+
+			p.pos += 1
+			return
+
 		case '-': fallthrough
 		case '0'..='9': fallthrough
 		case 't': fallthrough
 		case 'f': fallthrough
 		case 'n':
-			if p.super != -1 {
-				parent := &p.tokens[p.super]
-				if parent.type == .Object || (parent.type == .String && parent.children != 0) {
-					fmt.printf("Failed to parse token! 11\n")
-					return nil, .InvalidToken
-				}
-			}
-
-			state := parse_primitive(p)
+			token, state = parse_primitive(p)
 			if state != .TokenDone {
-				return nil, state
+				return
 			}
 
-			if p.super != -1 {
-				p.tokens[p.super].children += 1
-			}
-
-			token = &p.tokens[len(p.tokens)-1]
 			p.pos += 1
-			return token, state
+			return
 		case:
-			fmt.printf("Failed to parse token! 13\n")
-			return nil, .InvalidToken
+
+			fmt.printf("'%c':%d %s\n", ch, chunk_pos(p), data)
+			return
 		}
 	}
 
-	// this is dumb
-	for i := len(p.tokens) - 1; i >= 0; i -= 1 {
-		if p.tokens[i].start != -1 && p.tokens[i].end == -1 {
-			return nil, .PartialRead
+	depth := queue.len(p.parent_stack)
+	if depth != 0 {
+		if p.pos == p.total_size {
+			fmt.printf("unexpected leftovers?\n")
+			return
+		} else {
+			state = .PartialRead
+			return
 		}
 	}
 
-	return nil, .Finished
+	state = .Finished
+	return
 }

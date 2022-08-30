@@ -24,55 +24,6 @@ stop_bench :: proc(name: string) {
 	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f32(mem_range) / 1024 / 1024)
 }
 
-load_config :: proc(tokens: []Token, events: ^[dynamic]Event) -> bool {
-	start_bench("generate events")
-	if len(tokens) < 1 || tokens[0].type != .Object {
-		fmt.printf("Invalid JSON file!\n")
-		trap()
-	}
-
-	obj_map := make(map[string]int, 0, context.temp_allocator)
-
-	map_object(0, tokens, &obj_map)
-	idx := obj_map["traceEvents"] or_return
-	clear_map(&obj_map)
-
-	event_arr := &tokens[idx]
-	if event_arr.type != .Array {
-		fmt.printf("Invalid JSON file!\n")
-		trap()
-	}
-	idx += 1
-
-	for j := 0; j < int(event_arr.children); j += 1 {
-		idx = map_object(idx, tokens, &obj_map)
-		defer clear_map(&obj_map)
-
-		duration, ok := get_i64("dur", tokens, &obj_map)
-		if !ok {
-			continue
-		}
-
-		name       := get_string("name", tokens, &obj_map) or_return
-		timestamp  := get_i64("ts", tokens, &obj_map) or_return
-		tid := get_i64("tid", tokens, &obj_map) or_return
-		pid := get_i64("pid", tokens, &obj_map) or_return
-
-		append(events, Event{
-			name = name,
-			duration = u64(duration), 
-			timestamp = u64(timestamp), 
-			thread_id = u64(tid), 
-			process_id = u64(pid), 
-		})
-	}
-	stop_bench("generate events")
-	fmt.printf("Ingested config\n")
-	fmt.printf("generated %d events\n", len(events))
-
-	return true
-}
-
 process_events :: proc(events: []Event) -> ([]Process, u64, u64, int) {
 	processes := make([dynamic]Process)
 
@@ -209,6 +160,9 @@ process_events :: proc(events: []Event) -> ([]Process, u64, u64, int) {
 
 	return processes[:], total_max_time, total_min_time, total_max_depth
 }
+
+//default_config := `{"otherData": {}, "traceEvents": [{"name": "foo", "dur": 95, "pid": 0, "tid": 1, "ts": 2325}]}`
+//default_config := `{"foo": {}, "bar": [{"cab": 1}, {"cab": 2}]}`
 
 // default config courtesy of NeGate
 default_config := `

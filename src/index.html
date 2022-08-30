@@ -244,25 +244,20 @@
 						return get_system_colormode()
 					},
 					get_chunk(offset, size) {
-						_get_chunk(offset, size)
+						let r = new FileReader();
+						let blob = loading_file.slice(offset, offset + size);
+						r.onload = (e) => {
+							if (e.target.error != null) {
+								console.log("Failed to read file: " + e.target.error);
+								return;
+							}
+
+							window.wasm.load_config_chunk(offset, loading_file.size, ...bytes(e.target.result));
+						};
+						r.readAsArrayBuffer(blob);
 					}
 				},
 			});
-
-
-			let _get_chunk = function(_offset, _size) {
-				let r = new FileReader();
-				let blob = loading_file.slice(_offset, _offset + _size);
-				r.onload = (e) => {
-					if (e.target.error != null) {
-						console.log("Failed to read file: " + e.target.error);
-						return;
-					}
-
-					window.wasm.load_config_chunk(_offset, loading_file.size, ...bytes(e.target.result));
-				};
-				r.readAsArrayBuffer(blob);
-			}
 
 			let awake = false;
 			function wakeUp() {
@@ -466,7 +461,7 @@
 							let file = item.getAsFile();
 
 							loading_file = file;
-							_get_chunk(0, initial_chunk_size);
+							window.wasm.start_loading_file(loading_file.size);
 						}
 					});
 				}

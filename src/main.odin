@@ -5,10 +5,16 @@ import "core:math"
 import "core:math/rand"
 import "core:runtime"
 import "core:strings"
+import "core:mem"
 import "vendor:wasm/js"
 
 global_arena := Arena{}
 temp_arena := Arena{}
+scratch_arena := Arena{}
+
+global_allocator: mem.Allocator
+scratch_allocator: mem.Allocator
+temp_allocator: mem.Allocator
 
 wasmContext := runtime.default_context()
 
@@ -114,8 +120,6 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 }
 
 init :: proc() {
-	events = make([dynamic]Event)	
-
 	defer {
 		t = 0
 		frame_count = 0
@@ -124,11 +128,6 @@ init :: proc() {
 	}
 
 	if config_updated {
-		if ok := load_config(p.tokens[:], &events); !ok {
-			fmt.printf("Failed to load config!\n")
-			config_updated = false
-			return
-		}
 		processes, total_max_time, total_min_time, total_max_depth = process_events(events[:])
 
 		color_choices = make([dynamic]Vec3)
@@ -148,17 +147,23 @@ main :: proc() {
 	PAGE_SIZE :: 64
 	ONE_GB :: 1000000 / PAGE_SIZE
 	ONE_MB :: 1000 / PAGE_SIZE
-	temp_data, _ := js.page_alloc(ONE_MB * 2)
-	global_data, _ := js.page_alloc((ONE_GB * 2) + (ONE_MB * 101))
-    arena_init(&global_arena, global_data)
+	temp_data, _    := js.page_alloc(ONE_MB * 2)
+	scratch_data, _ := js.page_alloc(ONE_MB * 1)
+	global_data, _ := js.page_alloc(ONE_GB * 2)
     arena_init(&temp_arena, temp_data)
+    arena_init(&scratch_arena, scratch_data)
+    arena_init(&global_arena, global_data)
 
-    wasmContext.allocator = arena_allocator(&global_arena)
-    wasmContext.temp_allocator = arena_allocator(&temp_arena)
+    global_allocator = arena_allocator(&global_arena)
+    temp_allocator = arena_allocator(&temp_arena)
+    scratch_allocator = arena_allocator(&scratch_arena)
+
+	wasmContext.allocator = global_allocator
+	wasmContext.temp_allocator = temp_allocator
 
     context = wasmContext
 
-	load_config_chunk(0, len(default_config), transmute([]u8)default_config)
+	manual_load(default_config)
 }
 
 random_seed: u64

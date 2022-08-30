@@ -1,5 +1,8 @@
 package main
 
+import "core:container/queue"
+import "core:fmt"
+
 Vec2 :: [2]f32
 Vec3 :: [3]f32
 Rect :: struct {
@@ -47,4 +50,22 @@ rescale :: proc(val, old_min, old_max, new_min, new_max: $T) -> T {
 	old_range := old_max - old_min
 	new_range := new_max - new_min
 	return (((val - old_min) * new_range) / old_range) + new_min
+}
+
+print_queue :: proc(q: ^$Q/queue.Queue($T)) {
+	if queue.len(q^) == 0 {
+		fmt.printf("Queue{{}}\n")
+		return
+	}
+
+	fmt.printf("Queue{{\n")
+	for i := 0; i < queue.len(q^); i += 1 {
+		fmt.printf("\t%v", queue.get(q, i))
+
+		if i + 1 < queue.len(q^) {
+			fmt.printf(",")
+		}
+		fmt.printf("\n")
+	}
+	fmt.printf("}}\n")
 }

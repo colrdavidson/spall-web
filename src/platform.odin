@@ -3,6 +3,9 @@ package main
 import "core:mem"
 import "core:runtime"
 import "core:fmt"
+import "core:container/queue"
+import "core:strings"
+import "core:strconv"
 
 shift_down := false
 
@@ -90,48 +93,196 @@ load_build_hash :: proc "contextless" (_hash: int) {
 
 CHUNK_SIZE :: 1024 * 1024
 
+get_token_str :: proc(p: ^Parser, tok: Token) -> string {
+	str := string(p.full_chunk[int(tok.start)-p.chunk_start:int(tok.end)-p.chunk_start])
+	return str
+}
+
+is_obj_start :: proc(p: ^Parser, tok: Token, state: JSONState, key: string, depth: int) -> bool {
+	return is_scoped_start(p, tok, state, key, .Object, depth)
+}
+
+is_arr_start :: proc(p: ^Parser, tok: Token, state: JSONState, key: string, depth: int) -> bool {
+	return is_scoped_start(p, tok, state, key, .Array, depth)
+}
+
+is_scoped_start :: proc(p: ^Parser, tok: Token, state: JSONState, key: string, type: TokenType, depth: int) -> bool {
+	cur_depth := queue.len(p.parent_stack)
+	if state == .ScopeEntered && tok.type == type && cur_depth > 1 && (cur_depth - 2) == depth {
+		parent := queue.get_ptr(&p.parent_stack, cur_depth - 2)
+		return key == get_token_str(p, parent^)
+	}
+	return false
+}
+
+events_id: int
+cur_event_id: int
+
+obj_map: map[string]string
+parent_map: map[int]string
+seen_pair_map: map[string]bool
+cur_event: Event
+
+reset_token_maps :: proc() {
+	clear_map(&parent_map)
+	clear_map(&seen_pair_map)
+}
+
+manual_load :: proc(config: string) {
+	init_loading_state(len(config))
+	load_config_chunk(0, len(config), transmute([]u8)config)
+}
+
+init_loading_state :: proc(size: int) {
+	loading_config = true
+
+	free_all(context.allocator)
+	free_all(context.temp_allocator)
+
+	events = make([dynamic]Event)	
+
+	fields := []string{ "dur", "name", "pid", "tid", "ts" }
+	obj_map = make(map[string]string, 0, scratch_allocator)
+
+	for field in fields {
+		obj_map[field] = field
+	}
+
+	parent_map    = make(map[int]string, 0, scratch_allocator)
+	seen_pair_map = make(map[string]bool, 0, scratch_allocator)
+	cur_event = Event{}
+	events_id    = -1
+	cur_event_id = -1
+
+	fmt.printf("Loading a %.1f MB config\n", f32(size) / 1024 / 1024)
+	start_bench("tokenize config")
+	p = init_parser(size)
+}
+
+@export
+start_loading_file :: proc "contextless" (size: int) {
+	context = wasmContext
+
+	init_loading_state(size)
+	get_chunk(p.pos, CHUNK_SIZE)
+}
+
+// this is gross + brittle. I'm sorry. I need a better way to do JSON streaming
 @export
 load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) -> bool {
 	context = wasmContext
-
-	if start == 0 {
-		loading_config = true
-		free_all(context.allocator)
-
-		fmt.printf("Loading a %.1f MB config\n", f32(total_size) / 1024 / 1024)
-		start_bench("tokenize config")
-		p = init_parser(total_size)
-	}
-
 	defer free_all(context.temp_allocator)
 
 	hot_loop: for {
-		tok, state := get_next_token(&p, chunk[chunk_pos(&p):], start+chunk_pos(&p))
+		tok, state := get_next_token(&p, start, chunk, chunk[chunk_pos(&p):], start+chunk_pos(&p))
+
 		#partial switch state {
 		case .PartialRead:
+			p.offset = p.pos
 			get_chunk(p.pos, CHUNK_SIZE)
 			return true
 		case .InvalidToken:
+			trap()
 			return false
 		case .Finished:
-			break hot_loop
+			stop_bench("tokenize config")
+			fmt.printf("Got %d events!\n", len(events))
+
+			config_updated = true
+			init()
+			loading_config = false
+			return true
 		}
 
-		if tok.type == .Primitive || tok.type == .String {
-			//str := string(chunk[int(tok.start):int(tok.end)])
-			//fmt.printf("Got %s\n", str)
+		// get start of traceEvents
+		if events_id == -1 {
+			if is_arr_start(&p, tok, state, "traceEvents", 1) {
+				events_id = tok.id
+			}
+			continue
+		}
+
+		// get start of an event
+		if cur_event_id == -1 {
+			depth := queue.len(p.parent_stack)
+			if depth > 1 {
+				parent := queue.get_ptr(&p.parent_stack, depth - 2)
+				if state == .ScopeEntered && tok.type == .Object && parent.id == events_id {
+					cur_event_id = tok.id
+				}
+			}
+			continue
+		}
+
+		// eww.
+		depth := queue.len(p.parent_stack)
+		parent := queue.get_ptr(&p.parent_stack, depth - 1)
+		if parent.id == tok.id {
+			parent = queue.get_ptr(&p.parent_stack, depth - 2)
+		}
+
+		// gather keys for event
+		if state == .TokenDone && tok.type == .String && parent.id == cur_event_id {
+			key := get_token_str(&p, tok)
+			if key in obj_map {
+				parent_map[tok.id] = obj_map[key]
+			}
+			continue
+		}
+
+
+		// gather values for event
+		if state == .TokenDone &&
+		   (tok.type == .String || tok.type == .Primitive) {
+
+			if !(parent.id in parent_map) {
+				continue
+			}
+
+			key := parent_map[parent.id]
+			value := get_token_str(&p, tok)
+
+			if key == "name" {
+				cur_event.name = strings.clone(value)
+			}
+
+			switch parent_map[parent.id] {
+			case "dur": 
+				dur, ok := strconv.parse_u64(value)
+				if !ok { continue }
+				cur_event.duration = dur
+			case "ts": 
+				ts, ok := strconv.parse_u64(value)
+				if !ok { continue }
+				cur_event.timestamp = ts
+			case "tid": 
+				tid, ok := strconv.parse_u64(value)
+				if !ok { continue }
+				cur_event.thread_id = tid
+			case "pid": 
+				pid, ok := strconv.parse_u64(value)
+				if !ok { continue }
+				cur_event.process_id = pid
+			}
+
+			seen_pair_map[key] = true
+			continue
+		}
+
+		// got the whole event
+		if state == .ScopeExited && tok.id == cur_event_id {
+			if ("dur" in seen_pair_map) {
+				append(&events, cur_event)
+			}
+
+			cur_event = Event{}
+			reset_token_maps()
+			cur_event_id = -1
+			continue
 		}
 	}
 
-	stop_bench("tokenize config")
-
-	trap()
-
-	config_updated = true
-	init()
-	loading_config = false
-
-	return true
+	return false
 }
 
 foreign import "js"
