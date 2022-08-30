@@ -52,8 +52,8 @@ TokenType :: enum {
 
 Token :: struct {
 	type: TokenType,
-	start: i32,
-	end: i32,
+	start: int,
+	end: int,
 
 	id: int,
 }
@@ -82,8 +82,8 @@ init_token :: proc(p: ^Parser) -> Token {
 
 fill_token :: proc(token: ^Token, type: TokenType, start, end: int) {
 	token.type = type
-	token.start = i32(start)
-	token.end = i32(end)
+	token.start = start
+	token.end = end
 }
 
 real_pos :: proc(p: ^Parser) -> int { return p.pos }
@@ -184,7 +184,7 @@ parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 				p.pos += 1
 				for i := 0; i < 4 && chunk_pos(p) < len(p.data); i += 1 {
 					if (!((p.data[chunk_pos(p)] >= 48 && p.data[chunk_pos(p)] <= 57) ||
-					   (p.data[chunk_pos(p)] >= 65 && p.data[p.pos] <= 70) ||
+					   (p.data[chunk_pos(p)] >= 65 && p.data[chunk_pos(p)] <= 70) ||
 					   (p.data[chunk_pos(p)] >= 97 && p.data[chunk_pos(p)] <= 102))) {
 						p.pos = start
 						fmt.printf("Failed to parse token! 3\n")
@@ -234,7 +234,7 @@ get_next_token :: proc(p: ^Parser, chunk_start: int, full_chunk: []u8, data: []u
 			token = init_token(p)
 
 			token.type = (ch == '{') ? TokenType.Object : TokenType.Array
-			token.start = i32(real_pos(p))
+			token.start = real_pos(p)
 			push_wrap(p, token)
 
 			p.pos += 1
@@ -258,7 +258,7 @@ get_next_token :: proc(p: ^Parser, chunk_start: int, full_chunk: []u8, data: []u
 						return
 					}
 
-					token.end = i32(real_pos(p) + 1)
+					token.end = real_pos(p) + 1
 					p.pos += 1
 					state = .ScopeExited
 					return
