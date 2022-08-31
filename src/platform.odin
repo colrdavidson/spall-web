@@ -11,9 +11,9 @@ import "core:c"
 shift_down := false
 
 @export
-set_text_height :: proc "contextless" (height: f32) {
-	text_height = height
-	line_gap = height + (height * (3/4))
+set_text_height :: proc "contextless" (_height: f32) {
+	text_height = _height
+	line_gap = 1.125 * _height
 }
 
 // eww, this is not a good way to do it
@@ -233,8 +233,9 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 		// gather keys for event
 		if state == .TokenDone && tok.type == .String && parent.id == cur_event_id {
 			key := get_token_str(&p, tok)
-			if key in obj_map {
-				parent_map[tok.id] = obj_map[key]
+			val, ok := obj_map[key]
+			if ok {
+				parent_map[tok.id] = val
 			}
 			continue
 		}
@@ -244,13 +245,12 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 		if state == .TokenDone &&
 		   (tok.type == .String || tok.type == .Primitive) {
 
-			if !(parent.id in parent_map) {
+			key, ok := parent_map[parent.id]
+			if !ok {
 				continue
 			}
 
-			key := parent_map[parent.id]
 			value := get_token_str(&p, tok)
-
 			if key == "name" {
 				str, err := strings.intern_get(&p.intern, value)
 				if err != nil {
@@ -260,7 +260,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 				cur_event.name = str
 			}
 
-			switch parent_map[parent.id] {
+			switch key {
 			case "dur": 
 				dur, ok := strconv.parse_u64(value)
 				if !ok { continue }
@@ -303,16 +303,16 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 foreign import "js"
 
 foreign js {
-    canvas_clear :: proc() ---
-    canvas_clip :: proc(x, y, w, h: f32) ---
-    canvas_rect :: proc(x, y, w, h: f32, r, g, b, a: f32) ---
-    canvas_rectc :: proc(x, y, w, h, radius: f32, r, g, b, a: f32) ---
-    canvas_circle :: proc(x, y, radius: f32, r, g, b, a: f32) ---
-    canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32, scale: f32, font: string) ---
-    canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
-    canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
-    measure_text :: proc(str: string, scale: f32, font: string) -> f32 ---
-    get_text_height :: proc(scale: f32, font: string) -> f32 ---
+    _canvas_clear :: proc() ---
+    _canvas_clip :: proc(x, y, w, h: f32) ---
+    _canvas_rect :: proc(x, y, w, h: f32, r, g, b, a: f32) ---
+    _canvas_rectc :: proc(x, y, w, h, radius: f32, r, g, b, a: f32) ---
+    _canvas_circle :: proc(x, y, radius: f32, r, g, b, a: f32) ---
+    _canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32, scale: f32, font: string) ---
+    _canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
+    _canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
+    _measure_text :: proc(str: string, scale: f32, font: string) -> f32 ---
+    _get_text_height :: proc(scale: f32, font: string) -> f32 ---
 
     debugger :: proc() ---
     log_string :: proc(str: string) ---
@@ -327,23 +327,37 @@ foreign js {
 	get_chunk :: proc(offset, size: u32) ---
 }
 
+get_text_height :: #force_inline proc(scale: f32, font: string) -> f32 {
+	return _get_text_height(scale, font)
+}
+
+measure_text :: #force_inline proc(str: string, scale: f32, font: string) -> f32 {
+	return _measure_text(str, scale, font)
+}
+
+canvas_clear :: #force_inline proc() {
+	_canvas_clear()
+}
+draw_clip :: #force_inline proc(x, y, w, h: f32) {
+	_canvas_clip(x * dpr, y * dpr, w * dpr, h * dpr)
+}
 draw_rect :: #force_inline proc(rect: Rect, color: Vec3, a: f32 = 255) {
-    canvas_rect(rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, color.x, color.y, color.z, a)
+    _canvas_rect(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, color.x, color.y, color.z, a)
 }
 draw_rectc :: #force_inline proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {
-    canvas_rectc(rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, radius, color.x, color.y, color.z, a)
+    _canvas_rectc(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, radius * dpr, color.x, color.y, color.z, a)
 }
 draw_circle :: #force_inline proc(center: Vec2, radius: f32, color: Vec3, a: f32 = 255) {
-    canvas_circle(center.x, center.y, radius, color.x, color.y, color.z, a)
+    _canvas_circle(center.x * dpr, center.y * dpr, radius * dpr, color.x, color.y, color.z, a)
 }
 draw_text :: #force_inline proc(str: string, pos: Vec2, scale: f32, font: string, color: Vec3, a: f32 = 255) {
-    canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, a, scale, font)
+    _canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, a, scale, font)
 }
 draw_line :: #force_inline proc(start, end: Vec2, strokeWidth: f32, color: Vec3, a: f32 = 255) {
-    canvas_line(start.x, start.y, end.x, end.y, color.x, color.y, color.z, a, strokeWidth)
+    _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, color.x, color.y, color.z, a, strokeWidth * dpr * dpr)
 }
 draw_arc :: #force_inline proc(center: Vec2, radius, angleStart, angleEnd: f32, strokeWidth: f32, color: Vec3, a: f32) {
-    canvas_arc(center.x, center.y, radius, angleStart, angleEnd, color.x, color.y, color.z, a, strokeWidth)
+    _canvas_arc(center.x * dpr, center.y * dpr, radius * dpr, angleStart, angleEnd, color.x, color.y, color.z, a, strokeWidth * dpr)
 }
 
 draw_rect_outline :: proc(rect: Rect, width: f32, color: Vec3, a: f32 = 255) {
@@ -365,4 +379,9 @@ set_cursor :: proc(cursor: string) {
 
 reset_cursor :: proc() {
 	change_cursor("auto")
+}
+
+@export
+set_dpr :: proc "contextless" (v: f32) {
+	dpr = v
 }

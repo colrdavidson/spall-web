@@ -91,7 +91,6 @@
 		const audio_ctx = new AudioContext();
 
 		let dpr;
-		let textHeight;
 		let cached_font = "";
 		let cached_cursor = "";
 		let cached_size = 0;
@@ -107,6 +106,7 @@
 				cached_font = font;
 				cached_size = size;
 				cached_height = ctx.measureText('NothinBelowTheBaseline').actualBoundingBoxDescent / dpr;
+				window.wasm.set_text_height(cached_height);
 			}
 		}
 
@@ -118,52 +118,48 @@
 			window.wasm = await odin.runWasm('tracey_patched.wasm', null, {
 				js: {
 					// Canvas
-					canvas_clear() {
+					_canvas_clear() {
 						ctx.clearRect(0, 0, canvas.width, canvas.height);
 					},
-					canvas_clip(x, y, w, h) {
+					_canvas_clip(x, y, w, h) {
 						ctx.restore();
 						ctx.save();
 						ctx.beginPath();
-						ctx.rect(x * dpr, y * dpr, w * dpr, h * dpr);
+						ctx.rect(x, y, w, h);
 						ctx.clip();
 					},
-					canvas_rect(x, y, w, h, red, green, blue, alpha) {
+					_canvas_rect(x, y, w, h, red, green, blue, alpha) {
 						ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
-						ctx.fillRect(x * dpr, y * dpr, w * dpr, h * dpr);
+						ctx.fillRect(x, y, w, h);
 					},
-					canvas_rectc(x, y, w, h, r, red, green, blue, alpha) {
+					_canvas_rectc(x, y, w, h, r, red, green, blue, alpha) {
 						r = Math.min(r, w / 2, h / 2);
 
-						const dx = x * dpr;
-						const dy = y * dpr;
-						const dr = r * dpr;
-
-						const diw = (w - (2 * r)) * dpr; // device inner width
-						const dih = (h - (2 * r)) * dpr; // device inner height
+						const diw = (w - (2 * r)); // device inner width
+						const dih = (h - (2 * r)); // device inner height
 
 						ctx.beginPath();
-						ctx.moveTo(dx + dr, dy);
-						ctx.lineTo(dx + dr + diw, dy);
-						ctx.arc(dx + dr + diw, dy + dr, dr, -Math.PI/2, 0);
-						ctx.lineTo(dx + dr + diw + dr, dy + dr + dih);
-						ctx.arc(dx + dr + diw, dy + dr + dih, dr, 0, Math.PI/2);
-						ctx.lineTo(dx + dr, dy + dr + dih + dr);
-						ctx.arc(dx + dr, dy + dr + dih, dr, Math.PI/2, Math.PI);
-						ctx.lineTo(dx, dy + dr);
-						ctx.arc(dx + dr, dy + dr, dr, Math.PI, (3*Math.PI)/2);
+						ctx.moveTo(x + r, y);
+						ctx.lineTo(x + r + diw, y);
+						ctx.arc(x + r + diw, y + r, r, -Math.PI/2, 0);
+						ctx.lineTo(x + r + diw + r, y + r + dih);
+						ctx.arc(x + r + diw, y + r + dih, r, 0, Math.PI/2);
+						ctx.lineTo(x + r, y + r + dih + r);
+						ctx.arc(x + r, y + r + dih, r, Math.PI/2, Math.PI);
+						ctx.lineTo(x, y + r);
+						ctx.arc(x + r, y + r, r, Math.PI, (3*Math.PI)/2);
 
 						ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
 						ctx.fill();
 					},
-					canvas_circle(x, y, radius, red, green, blue, alpha) {
+					_canvas_circle(x, y, radius, red, green, blue, alpha) {
 						ctx.beginPath();
-						ctx.arc(x * dpr, y * dpr, radius * dpr, 0, 2*Math.PI, true);
+						ctx.arc(x, y, radius, 0, 2*Math.PI, true);
 
 						ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
 						ctx.fill();
 					},
-					canvas_text(strP, strLen, x, y, r, g, b, a, size, f, flen) {
+					_canvas_text(strP, strLen, x, y, r, g, b, a, size, f, flen) {
 						const str = window.wasm.odinMem.loadString(strP, strLen);
 						const font = window.wasm.odinMem.loadString(f, flen);
 						updateFont(size, font);
@@ -171,18 +167,18 @@
 						ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
 						ctx.fillText(str, x * dpr, y * dpr);
 					},
-					canvas_line(x1, y1, x2, y2, r, g, b, a, strokeWidth) {
+					_canvas_line(x1, y1, x2, y2, r, g, b, a, strokeWidth) {
 						ctx.beginPath();
-						ctx.moveTo(x1 * dpr, y1 * dpr);
-						ctx.lineTo(x2 * dpr, y2 * dpr);
+						ctx.moveTo(x1, y1);
+						ctx.lineTo(x2, y2);
 
 						ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${a/255})`;
-						ctx.lineWidth = strokeWidth * dpr;
+						ctx.lineWidth = strokeWidth;
 						ctx.stroke();
 					},
-					canvas_arc(x, y, radius, angleStart, angleEnd, r, g, b, a, strokeWidth) {
+					_canvas_arc(x, y, radius, angleStart, angleEnd, r, g, b, a, strokeWidth) {
 						ctx.beginPath();
-						ctx.arc(x * dpr, y * dpr, radius * dpr, -angleStart, -angleEnd - 0.001, true);
+						ctx.arc(x, y, radius, -angleStart, -angleEnd - 0.001, true);
 						/*
 						The 0.001 is because Firefox has some dumb bug where
 						it doesn't draw all the way to the end of the arc and
@@ -194,10 +190,10 @@
 						*/
 
 						ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${a/255})`;
-						ctx.lineWidth = strokeWidth * dpr;
+						ctx.lineWidth = strokeWidth;
 						ctx.stroke();
 					},
-					measure_text: (p, len, size, f, flen) => {
+					_measure_text: (p, len, size, f, flen) => {
 						const str = window.wasm.odinMem.loadString(p, len);
 						const font = window.wasm.odinMem.loadString(f, flen);
 						updateFont(size, font);
@@ -205,7 +201,7 @@
 
 						return metrics.width / dpr;
 					},
-					get_text_height: (size, f, flen) => {
+					_get_text_height: (size, f, flen) => {
 						const font = window.wasm.odinMem.loadString(f, flen);
 						updateFont(size, font);
 						return cached_height;
@@ -410,11 +406,7 @@
 			window.addEventListener('keydown', e => {
 				if (e.key.length > 1) {
 					specialKeyEvent('down', e);
-				} else if (
-					!(e.ctrlKey || e.metaKey)
-					|| e.code == 'KeyA'
-					|| e.code == 'KeyZ'
-				) {
+				} else if ( !(e.ctrlKey || e.metaKey) || e.code == 'KeyA' || e.code == 'KeyZ') {
 					window.wasm.text_input(...str(e.key), ...str(e.code));
 					e.preventDefault();
 				}
@@ -499,15 +491,16 @@
 				dpr = window.devicePixelRatio;
 				canvas.width = canvasContainer.getBoundingClientRect().width * dpr;
 				canvas.height = canvasContainer.getBoundingClientRect().height * dpr;
+				window.wasm.set_dpr(dpr);
 
 				ctx.textBaseline = 'top';
 				updateFont(cached_size, cached_font, true);
-				window.wasm.set_text_height(cached_height);
 
 				wakeUp();
 			}
 			updateCanvasSize();
 			window.addEventListener('resize', () => updateCanvasSize());
+			window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('change', () => updateCanvasSize());
 
 			// TODO: The timer should probably have a cap or otherwise
 			// keep ticking in some other way. We have weird issues where

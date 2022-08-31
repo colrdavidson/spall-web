@@ -41,7 +41,7 @@ if RELEASE:
     subprocess.run([
         'wasm-opt', 'build/tracey.wasm',
         '-o', 'build/tracey.wasm',
-        '-O2', # general perf optimizations
+        '-O4', # general perf optimizations
         '--memory-packing', # remove unnecessary and extremely large .bss segment
         '--zero-filled-memory',
     ])
