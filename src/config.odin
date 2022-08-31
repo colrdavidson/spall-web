@@ -21,7 +21,7 @@ stop_bench :: proc(name: string) {
 
 	time_range := end_time - start_time
 	mem_range := end_mem - start_mem
-	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f32(mem_range) / 1024 / 1024)
+	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f64(mem_range) / 1024 / 1024)
 }
 
 push_event :: proc(processes: ^[dynamic]Process, event: Event) {

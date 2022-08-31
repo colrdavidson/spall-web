@@ -92,28 +92,9 @@ load_build_hash :: proc "contextless" (_hash: int) {
 	hash = _hash
 }
 
-CHUNK_SIZE :: 1024 * 1024
-
 get_token_str :: proc(p: ^Parser, tok: Token) -> string {
-	str := string(p.full_chunk[int(tok.start)-p.chunk_start:int(tok.end)-p.chunk_start])
+	str := string(p.full_chunk[u32(tok.start)-p.chunk_start:u32(tok.end)-p.chunk_start])
 	return str
-}
-
-is_obj_start :: proc(p: ^Parser, tok: Token, state: JSONState, key: string, depth: int) -> bool {
-	return is_scoped_start(p, tok, state, key, .Object, depth)
-}
-
-is_arr_start :: proc(p: ^Parser, tok: Token, state: JSONState, key: string, depth: int) -> bool {
-	return is_scoped_start(p, tok, state, key, .Array, depth)
-}
-
-is_scoped_start :: proc(p: ^Parser, tok: Token, state: JSONState, key: string, type: TokenType, depth: int) -> bool {
-	cur_depth := queue.len(p.parent_stack)
-	if state == .ScopeEntered && tok.type == type && cur_depth > 1 && (cur_depth - 2) == depth {
-		parent := queue.get_ptr(&p.parent_stack, cur_depth - 2)
-		return key == get_token_str(p, parent^)
-	}
-	return false
 }
 
 events_id: int
@@ -130,12 +111,12 @@ reset_token_maps :: proc() {
 }
 
 manual_load :: proc(config: string) {
-	init_loading_state(len(config))
-	load_config_chunk(0, len(config), transmute([]u8)config)
+	init_loading_state(u32(len(config)))
+	load_config_chunk(0, u32(len(config)), transmute([]u8)config)
 }
 
 fields := []string{ "dur", "name", "pid", "tid", "ts" }
-init_loading_state :: proc(size: int) {
+init_loading_state :: proc(size: u32) {
 	loading_config = true
 
 	free_all(scratch_allocator)
@@ -158,41 +139,40 @@ init_loading_state :: proc(size: int) {
 	cur_event_id = -1
 	event_count = 0
 
-	fmt.printf("Loading a %.1f MB config\n", f32(size) / 1024 / 1024)
+	fmt.printf("Loading a %.1f MB config\n", f64(size) / 1024 / 1024)
 	start_bench("parse config")
 	p = init_parser(size)
 }
 
 @export
-start_loading_file :: proc "contextless" (size: int) {
+start_loading_file :: proc "contextless" (size: u32) {
 	context = wasmContext
 
-	init_loading_state(size)
-	get_chunk(p.pos, CHUNK_SIZE)
+	init_loading_state(u32(size))
+	get_chunk(u32(p.pos), CHUNK_SIZE)
 }
 
 // this is gross + brittle. I'm sorry. I need a better way to do JSON streaming
 @export
-load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) {
+load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 	context = wasmContext
 	defer free_all(context.temp_allocator)
 
-	p.chunk_start = start
-	p.full_chunk = string(chunk)
+	set_next_chunk(&p, start, chunk)
 	hot_loop: for {
-		tok, state := get_next_token(&p, chunk[chunk_pos(&p):], start+chunk_pos(&p))
+		tok, state := get_next_token(&p)
 
 		#partial switch state {
 		case .PartialRead:
 			p.offset = p.pos
-			get_chunk(p.pos, CHUNK_SIZE)
+			get_chunk(u32(p.pos), CHUNK_SIZE)
 			return
 		case .InvalidToken:
 			trap()
 			return
 		case .Finished:
 			stop_bench("parse config")
-			fmt.printf("Got %d events!\n", event_count)
+			fmt.printf("Got %d events and %d tokens!\n", event_count, p.tok_count)
 
 			start_bench("process events")
 			total_max_depth = process_events(&processes)
@@ -220,20 +200,24 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) {
 			return
 		}
 
+		depth := queue.len(p.parent_stack)
+
 		// get start of traceEvents
 		if events_id == -1 {
-			if is_arr_start(&p, tok, state, "traceEvents", 1) {
-				events_id = tok.id
+			if state == .ScopeEntered && tok.type == .Array && depth == 3 {
+				parent := queue.get_ptr(&p.parent_stack, depth - 2)
+				if "traceEvents" == get_token_str(&p, parent^) {
+					events_id = tok.id
+				}
 			}
 			continue
 		}
 
 		// get start of an event
 		if cur_event_id == -1 {
-			depth := queue.len(p.parent_stack)
-			if depth > 1 {
+			if depth > 1 && state == .ScopeEntered && tok.type == .Object {
 				parent := queue.get_ptr(&p.parent_stack, depth - 2)
-				if state == .ScopeEntered && tok.type == .Object && parent.id == events_id {
+				if parent.id == events_id {
 					cur_event_id = tok.id
 				}
 			}
@@ -241,7 +225,6 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) {
 		}
 
 		// eww.
-		depth := queue.len(p.parent_stack)
 		parent := queue.get_ptr(&p.parent_stack, depth - 1)
 		if parent.id == tok.id {
 			parent = queue.get_ptr(&p.parent_stack, depth - 2)
@@ -340,7 +323,7 @@ foreign js {
 	change_cursor :: proc(cursor: string) ---
 	get_system_color :: proc() -> bool ---
 
-	get_chunk :: proc(offset: int, size: int) ---
+	get_chunk :: proc(offset, size: u32) ---
 }
 
 draw_rect :: proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {

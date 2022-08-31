@@ -82,7 +82,7 @@ events: [dynamic]Event
 color_choices: [dynamic]Vec3
 processes: [dynamic]Process
 process_map: map[u64]int
-event_count: int
+event_count: i64
 total_max_time: u64
 total_min_time: u64
 total_max_depth: int
@@ -120,13 +120,14 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 	}
 }
 
+CHUNK_SIZE :: 10 * 1024 * 1024
 main :: proc() {
 	PAGE_SIZE :: 64
 	ONE_GB :: 1000000 / PAGE_SIZE
 	ONE_MB :: 1000 / PAGE_SIZE
-	temp_data, _    := js.page_alloc(ONE_MB * 2)
+	temp_data, _    := js.page_alloc(ONE_MB * 11)
 	scratch_data, _ := js.page_alloc(ONE_MB * 2)
-	global_data, _ := js.page_alloc(ONE_GB * 2)
+	global_data, _ := js.page_alloc((ONE_GB * 2) + (ONE_MB * 100))
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
     arena_init(&global_arena, global_data)
@@ -165,6 +166,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 		first_frame = false
 	}
 
+
 	// render loading screen
 	if loading_config {
 		pad_size : f32 = 3
@@ -189,12 +191,15 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 		return true
 	}
 
-	defer free_all(context.temp_allocator)
+	defer {
+		free_all(context.temp_allocator)
+		if clicked {
+			clicked = false
+		}
 
-	defer if clicked {
-		clicked = false
+		is_hovering = false
 	}
-	defer is_hovering = false
+
 
     t += dt
 

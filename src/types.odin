@@ -61,3 +61,13 @@ print_queue :: proc(q: ^$Q/queue.Queue($T)) {
 	}
 	fmt.printf("}}\n")
 }
+
+split_u64 :: proc(x: u64) -> (u32, u32) {
+	lo := u32(x)
+	hi := u32(x >> 32)
+	return lo, hi
+}
+
+compose_u64 :: proc(lo, hi: u32) -> (u64) {
+	return u64(hi) << 32 | u64(lo)
+}

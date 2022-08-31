@@ -52,26 +52,26 @@ TokenType :: enum {
 
 Token :: struct {
 	type: TokenType,
-	start: int,
-	end: int,
+	start: i64,
+	end: i64,
 	id: int,
 }
 
 Parser :: struct {
-	pos: int,
-	offset: int,
+	pos: u32,
+	offset: u32,
 
 	parent_stack: queue.Queue(Token),
-	data: string,
-	full_chunk: string,
-	chunk_start: int,
-	total_size: int,
+	data: []u8,
+	full_chunk: []u8,
+	chunk_start: u32,
+	total_size: u32,
 	tok_count: int,
 
 	intern: strings.Intern,
 }
 
-init_token :: proc(p: ^Parser, type: TokenType, start, end: int) -> Token {
+init_token :: proc(p: ^Parser, type: TokenType, start, end: i64) -> Token {
 	tok := Token{}
 	tok.type = type
 	tok.start = start
@@ -82,8 +82,8 @@ init_token :: proc(p: ^Parser, type: TokenType, start, end: int) -> Token {
 	return tok
 }
 
-real_pos :: #force_inline proc(p: ^Parser) -> int { return p.pos }
-chunk_pos :: #force_inline proc(p: ^Parser) -> int { return p.pos - p.offset }
+real_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos }
+chunk_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos - p.offset }
 
 pop_wrap :: #force_inline proc(p: ^Parser, loc := #caller_location) -> Token {
 	tok := queue.pop_back(&p.parent_stack)
@@ -109,7 +109,7 @@ parse_primitive :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 	start := real_pos(p)
 
 	found := false
-	top_loop: for ; chunk_pos(p) < len(p.data); p.pos += 1 {
+	top_loop: for ; chunk_pos(p) < u32(len(p.data)); p.pos += 1 {
 		ch := p.data[chunk_pos(p)]
 
 		switch ch {
@@ -140,7 +140,7 @@ parse_primitive :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		return
 	}
 
-	token = init_token(p, .Primitive, start, real_pos(p))
+	token = init_token(p, .Primitive, i64(start), i64(real_pos(p)))
 	p.pos -= 1
 
 	state = .TokenDone
@@ -152,16 +152,16 @@ parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 	start := real_pos(p)
 	p.pos += 1
 
-	for ; chunk_pos(p) < len(p.data); p.pos += 1 {
+	for ; chunk_pos(p) < u32(len(p.data)); p.pos += 1 {
 		ch := p.data[chunk_pos(p)]
 
 		if ch == '\"' {
-			token = init_token(p, .String, start + 1, real_pos(p))
+			token = init_token(p, .String, i64(start + 1), i64(real_pos(p)))
 			state = .TokenDone
 			return
 		}
 
-		if ch == '\\' && (chunk_pos(p) + 1) < len(p.data) {
+		if ch == '\\' && (chunk_pos(p) + 1) < u32(len(p.data)) {
 			p.pos += 1
 			switch p.data[chunk_pos(p)] {
 			case '\"': fallthrough
@@ -175,7 +175,7 @@ parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 
 			case 'u':
 				p.pos += 1
-				for i := 0; i < 4 && chunk_pos(p) < len(p.data); i += 1 {
+				for i := 0; i < 4 && chunk_pos(p) < u32(len(p.data)); i += 1 {
 					if (!((p.data[chunk_pos(p)] >= 48 && p.data[chunk_pos(p)] <= 57) ||
 					   (p.data[chunk_pos(p)] >= 65 && p.data[chunk_pos(p)] <= 70) ||
 					   (p.data[chunk_pos(p)] >= 97 && p.data[chunk_pos(p)] <= 102))) {
@@ -202,7 +202,7 @@ parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 }
 
 
-init_parser :: proc(total_size: int) -> Parser {
+init_parser :: proc(total_size: u32) -> Parser {
 	p := Parser{}
 	p.pos    = 0
 	p.offset = 0
@@ -213,18 +213,23 @@ init_parser :: proc(total_size: int) -> Parser {
 	return p
 }
 
-get_next_token :: proc(p: ^Parser, data: []u8, offset: int) -> (token: Token, state: JSONState) {
-	p.offset = offset
-	p.data = string(data)
+set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
+	p.chunk_start = start
+	p.full_chunk = chunk
+}
 
-	for ; chunk_pos(p) < len(data); p.pos += 1 {
-		ch := data[chunk_pos(p)]
+get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
+	p.data = p.full_chunk[chunk_pos(p):]
+	p.offset = p.chunk_start+chunk_pos(p)
+
+	for ; chunk_pos(p) < u32(len(p.data)); p.pos += 1 {
+		ch := p.data[chunk_pos(p)]
 
 		switch ch {
 		case '{': fallthrough
 		case '[':
 			type := (ch == '{') ? TokenType.Object : TokenType.Array
-			token = init_token(p, type, real_pos(p), -1)
+			token = init_token(p, type, i64(real_pos(p)), -1)
 			push_wrap(p, token)
 
 			p.pos += 1
@@ -248,7 +253,7 @@ get_next_token :: proc(p: ^Parser, data: []u8, offset: int) -> (token: Token, st
 						return
 					}
 
-					token.end = real_pos(p) + 1
+					token.end = i64(real_pos(p) + 1)
 					p.pos += 1
 					state = .ScopeExited
 					return
@@ -307,7 +312,7 @@ get_next_token :: proc(p: ^Parser, data: []u8, offset: int) -> (token: Token, st
 			return
 		case:
 
-			fmt.printf("'%c':%d %s\n", ch, chunk_pos(p), data)
+			fmt.printf("'%c':%d %s\n", ch, chunk_pos(p), p.data)
 			return
 		}
 	}
