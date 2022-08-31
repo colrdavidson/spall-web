@@ -136,7 +136,7 @@ main :: proc() {
 	ONE_MB :: 1000 / PAGE_SIZE
 	temp_data, _    := js.page_alloc(ONE_MB * 11)
 	scratch_data, _ := js.page_alloc(ONE_MB * 2)
-	global_data, _ := js.page_alloc((ONE_GB * 1) + (ONE_MB * 100))
+	global_data, _ := js.page_alloc(ONE_GB * 1)
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
     arena_init(&global_arena, global_data)
@@ -430,6 +430,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 		}
 
 		event := processes[p_idx].threads[t_idx].events[e_idx]
+		text_height = get_text_height(p_font_size, monospace_font)
 		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start timestamp: %d", event.timestamp), Vec2{x_subpad, next_line(&y)}, p_font_size, monospace_font, text_color)
