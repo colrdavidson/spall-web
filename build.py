@@ -32,7 +32,7 @@ subprocess.run([
     'build', 'src',
     '-target:js_wasm32',
     '-out:build/tracy.wasm',
-    '-o:size'
+    '-o:speed'
 ])
 
 # Optimize output WASM file
@@ -59,10 +59,17 @@ memcpy = """(\\1
     local.get 2
     memory.copy
     local.get 0)"""
+memset = """(\\1
+    local.get 0
+    local.get 1
+    local.get 2
+    memory.fill
+    local.get 0)"""
 with open('build/tracy.wat', 'r') as infile, open('build/tracey_patched.wat', 'w') as outfile:
     wat = infile.read()
     wat = re.sub(r'\((func \$memcpy.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
     wat = re.sub(r'\((func \$memmove.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
+    wat = re.sub(r'\((func \$memset.*?\(result i32\)).*?local.get 0(.*?return)?\)', memset, wat, flags=re.DOTALL)
     outfile.write(wat)
 subprocess.run([
     'wat2wasm',
