@@ -244,7 +244,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	x_subpad : f32 = em
 	y_pad_size : f32 = em
 	start_x := x_pad_size
-	info_pane_height : f32 = pane_y + (y_pad_size * 2) + line_gap
+	info_pane_height : f32 = pane_y + y_pad_size + line_gap
 	info_pane_y := height - info_pane_height
 
 	time_range := total_max_time - total_min_time
@@ -410,8 +410,6 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
     draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
-
-	info_pane_y += y_pad_size
 
 	if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.eid != -1 {
 		p_idx := int(selected_event.pid)

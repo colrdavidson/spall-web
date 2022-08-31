@@ -13,7 +13,7 @@ shift_down := false
 @export
 set_text_height :: proc "contextless" (_height: f32) {
 	text_height = _height
-	line_gap = 1.125 * _height
+	line_gap = _height / 1.5
 }
 
 // eww, this is not a good way to do it
