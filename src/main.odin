@@ -61,7 +61,6 @@ hash := 0
 p: Parser
 
 first_frame := true
-config_updated := false
 loading_config := true
 colormode := ColorMode.Dark
 
@@ -118,32 +117,6 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 		colormode = ColorMode.Auto
 	} else {
 		colormode = is_dark ? ColorMode.Dark : ColorMode.Light
-	}
-}
-
-init :: proc() {
-	defer {
-		t = 0
-		frame_count = 0
-		scale = 1
-		pan = Vec2{}
-	}
-
-	if config_updated {
-		total_max_time, total_min_time, total_max_depth = process_events(&processes)
-		free_all(context.temp_allocator)
-		free_all(scratch_allocator)
-
-		color_choices = make([dynamic]Vec3)
-		for i := 0; i < total_max_depth; i += 1 {
-			r := f32(205 + rand_int(0, 50))
-			g := f32(0 + rand_int(0, 230))
-			b := f32(0 + rand_int(0, 55))
-
-			append(&color_choices, Vec3{r, g, b})
-		}
-
-		config_updated = false
 	}
 }
 

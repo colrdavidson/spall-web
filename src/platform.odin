@@ -6,6 +6,7 @@ import "core:fmt"
 import "core:container/queue"
 import "core:strings"
 import "core:strconv"
+import "core:c"
 
 shift_down := false
 
@@ -142,6 +143,8 @@ init_loading_state :: proc(size: int) {
 	free_all(context.temp_allocator)
 	processes = make([dynamic]Process)
 	process_map = make(map[u64]int, 0, scratch_allocator)
+	total_max_time = 0
+	total_min_time = c.UINT64_MAX
 
 	obj_map = make(map[string]string, 0, scratch_allocator)
 	for field in fields {
@@ -170,31 +173,51 @@ start_loading_file :: proc "contextless" (size: int) {
 
 // this is gross + brittle. I'm sorry. I need a better way to do JSON streaming
 @export
-load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) -> bool {
+load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) {
 	context = wasmContext
 	defer free_all(context.temp_allocator)
 
+	p.chunk_start = start
+	p.full_chunk = string(chunk)
 	hot_loop: for {
-		tok, state := get_next_token(&p, start, chunk, chunk[chunk_pos(&p):], start+chunk_pos(&p))
+		tok, state := get_next_token(&p, chunk[chunk_pos(&p):], start+chunk_pos(&p))
 
 		#partial switch state {
 		case .PartialRead:
 			p.offset = p.pos
 			get_chunk(p.pos, CHUNK_SIZE)
-			return true
+			return
 		case .InvalidToken:
 			trap()
-			return false
+			return
 		case .Finished:
 			stop_bench("parse config")
 			fmt.printf("Got %d events!\n", event_count)
 
-			config_updated = true
 			start_bench("process events")
-			init()
+			total_max_depth = process_events(&processes)
 			stop_bench("process events")
+
+			// reset render state
+			color_choices = make([dynamic]Vec3)
+			for i := 0; i < total_max_depth; i += 1 {
+				r := f32(205 + rand_int(0, 50))
+				g := f32(0 + rand_int(0, 230))
+				b := f32(0 + rand_int(0, 55))
+
+				append(&color_choices, Vec3{r, g, b})
+			}
+
+			t = 0
+			frame_count = 0
+			scale = 1
+			pan = Vec2{}
+
+			free_all(context.temp_allocator)
+			free_all(scratch_allocator)
+
 			loading_config = false
-			return true
+			return
 		}
 
 		// get start of traceEvents
@@ -248,7 +271,7 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) ->
 			if key == "name" {
 				str, err := strings.intern_get(&p.intern, value)
 				if err != nil {
-					return false
+					return
 				}
 
 				cur_event.name = str
@@ -291,7 +314,7 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) ->
 		}
 	}
 
-	return false
+	return
 }
 
 foreign import "js"

@@ -29,7 +29,6 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 	if !ok1 {
 		append(processes, Process{
 			min_time = c.UINT64_MAX, 
-			min_duration = c.UINT64_MAX, 
 			process_id = event.process_id,
 			threads = make([dynamic]Thread),
 			thread_map = make(map[u64]int, 0, scratch_allocator),
@@ -44,7 +43,6 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 
 		append(threads, Thread{ 
 			min_time = c.UINT64_MAX, 
-			min_duration = c.UINT64_MAX, 
 			thread_id = event.thread_id,
 			events = make([dynamic]Event),
 		})
@@ -55,60 +53,56 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 
 	p := &processes[p_idx]
 	p.min_time = min(p.min_time, event.timestamp)
-	p.max_time = max(p.max_time, event.timestamp + event.duration)
-	p.min_duration = min(p.min_duration, event.duration)
-	p.max_duration = max(p.max_duration, event.duration)
-	p.total_duration += event.duration
 
 	t := &p.threads[t_idx]
 	t.min_time = min(t.min_time, event.timestamp)
-	t.max_time = max(t.max_time, event.timestamp + event.duration)
-	t.min_duration = min(t.min_duration, event.duration)
-	t.max_duration = max(t.max_duration, event.duration)
-	t.total_duration += event.duration
+
+	total_max_time = max(total_max_time, event.timestamp + event.duration)
+	total_min_time = min(total_min_time, event.timestamp)
 
 	append(&t.events, event)
 }
 
-process_events :: proc(processes: ^[dynamic]Process) -> (u64, u64, int) {
-	total_min_time : u64 = c.UINT64_MAX
-	total_max_time : u64 = 0
+pid_sort_proc :: proc(a, b: Process) -> bool {
+	if a.min_time < b.min_time {
+		return true
+	}
+	return false
+}
+tid_sort_proc :: proc(a, b: Thread) -> bool {
+	if a.min_time < b.min_time {
+		return true
+	}
+	return false
+}
+event_sort_proc :: proc(a, b: Event) -> bool {
+	if a.timestamp < b.timestamp {
+		return true
+	}
+	return false
+}
+process_events :: proc(processes: ^[dynamic]Process) -> int {
 	total_max_depth := 0
 
-	for pid, proc_idx in process_map {
+	ev_stack: queue.Queue(int)
+	queue.init(&ev_stack, 0, context.temp_allocator)
+	for _, proc_idx in process_map {
 		process := &processes[proc_idx]
 
-		total_max_time = max(total_max_time, process.max_time)
-		total_min_time = min(total_min_time, process.min_time)
-		
-		tid_sort_proc :: proc(a, b: Thread) -> bool {
-			if a.min_time < b.min_time {
-				return true
-			}
-			return false
-		}
 		slice.sort_by(process.threads[:], tid_sort_proc)
 
 		// generate depth mapping
 		for tm in &process.threads {
-			event_sort_proc :: proc(a, b: Event) -> bool {
-				if a.timestamp < b.timestamp {
-					return true
-				}
-				return false
-			}
 			slice.sort_by(tm.events[:], event_sort_proc)
 
-			ev_stack: queue.Queue(int)
-			queue.init(&ev_stack, 0, context.temp_allocator)
-
+			queue.clear(&ev_stack)		
 			for event, e_idx in &tm.events {
 				cur_start := event.timestamp
 				cur_end   := event.timestamp + event.duration
 				if queue.len(ev_stack) == 0 {
 					queue.push_back(&ev_stack, e_idx)
 				} else {
-					prev_e_idx := queue.get(&ev_stack, queue.len(ev_stack) - 1)
+					prev_e_idx := queue.peek_back(&ev_stack)^
 					prev_ev := tm.events[prev_e_idx]
 
 					prev_start := prev_ev.timestamp
@@ -121,7 +115,7 @@ process_events :: proc(processes: ^[dynamic]Process) -> (u64, u64, int) {
 
 						// while it doesn't overlap the parent
 						for queue.len(ev_stack) > 0 {
-							prev_e_idx = queue.get(&ev_stack, queue.len(ev_stack) - 1)
+							prev_e_idx = queue.peek_back(&ev_stack)^
 							prev_ev = tm.events[prev_e_idx]
 
 							prev_start = prev_ev.timestamp
@@ -140,21 +134,12 @@ process_events :: proc(processes: ^[dynamic]Process) -> (u64, u64, int) {
 				event.depth = queue.len(ev_stack)
 				tm.max_depth = max(tm.max_depth, event.depth)
 			}
-
-			free_all(context.temp_allocator)
 			total_max_depth = max(total_max_depth, tm.max_depth)
 		}
 	}
 
-	pid_sort_proc :: proc(a, b: Process) -> bool {
-		if a.min_time < b.min_time {
-			return true
-		}
-		return false
-	}
 	slice.sort_by(processes[:], pid_sort_proc)
-
-	return total_max_time, total_min_time, total_max_depth
+	return total_max_depth
 }
 
 //default_config := `{"otherData": {}, "traceEvents": [{"name": "foo", "dur": 95, "pid": 0, "tid": 1, "ts": 2325}]}`

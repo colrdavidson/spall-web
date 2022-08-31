@@ -24,10 +24,6 @@ Event :: struct {
 
 Thread :: struct {
 	min_time: u64,
-	max_time: u64,
-	min_duration: u64,
-	max_duration: u64,
-	total_duration: u64,
 	max_depth: int,
 
 	thread_id: u64,
@@ -36,10 +32,6 @@ Thread :: struct {
 
 Process :: struct {
 	min_time: u64,
-	max_time: u64,
-	min_duration: u64,
-	max_duration: u64,
-	total_duration: u64,
 
 	process_id: u64,
 	threads: [dynamic]Thread,
