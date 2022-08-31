@@ -80,7 +80,6 @@ ColorMode :: enum {
 	Auto
 }
 
-y_pad_size     : f32 = 20
 text_height    : f32 = 0
 em             : f32 = 0
 line_gap       : f32 = 0
@@ -171,8 +170,6 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 		random_seed = u64(get_time())
 		fmt.printf("Seed is 0x%X\n", random_seed)
 
-		fmt.printf("%f %f %f\n", width, height, dpr)
-
 		rand.set_global_seed(random_seed)
 		first_frame = false
 	}
@@ -227,7 +224,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	thread_gap : f32 = 8
 
 	em := get_text_height(p_font_size, monospace_font)
-	toolbar_height : f32 = 3 * em
+	toolbar_height : f32 = 4 * em
 
 	ch_width := measure_text("a", p_font_size, monospace_font)
 	rect_height := em + (0.75 * em)
@@ -242,7 +239,12 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	for i := 0; i < 4; i += 1 {
 		next_line(&pane_y)
 	}
-	info_pane_height : f32 = pane_y + (y_pad_size * 2)
+
+	x_pad_size : f32 = 3 * em
+	x_subpad : f32 = em
+	y_pad_size : f32 = em
+	start_x := x_pad_size
+	info_pane_height : f32 = pane_y + (y_pad_size * 2) + line_gap
 	info_pane_y := height - info_pane_height
 
 	time_range := total_max_time - total_min_time
@@ -271,9 +273,6 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	pan.x += pan_delta.x
 	pan.y -= pan_delta.y
 
-	x_pad_size : f32 = 3 * em
-	x_subpad : f32 = em
-	start_x := x_pad_size
 	start_y := toolbar_height + y_pad_size
 
 	graph_start_y := start_y
@@ -419,7 +418,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 		t_idx := int(selected_event.tid)
 		e_idx := int(selected_event.eid)
 
-		y := info_pane_y
+		y := info_pane_y + y_pad_size
 
 		time_fmt :: proc(time: u64) -> string {
 			if time < 1000 {
@@ -442,9 +441,9 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
     draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
 
 	// draw toolbar
-	edge_pad : f32 = 0.5 * em
-	button_height : f32 = 2 * em
-	button_width  : f32 = 2 * em
+	edge_pad : f32 = 1 * em
+	button_height : f32 = 2.5 * em
+	button_width  : f32 = 2.5 * em
 	button_pad    : f32 = 0.5 * em
 
 	color_text : string
