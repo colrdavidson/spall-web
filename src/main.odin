@@ -206,31 +206,24 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	header_pad : f32 = 10
 	top_line_gap : f32 = 7
 	thread_gap : f32 = 8
+
 	normal_text_height := get_text_height(1, default_font)
+	ch_width := measure_text("a", 1, monospace_font)
 	rect_height := normal_text_height + 5
 
 	info_pane_height : f32 = 100
 	info_pane_y := height - info_pane_height
 
-	start_x := x_pad_size
-	start_y := toolbar_height + y_pad_size
-
-	graph_start_y := start_y
-	header_height := top_line_gap + normal_text_height
-	cur_y := graph_start_y + header_height + header_pad - pan.y
-	max_x := width - x_pad_size
-	display_width := width - (x_pad_size * 2)
-
-	ch_width := measure_text("a", 1, monospace_font)
-
 	time_range := total_max_time - total_min_time
 	start_time := f64(0)
 	end_time   := f64(time_range) / scale
 
+	trace_display_rect := rect(0, toolbar_height, width, info_pane_y)
+
 	// compute scale + scroll
 	MIN_SCALE :: 0.01
 	MAX_SCALE :: 100000
-	if pt_in_rect(mouse_pos, rect(0, toolbar_height, width, height - toolbar_height)) {
+	if pt_in_rect(mouse_pos, trace_display_rect) {
 		scale *= 1 + (0.1 * zoom_velocity * dt)
 		scale = min(max(scale, MIN_SCALE), MAX_SCALE)
 	}
@@ -239,13 +232,23 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	// compute pan
 	pan_delta := Vec2{}
 	if is_mouse_down {
-		if pt_in_rect(clicked_pos, rect(0, toolbar_height, width, info_pane_y)) {
+		if pt_in_rect(clicked_pos, trace_display_rect) {
 			pan_delta = mouse_pos - last_mouse_pos
 		}
 		last_mouse_pos = mouse_pos
 	}
 	pan.x += pan_delta.x
 	pan.y -= pan_delta.y
+
+	start_x := x_pad_size
+	start_y := toolbar_height + y_pad_size
+
+	graph_start_y := start_y
+	header_height := top_line_gap + normal_text_height
+	max_x := width - x_pad_size
+	display_width := width - (x_pad_size * 2)
+
+	cur_y := graph_start_y + header_height + header_pad - pan.y
 
     canvas_clear()
 
@@ -281,7 +284,6 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 
 			row_text := fmt.tprintf("TID: %d", tm.thread_id)
 			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, 1.0625, default_font, text_color)
-
 
 			for event, e_idx in tm.events {
 				cur_start := event.timestamp - total_min_time
@@ -476,6 +478,20 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 	y2 := box.pos.y + box.size.y
 
 	return x1 <= pt.x && pt.x <= x2 && y1 <= pt.y && pt.y <= y2
+}
+
+rect_in_rect :: proc(a, b: Rect) -> bool {
+	a_left := a.pos.x
+	a_top := a.pos.y
+	a_right := a.pos.x + a.size.x
+	a_bottom := a.pos.y + a.size.y
+
+	b_left := b.pos.x
+	b_top := b.pos.y
+	b_right := b.pos.x + b.size.x
+	b_bottom := b.pos.y + b.size.y
+
+	return !(b_left > a_right || b_right < a_left || b_top < a_top || b_bottom > a_top)
 }
 
 button :: proc(in_rect: Rect, text: string, font: string) -> bool {
