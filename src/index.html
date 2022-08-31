@@ -129,11 +129,8 @@
 						ctx.clip();
 					},
 					canvas_rect(x, y, w, h, red, green, blue, alpha) {
-						const dx = x * dpr;
-						const dy = y * dpr;
-
 						ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
-						ctx.fillRect(dx, dy, w, h);
+						ctx.fillRect(x * dpr, y * dpr, w * dpr, h * dpr);
 					},
 					canvas_rectc(x, y, w, h, r, red, green, blue, alpha) {
 						r = Math.min(r, w / 2, h / 2);
