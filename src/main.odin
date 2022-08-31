@@ -159,6 +159,12 @@ main :: proc() {
     arena_init(&global_arena, global_data)
 
     global_allocator = arena_allocator(&global_arena)
+
+	// I'm doing olympic-level memory juggling BS in the ingest system because 
+	// arenas are *special*, and memory is *precious*. Beware free_all()'ing 
+	// the wrong one at the wrong time, here thar be dragons. Once you're in
+	// normal render/frame space, I free_all temp once per frame, and I shouldn't
+	// need to touch scratch
     temp_allocator = arena_allocator(&temp_arena)
     scratch_allocator = arena_allocator(&scratch_arena)
 
