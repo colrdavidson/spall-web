@@ -133,17 +133,17 @@ manual_load :: proc(config: string) {
 	load_config_chunk(0, len(config), transmute([]u8)config)
 }
 
+fields := []string{ "dur", "name", "pid", "tid", "ts" }
 init_loading_state :: proc(size: int) {
 	loading_config = true
 
+	free_all(scratch_allocator)
 	free_all(context.allocator)
 	free_all(context.temp_allocator)
+	processes = make([dynamic]Process)
+	process_map = make(map[u64]int, 0, scratch_allocator)
 
-	events = make([dynamic]Event)	
-
-	fields := []string{ "dur", "name", "pid", "tid", "ts" }
 	obj_map = make(map[string]string, 0, scratch_allocator)
-
 	for field in fields {
 		obj_map[field] = field
 	}
@@ -153,9 +153,10 @@ init_loading_state :: proc(size: int) {
 	cur_event = Event{}
 	events_id    = -1
 	cur_event_id = -1
+	event_count = 0
 
 	fmt.printf("Loading a %.1f MB config\n", f32(size) / 1024 / 1024)
-	start_bench("tokenize config")
+	start_bench("parse config")
 	p = init_parser(size)
 }
 
@@ -185,11 +186,13 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) ->
 			trap()
 			return false
 		case .Finished:
-			stop_bench("tokenize config")
-			fmt.printf("Got %d events!\n", len(events))
+			stop_bench("parse config")
+			fmt.printf("Got %d events!\n", event_count)
 
 			config_updated = true
+			start_bench("process events")
 			init()
+			stop_bench("process events")
 			loading_config = false
 			return true
 		}
@@ -277,7 +280,8 @@ load_config_chunk :: proc "contextless" (start, total_size: int, chunk: []u8) ->
 		// got the whole event
 		if state == .ScopeExited && tok.id == cur_event_id {
 			if ("dur" in seen_pair_map) {
-				append(&events, cur_event)
+				event_count += 1
+				push_event(&processes, cur_event)
 			}
 
 			cur_event = Event{}

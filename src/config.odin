@@ -24,75 +24,62 @@ stop_bench :: proc(name: string) {
 	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f32(mem_range) / 1024 / 1024)
 }
 
-process_events :: proc(events: []Event) -> ([]Process, u64, u64, int) {
-	processes := make([dynamic]Process)
-
-	process_map := make(map[u64]int, 0, context.temp_allocator)
-
-	for event, _ in events {
-		p_idx, ok1 := process_map[event.process_id]
-		if !ok1 {
-			append(&processes, Process{
-				min_time = c.UINT64_MAX, 
-				min_duration = c.UINT64_MAX, 
-				process_id = event.process_id,
-				threads = make([dynamic]Thread),
-				thread_map = make(map[u64]int, 0, context.temp_allocator),
-			})
-			p_idx = len(processes) - 1
-			process_map[event.process_id] = p_idx
-		}
-
-		t_idx, ok2 := processes[p_idx].thread_map[event.thread_id]
-		if !ok2 {
-			threads := &processes[p_idx].threads
-
-			append(threads, Thread{ 
-				min_time = c.UINT64_MAX, 
-				min_duration = c.UINT64_MAX, 
-				thread_id = event.thread_id,
-				events = make([dynamic]Event),
-			})
-
-			t_idx = len(threads) - 1
-			processes[p_idx].thread_map[event.thread_id] = t_idx
-		}
-
-		p := &processes[p_idx]
-		p.min_time = min(p.min_time, event.timestamp)
-		p.max_time = max(p.max_time, event.timestamp + event.duration)
-		p.min_duration = min(p.min_duration, event.duration)
-		p.max_duration = max(p.max_duration, event.duration)
-		p.total_duration += event.duration
-
-		t := &p.threads[t_idx]
-		t.min_time = min(t.min_time, event.timestamp)
-		t.max_time = max(t.max_time, event.timestamp + event.duration)
-		t.min_duration = min(t.min_duration, event.duration)
-		t.max_duration = max(t.max_duration, event.duration)
-		t.total_duration += event.duration
-
-		append(&t.events, event)
+push_event :: proc(processes: ^[dynamic]Process, event: Event) {
+	p_idx, ok1 := process_map[event.process_id]
+	if !ok1 {
+		append(processes, Process{
+			min_time = c.UINT64_MAX, 
+			min_duration = c.UINT64_MAX, 
+			process_id = event.process_id,
+			threads = make([dynamic]Thread),
+			thread_map = make(map[u64]int, 0, scratch_allocator),
+		})
+		p_idx = len(processes) - 1
+		process_map[event.process_id] = p_idx
 	}
 
+	t_idx, ok2 := processes[p_idx].thread_map[event.thread_id]
+	if !ok2 {
+		threads := &processes[p_idx].threads
+
+		append(threads, Thread{ 
+			min_time = c.UINT64_MAX, 
+			min_duration = c.UINT64_MAX, 
+			thread_id = event.thread_id,
+			events = make([dynamic]Event),
+		})
+
+		t_idx = len(threads) - 1
+		processes[p_idx].thread_map[event.thread_id] = t_idx
+	}
+
+	p := &processes[p_idx]
+	p.min_time = min(p.min_time, event.timestamp)
+	p.max_time = max(p.max_time, event.timestamp + event.duration)
+	p.min_duration = min(p.min_duration, event.duration)
+	p.max_duration = max(p.max_duration, event.duration)
+	p.total_duration += event.duration
+
+	t := &p.threads[t_idx]
+	t.min_time = min(t.min_time, event.timestamp)
+	t.max_time = max(t.max_time, event.timestamp + event.duration)
+	t.min_duration = min(t.min_duration, event.duration)
+	t.max_duration = max(t.max_duration, event.duration)
+	t.total_duration += event.duration
+
+	append(&t.events, event)
+}
+
+process_events :: proc(processes: ^[dynamic]Process) -> (u64, u64, int) {
 	total_min_time : u64 = c.UINT64_MAX
 	total_max_time : u64 = 0
 	total_max_depth := 0
+
 	for pid, proc_idx in process_map {
 		process := &processes[proc_idx]
 
-		for tm in &process.threads {
-			event_sort_proc :: proc(a, b: Event) -> bool {
-				if a.timestamp < b.timestamp {
-					return true
-				}
-				return false
-			}
-			slice.sort_by(tm.events[:], event_sort_proc)
-
-			total_max_time = max(total_max_time, process.max_time)
-			total_min_time = min(total_min_time, process.min_time)
-		}
+		total_max_time = max(total_max_time, process.max_time)
+		total_min_time = min(total_min_time, process.min_time)
 		
 		tid_sort_proc :: proc(a, b: Thread) -> bool {
 			if a.min_time < b.min_time {
@@ -104,6 +91,14 @@ process_events :: proc(events: []Event) -> ([]Process, u64, u64, int) {
 
 		// generate depth mapping
 		for tm in &process.threads {
+			event_sort_proc :: proc(a, b: Event) -> bool {
+				if a.timestamp < b.timestamp {
+					return true
+				}
+				return false
+			}
+			slice.sort_by(tm.events[:], event_sort_proc)
+
 			ev_stack: queue.Queue(int)
 			queue.init(&ev_stack, 0, context.temp_allocator)
 
@@ -146,6 +141,7 @@ process_events :: proc(events: []Event) -> ([]Process, u64, u64, int) {
 				tm.max_depth = max(tm.max_depth, event.depth)
 			}
 
+			free_all(context.temp_allocator)
 			total_max_depth = max(total_max_depth, tm.max_depth)
 		}
 	}
@@ -158,7 +154,7 @@ process_events :: proc(events: []Event) -> ([]Process, u64, u64, int) {
 	}
 	slice.sort_by(processes[:], pid_sort_proc)
 
-	return processes[:], total_max_time, total_min_time, total_max_depth
+	return total_max_time, total_min_time, total_max_depth
 }
 
 //default_config := `{"otherData": {}, "traceEvents": [{"name": "foo", "dur": 95, "pid": 0, "tid": 1, "ts": 2325}]}`

@@ -81,7 +81,9 @@ trace_config : string
 
 events: [dynamic]Event
 color_choices: [dynamic]Vec3
-processes: []Process
+processes: [dynamic]Process
+process_map: map[u64]int
+event_count: int
 total_max_time: u64
 total_min_time: u64
 total_max_depth: int
@@ -128,7 +130,9 @@ init :: proc() {
 	}
 
 	if config_updated {
-		processes, total_max_time, total_min_time, total_max_depth = process_events(events[:])
+		total_max_time, total_min_time, total_max_depth = process_events(&processes)
+		free_all(context.temp_allocator)
+		free_all(scratch_allocator)
 
 		color_choices = make([dynamic]Vec3)
 		for i := 0; i < total_max_depth; i += 1 {
@@ -148,7 +152,7 @@ main :: proc() {
 	ONE_GB :: 1000000 / PAGE_SIZE
 	ONE_MB :: 1000 / PAGE_SIZE
 	temp_data, _    := js.page_alloc(ONE_MB * 2)
-	scratch_data, _ := js.page_alloc(ONE_MB * 1)
+	scratch_data, _ := js.page_alloc(ONE_MB * 2)
 	global_data, _ := js.page_alloc(ONE_GB * 2)
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
