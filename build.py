@@ -31,7 +31,7 @@ subprocess.run([
     odin,
     'build', 'src',
     '-target:js_wasm32',
-    '-out:build/tracy.wasm',
+    '-out:build/tracey.wasm',
     '-o:speed'
 ])
 
@@ -39,8 +39,8 @@ subprocess.run([
 if RELEASE:
     print('Optimizing WASM...')
     subprocess.run([
-        'wasm-opt', 'build/tracy.wasm',
-        '-o', 'build/tracy.wasm',
+        'wasm-opt', 'build/tracey.wasm',
+        '-o', 'build/tracey.wasm',
         '-O2', # general perf optimizations
         '--memory-packing', # remove unnecessary and extremely large .bss segment
         '--zero-filled-memory',
@@ -50,8 +50,8 @@ if RELEASE:
 print('Patching WASM...')
 subprocess.run([
     'wasm2wat',
-    '-o', 'build/tracy.wat',
-    'build/tracy.wasm',
+    '-o', 'build/tracey.wat',
+    'build/tracey.wasm',
 ])
 memcpy = """(\\1
     local.get 0
@@ -65,7 +65,7 @@ memset = """(\\1
     local.get 2
     memory.fill
     local.get 0)"""
-with open('build/tracy.wat', 'r') as infile, open('build/tracey_patched.wat', 'w') as outfile:
+with open('build/tracey.wat', 'r') as infile, open('build/tracey_patched.wat', 'w') as outfile:
     wat = infile.read()
     wat = re.sub(r'\((func \$memcpy.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
     wat = re.sub(r'\((func \$memmove.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)

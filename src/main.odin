@@ -175,7 +175,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 		load_box := rect(0, 0, 100, 100)
 		load_box = rect((width / 2) - (load_box.size.x / 2) - pad_size, (height / 2) - (load_box.size.y / 2) - pad_size, load_box.size.x + pad_size, load_box.size.y + pad_size)
 
-		draw_rect(load_box, 3, Vec3{50, 50, 50})
+		draw_rectc(load_box, 3, Vec3{50, 50, 50})
 
 		chunk_count := int(rescale(f32(p.offset), 0, f32(p.total_size), 0, 100))
 
@@ -185,7 +185,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 		for i := chunk_count; i >= 0; i -= 1 {
 			cur_x := f32(i %% int(chunk_size))
 			cur_y := f32(i /  int(chunk_size))
-			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), 0, Vec3{0, 255, 0})
+			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), Vec3{0, 255, 0})
 		}
 		
 		return true
@@ -250,7 +250,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
     canvas_clear()
 
 	// Render background
-    draw_rect(rect(0, toolbar_height, width, height), 0, bg_color2)
+    draw_rect(rect(0, toolbar_height, width, height), bg_color2)
 
 	// draw lines for time markings
 	slice_count := 10
@@ -262,7 +262,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 
 	// Render flamegraphs
 	clicked_on_rect := false
-	for proc_v, p_idx in processes {
+	proc_loop: for proc_v, p_idx in processes {
 		if len(processes) > 1 {
 			row_text := fmt.tprintf("PID: %d", proc_v.process_id)
 			header_text_height := get_text_height(1.25, default_font)
@@ -270,15 +270,18 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 			cur_y += header_text_height + (header_text_height / 2)
 		}
 
-		for tm, t_idx in proc_v.threads {
-			row_text := fmt.tprintf("TID: %d", tm.thread_id)
+		thread_loop: for tm, t_idx in proc_v.threads {
 			header_text_height := get_text_height(1.0625, default_font)
-			draw_text(row_text, Vec2{start_x + 5, cur_y}, 1.0625, default_font, text_color)
-			cur_y += header_text_height + (header_text_height / 2)
 
+			last_cur_y := cur_y
+			cur_y += header_text_height + (header_text_height / 2)
 			if cur_y > info_pane_y {
-				continue
+				break proc_loop
 			}
+
+			row_text := fmt.tprintf("TID: %d", tm.thread_id)
+			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, 1.0625, default_font, text_color)
+
 
 			for event, e_idx in tm.events {
 				cur_start := event.timestamp - total_min_time
@@ -316,7 +319,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 					rect_color.y += 30
 					rect_color.z += 30
 				}
-				draw_rect(entry_rect, 0, rect_color)
+				draw_rect(entry_rect, rect_color)
 
 				text_pad : f32 = 10
 				max_chars := max(0, min(len(event.name), int(math.floor((rect_width - (text_pad * 2)) / ch_width))))
@@ -344,10 +347,10 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 
 
 	// Chop sides of screen
-    draw_rect(rect(0, toolbar_height, width, y_pad_size + header_height), 0, bg_color2) // top
-    draw_rect(rect(max_x, toolbar_height, width, height), 0, bg_color2) // right
-    draw_rect(rect(0, toolbar_height, x_pad_size, height), 0, bg_color2) // left
-    draw_rect(rect(0, info_pane_y, width, height), 0, bg_color2) // bottom
+    draw_rect(rect(0, toolbar_height, width, y_pad_size + header_height), bg_color2) // top
+    draw_rect(rect(max_x, toolbar_height, width, height), bg_color2) // right
+    draw_rect(rect(0, toolbar_height, x_pad_size, height), bg_color2) // left
+    draw_rect(rect(0, info_pane_y, width, height), bg_color2) // bottom
 
 	for i := 0; i <= slice_count; i += 1 {
 		off_x := f32(i) * (f32(display_width) / f32(slice_count))
@@ -370,7 +373,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
-    draw_rect(rect(0, info_pane_y, width, height), 0, bg_color) // bottom
+    draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
 
 	info_pane_y += y_pad_size
 
@@ -403,7 +406,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	}
 
 	// Render toolbar background
-    draw_rect(rect(0, 0, width, toolbar_height), 0, toolbar_color)
+    draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
 
 	// draw toolbar
 	edge_pad : f32 = 10
@@ -476,7 +479,7 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 }
 
 button :: proc(in_rect: Rect, text: string, font: string) -> bool {
-	draw_rect(in_rect, 3, button_color)
+	draw_rectc(in_rect, 3, button_color)
 	text_width := measure_text(text, 1, font)
 	text_height = get_text_height(1, font)
 	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, 1, font, text_color3)

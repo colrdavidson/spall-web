@@ -305,7 +305,8 @@ foreign import "js"
 foreign js {
     canvas_clear :: proc() ---
     canvas_clip :: proc(x, y, w, h: f32) ---
-    canvas_rect :: proc(x, y, w, h, radius: f32, r, g, b, a: f32) ---
+    canvas_rect :: proc(x, y, w, h: f32, r, g, b, a: f32) ---
+    canvas_rectc :: proc(x, y, w, h, radius: f32, r, g, b, a: f32) ---
     canvas_circle :: proc(x, y, radius: f32, r, g, b, a: f32) ---
     canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32, scale: f32, font: string) ---
     canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
@@ -326,19 +327,22 @@ foreign js {
 	get_chunk :: proc(offset, size: u32) ---
 }
 
-draw_rect :: proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {
-    canvas_rect(rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, radius, color.x, color.y, color.z, a)
+draw_rect :: #force_inline proc(rect: Rect, color: Vec3, a: f32 = 255) {
+    canvas_rect(rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, color.x, color.y, color.z, a)
 }
-draw_circle :: proc(center: Vec2, radius: f32, color: Vec3, a: f32 = 255) {
+draw_rectc :: #force_inline proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {
+    canvas_rectc(rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, radius, color.x, color.y, color.z, a)
+}
+draw_circle :: #force_inline proc(center: Vec2, radius: f32, color: Vec3, a: f32 = 255) {
     canvas_circle(center.x, center.y, radius, color.x, color.y, color.z, a)
 }
-draw_text :: proc(str: string, pos: Vec2, scale: f32, font: string, color: Vec3, a: f32 = 255) {
+draw_text :: #force_inline proc(str: string, pos: Vec2, scale: f32, font: string, color: Vec3, a: f32 = 255) {
     canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, a, scale, font)
 }
-draw_line :: proc(start, end: Vec2, strokeWidth: f32, color: Vec3, a: f32 = 255) {
+draw_line :: #force_inline proc(start, end: Vec2, strokeWidth: f32, color: Vec3, a: f32 = 255) {
     canvas_line(start.x, start.y, end.x, end.y, color.x, color.y, color.z, a, strokeWidth)
 }
-draw_arc :: proc(center: Vec2, radius, angleStart, angleEnd: f32, strokeWidth: f32, color: Vec3, a: f32) {
+draw_arc :: #force_inline proc(center: Vec2, radius, angleStart, angleEnd: f32, strokeWidth: f32, color: Vec3, a: f32) {
     canvas_arc(center.x, center.y, radius, angleStart, angleEnd, color.x, color.y, color.z, a, strokeWidth)
 }
 
