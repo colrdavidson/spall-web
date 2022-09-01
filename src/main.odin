@@ -131,16 +131,14 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 CHUNK_SIZE :: 10 * 1024 * 1024
 main :: proc() {
 	PAGE_SIZE :: 64
-	ONE_GB :: 1000000 / PAGE_SIZE
-	ONE_MB :: 1000 / PAGE_SIZE
-	temp_data, _    := js.page_alloc(ONE_MB * 11)
-	scratch_data, _ := js.page_alloc(ONE_MB * 2)
-	global_data, _ := js.page_alloc(ONE_GB * 1)
+	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
+	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
+	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 11)
+	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 2)
+
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
-    arena_init(&global_arena, global_data)
-
-    global_allocator = arena_allocator(&global_arena)
+    growing_arena_init(&global_arena)
 
 	// I'm doing olympic-level memory juggling BS in the ingest system because 
 	// arenas are *special*, and memory is *precious*. Beware free_all()'ing 
@@ -149,6 +147,8 @@ main :: proc() {
 	// need to touch scratch
     temp_allocator = arena_allocator(&temp_arena)
     scratch_allocator = arena_allocator(&scratch_arena)
+
+    global_allocator = growing_arena_allocator(&global_arena)
 
 	wasmContext.allocator = global_allocator
 	wasmContext.temp_allocator = temp_allocator
