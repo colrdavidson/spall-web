@@ -97,6 +97,7 @@
 		let cached_height = 0;
 
 		let loading_file = null;
+		let loading_reader = null;
 
 		function updateFont(size, font, forced = false) {
 			let font_str = `${14 * dpr * size}px ${font}`;
@@ -244,9 +245,8 @@
 						return get_system_colormode()
 					},
 					get_chunk(offset, size) {
-						let r = new FileReader();
 						let blob = loading_file.slice(offset, offset + size);
-						r.onload = (e) => {
+						loading_reader.onload = (e) => {
 							if (e.target.error != null) {
 								console.log("Failed to read file: " + e.target.error);
 								return;
@@ -254,7 +254,7 @@
 
 							window.wasm.load_config_chunk(offset, loading_file.size, ...bytes(e.target.result));
 						};
-						r.readAsArrayBuffer(blob);
+						loading_reader.readAsArrayBuffer(blob);
 					}
 				},
 			});
@@ -456,6 +456,7 @@
 							let file = item.getAsFile();
 
 							loading_file = file;
+							loading_reader = new FileReader();
 							window.wasm.start_loading_file(loading_file.size);
 						}
 					});
