@@ -13,6 +13,7 @@ RELEASE = len(sys.argv) > 1 and sys.argv[1] == 'release'
 
 odin = 'odin'
 wasmld = 'wasm-ld'
+program_name = 'foobar'
 
 try:
     subprocess.run(['wasm-ld-10', '-v'], stdout=subprocess.DEVNULL)
@@ -31,16 +32,16 @@ subprocess.run([
     odin,
     'build', 'src',
     '-target:js_wasm32',
-    '-out:build/tracey.wasm',
-    '-o:speed'
+    f"-out:build/{program_name}.wasm",
+    '-o:speed', '-debug'
 ])
 
 # Optimize output WASM file
 if RELEASE:
     print('Optimizing WASM...')
     subprocess.run([
-        'wasm-opt', 'build/tracey.wasm',
-        '-o', 'build/tracey.wasm',
+        'wasm-opt', f"build/{program_name}.wasm",
+        '-o', f"build/{program_name}.wasm",
         '-O4', # general perf optimizations
         '--memory-packing', # remove unnecessary and extremely large .bss segment
         '--zero-filled-memory',
@@ -50,8 +51,8 @@ if RELEASE:
 print('Patching WASM...')
 subprocess.run([
     'wasm2wat',
-    '-o', 'build/tracey.wat',
-    'build/tracey.wasm',
+    '-o', f"build/{program_name}.wat",
+    f"build/{program_name}.wasm",
 ])
 memcpy = """(\\1
     local.get 0
@@ -65,7 +66,7 @@ memset = """(\\1
     local.get 2
     memory.fill
     local.get 0)"""
-with open('build/tracey.wat', 'r') as infile, open('build/tracey_patched.wat', 'w') as outfile:
+with open(f"build/{program_name}.wat", 'r') as infile, open(f"build/{program_name}_patched.wat", 'w') as outfile:
     wat = infile.read()
     wat = re.sub(r'\((func \$memcpy.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
     wat = re.sub(r'\((func \$memmove.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
@@ -73,8 +74,8 @@ with open('build/tracey.wat', 'r') as infile, open('build/tracey_patched.wat', '
     outfile.write(wat)
 subprocess.run([
     'wat2wasm',
-    '-o', 'build/tracey_patched.wasm',
-    'build/tracey_patched.wat',
+    '-o', f"build/{program_name}_patched.wasm",
+    f"build/{program_name}_patched.wat",
 ])
 
 #
@@ -89,7 +90,7 @@ buildId = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8)) #
 root = 'src/index.html'
 assets = [
     'src/runtime.js',
-    'build/tracey_patched.wasm',
+    f"build/{program_name}_patched.wasm",
 ]
 
 rootContents = open(root).read()

@@ -20,7 +20,6 @@ class WasmMemoryInterface {
 		return new DataView(this.memory.buffer);
 	}
 
-
 	loadF32Array(addr, len) {
 		let array = new Float32Array(this.memory.buffer, addr, len);
 		return array;
@@ -37,7 +36,6 @@ class WasmMemoryInterface {
 		let array = new Int32Array(this.memory.buffer, addr, len);
 		return array;
 	}
-
 
 	loadU8(addr) { return this.mem.getUint8  (addr, true); }
 	loadI8(addr) { return this.mem.getInt8   (addr, true); }
@@ -565,26 +563,6 @@ async function runWasm(wasmPath, consoleElement, extraForeignImports) {
 	wasmMemoryInterface.setMemory(exports.memory);
 
 	exports._start();
-
-	if (exports.step) {
-		const odin_ctx = exports.default_context_ptr();
-
-		let prevTimeStamp = undefined;
-		const step = (currTimeStamp) => {
-			if (prevTimeStamp == undefined) {
-				prevTimeStamp = currTimeStamp;
-			}
-
-			const dt = (currTimeStamp - prevTimeStamp)*0.001;
-			prevTimeStamp = currTimeStamp;
-			exports.step(dt, odin_ctx);
-			window.requestAnimationFrame(step);
-		};
-
-		window.requestAnimationFrame(step);
-	}
-
-	// exports._end();
 
 	const jsExports = {
 		...exports,

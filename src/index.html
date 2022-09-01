@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset="UTF-8">
-	<title>Tracey</title>
+	<title>Foobar</title>
 
 	<script src="runtime.js"></script>
 	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
@@ -116,7 +116,7 @@
 		}
 
 		async function init() {
-			window.wasm = await odin.runWasm('tracey_patched.wasm', null, {
+			window.wasm = await odin.runWasm(`foobar_patched.wasm`, null, {
 				js: {
 					// Canvas
 					_canvas_clear() {
