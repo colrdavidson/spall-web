@@ -138,6 +138,9 @@ main :: proc() {
 
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
+
+	// This must be init last, because it grows infinitely. 
+	// We don't want it accidentally growing into anything useful.
     growing_arena_init(&global_arena)
 
 	// I'm doing olympic-level memory juggling BS in the ingest system because 
@@ -147,7 +150,6 @@ main :: proc() {
 	// need to touch scratch
     temp_allocator = arena_allocator(&temp_arena)
     scratch_allocator = arena_allocator(&scratch_arena)
-
     global_allocator = growing_arena_allocator(&global_arena)
 
 	wasmContext.allocator = global_allocator
