@@ -9,8 +9,23 @@ Rect :: struct {
 	pos: Vec2,
 	size: Vec2,
 }
-rect :: proc(x, y, w, h: f32) -> Rect {
+rect :: #force_inline proc(x, y, w, h: f32) -> Rect {
 	return Rect{Vec2{x, y}, Vec2{w, h}}
+}
+
+Camera :: struct {
+	pan: Vec2,
+	vel: Vec2,
+	scale: f32,
+}
+
+EventRect :: struct {
+	r: Rect,
+	name: string,
+	idx: int,
+	depth: int,
+
+	collated: bool,
 }
 
 Event :: struct {
@@ -28,6 +43,7 @@ Thread :: struct {
 
 	thread_id: u64,
 	events: [dynamic]Event,
+	rects: []EventRect,
 }
 
 Process :: struct {

@@ -255,6 +255,9 @@
 							window.wasm.load_config_chunk(offset, loading_file.size, ...bytes(e.target.result));
 						};
 						loading_reader.readAsArrayBuffer(blob);
+					},
+					_pow(x, power) {
+						return Math.pow(x, power);
 					}
 				},
 			});
@@ -315,7 +318,15 @@
 				e.preventDefault();
 
 				const containerRect = canvasContainer.getBoundingClientRect();
-				if (e.touches.length === 1) {
+
+				if (e.touches.length === 0) {
+					let touch = e.changedTouches[0];
+
+					let x = touch.clientX - containerRect.x;
+					let y = touch.clientY - containerRect.y;
+					window.wasm.mouse_up(x, y);
+					wakeUp();
+				} else if (e.touches.length === 1) {
 					let touch = e.touches[0];
 
 					let x = touch.clientX - containerRect.x;
@@ -325,6 +336,7 @@
 				} else if (e.touches.length === 2) {
 					pinch_start_pos = [];
 				}
+
 			}, {passive: false});
 
 			window.addEventListener('mousemove', e => {

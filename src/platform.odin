@@ -21,6 +21,8 @@ last_frame_count := 0
 
 @export
 mouse_move :: proc "contextless" (x, y: f32) {
+	context = wasmContext
+
 	if frame_count != last_frame_count {
 		last_mouse_pos = mouse_pos
 		last_frame_count = frame_count
@@ -31,6 +33,8 @@ mouse_move :: proc "contextless" (x, y: f32) {
 
 @export
 mouse_down :: proc "contextless" (x, y: f32) {
+	context = wasmContext
+
 	is_mouse_down = true
 	mouse_pos = Vec2{x, y}
 
@@ -45,6 +49,8 @@ mouse_down :: proc "contextless" (x, y: f32) {
 
 @export
 mouse_up :: proc "contextless" (x, y: f32) {
+	context = wasmContext
+
 	is_mouse_down = false
 
 	if frame_count != last_frame_count {
@@ -55,12 +61,12 @@ mouse_up :: proc "contextless" (x, y: f32) {
 }
 
 @export
-scroll :: proc "contextless" (x, y: f64) {
+scroll :: proc "contextless" (x, y: f32) {
 	zoom_velocity += y
 }
 
 @export
-zoom :: proc "contextless" (x, y: f64) {
+zoom :: proc "contextless" (x, y: f32) {
 	zoom_velocity += y
 }
 
@@ -190,13 +196,12 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 			t = 0
 			frame_count = 0
-			scale = 1
-			pan = Vec2{}
 
 			free_all(context.temp_allocator)
 			free_all(scratch_allocator)
 
 			loading_config = false
+			finished_loading = true
 			return
 		}
 
@@ -313,6 +318,7 @@ foreign js {
     _canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
     _measure_text :: proc(str: string, scale: f32, font: string) -> f32 ---
     _get_text_height :: proc(scale: f32, font: string) -> f32 ---
+	_pow :: proc(x, power: f32) -> f32 ---
 
     debugger :: proc() ---
     log_string :: proc(str: string) ---

@@ -6,17 +6,20 @@ import "core:slice"
 import "core:container/queue"
 import "core:c"
 import "core:time"
+import "core:mem"
 
 start_time: u64
 start_mem: u64
-start_bench :: proc(name: string) {
+allocator: mem.Allocator
+start_bench :: proc(name: string, al := context.allocator) {
 	start_time = u64(get_time())
-	arena := cast(^Arena)context.allocator.data
+	allocator = al
+	arena := cast(^Arena)al.data
 	start_mem = u64(arena.offset)
 }
 stop_bench :: proc(name: string) {
 	end_time := u64(get_time())
-	arena := cast(^Arena)context.allocator.data
+	arena := cast(^Arena)allocator.data
 	end_mem := u64(arena.offset)
 
 	time_range := end_time - start_time
@@ -5836,6 +5839,6 @@ default_config := `
 {"cat":"function", "dur":40478, "name":"CodeGen", "ph":"X", "pid":0, "tid": 10732, "ts": 589047},
 {"cat":"function", "dur":1502, "name":"Export object", "ph":"X", "pid":0, "tid": 10732, "ts": 629528},
 {"cat":"function", "dur":585108, "name":"linker", "ph":"X", "pid":0, "tid": 10732, "ts": 631033},
-{"cat":"function", "dur":1217665, "name":"libCuik", "ph":"X", "pid":0, "tid": 10732, "ts": 0}
+{"cat":"function", "dur":1217665, "name":"libCuik", "ph":"X", "pid":0, "tid": 10732, "ts": 10}
 ]}
 `

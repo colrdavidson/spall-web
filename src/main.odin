@@ -18,7 +18,7 @@ temp_allocator: mem.Allocator
 
 wasmContext := runtime.default_context()
 
-t           : f64
+t           : f32
 frame_count : int
 
 bg_color      := Vec3{}
@@ -54,13 +54,12 @@ p_font_size: f32
 h1_font_size: f32
 h2_font_size: f32
 
-scale: f64 = 1
-
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
-pan            := Vec2{}
-zoom_velocity: f64 = 0
+zoom_velocity: f32 = 0
+cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 1}
+division: int = 0
 
 is_mouse_down := false
 clicked       := false
@@ -72,6 +71,7 @@ p: Parser
 
 first_frame := true
 loading_config := true
+finished_loading := false
 colormode := ColorMode.Dark
 
 ColorMode :: enum {
@@ -83,13 +83,13 @@ ColorMode :: enum {
 text_height    : f32 = 0
 em             : f32 = 0
 line_gap       : f32 = 0
+thread_gap     : f32 = 8
 
 trace_config : string
 
-events: [dynamic]Event
-color_choices: [dynamic]Vec3
 processes: [dynamic]Process
 process_map: map[u64]int
+color_choices: [dynamic]Vec3
 event_count: i64
 total_max_time: u64
 total_min_time: u64
@@ -128,9 +128,55 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 	}
 }
 
+get_max_y_pan :: proc(processes: []Process, rect_height: f32) -> f32 {
+	cur_y : f32 = 0
+
+	h1_height := get_text_height(h1_font_size, default_font)
+	h2_height := get_text_height(h2_font_size, default_font)
+	for proc_v, _ in processes {
+		h1_size := h1_height + (h1_height / 2)
+		cur_y += h1_size
+		for tm, _ in proc_v.threads {
+			h2_size := h2_height + (h2_height / 2)
+			cur_y += h2_size + ((f32(tm.max_depth) * rect_height) + thread_gap)
+		}
+	}
+
+	return cur_y
+}
+
+generate_lod_rects :: proc(processes: ^[dynamic]Process, rect_height: f32) {
+	//start_bench("generate LOD", context.temp_allocator)
+
+	for proc_v, p_idx in processes {
+		for tm, t_idx in &proc_v.threads {
+			event_rects := make([dynamic]EventRect, 0, context.temp_allocator)
+
+			for event, e_idx in tm.events {
+				x := f32(event.timestamp - total_min_time)
+				y := (rect_height * f32(event.depth - 1))
+				w := f32(event.duration)
+				h := rect_height
+
+				append(&event_rects, 
+					EventRect{
+						r = rect(x, y, w, h),
+						name = event.name,
+						idx = e_idx,
+						depth = event.depth,
+					}
+				)
+			}
+
+			tm.rects = event_rects[:]
+		}
+	}
+
+	//stop_bench("generate LOD")
+}
+
 CHUNK_SIZE :: 10 * 1024 * 1024
 main :: proc() {
-	PAGE_SIZE :: 64
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
 	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 11)
@@ -163,7 +209,7 @@ main :: proc() {
 random_seed: u64
 
 @export
-frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
+frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
 	defer frame_count += 1
 
@@ -171,6 +217,7 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	if first_frame {
 		random_seed = u64(get_time())
 		fmt.printf("Seed is 0x%X\n", random_seed)
+
 
 		rand.set_global_seed(random_seed)
 		first_frame = false
@@ -223,13 +270,10 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 
 	header_pad : f32 = 10
 	top_line_gap : f32 = line_gap
-	thread_gap : f32 = 8
 
 	em := get_text_height(p_font_size, monospace_font)
-	toolbar_height : f32 = 4 * em
-
-	ch_width := measure_text("a", p_font_size, monospace_font)
 	rect_height := em + (0.75 * em)
+	toolbar_height : f32 = 4 * em
 
 	pane_y : f32 = 0
 	next_line := proc(y: ^f32) -> f32 {
@@ -245,22 +289,38 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	x_pad_size : f32 = 3 * em
 	x_subpad : f32 = em
 	y_pad_size : f32 = em
-	start_x := x_pad_size
+
 	info_pane_height : f32 = pane_y + y_pad_size + line_gap
 	info_pane_y := height - info_pane_height
 
-	time_range := total_max_time - total_min_time
-	start_time := f64(0)
-	end_time   := f64(time_range) / scale
+	start_x := x_pad_size
+	end_x := width - x_pad_size
+	display_width := end_x - start_x
+	start_y := toolbar_height + y_pad_size
+	end_y   := info_pane_y
+	display_height := end_y - start_y
+
+
+	if finished_loading {
+		cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 1}
+
+		fmt.printf("min %d μs, max %d μs, range %d μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
+		start_time : f32 = 0
+		end_time   : f32 = f32(total_max_time - total_min_time)
+		cam.scale = rescale(cam.scale, start_time, end_time, 0, display_width)
+		division  = int(display_width / 6)
+
+		finished_loading = false
+	}
 
 	trace_display_rect := rect(0, toolbar_height, width, info_pane_y)
 
 	// compute scale + scroll
-	MIN_SCALE :: 0.01
+	MIN_SCALE :: 0.00001
 	MAX_SCALE :: 100000
 	if pt_in_rect(mouse_pos, trace_display_rect) {
-		scale *= 1 + (0.1 * zoom_velocity * dt)
-		scale = min(max(scale, MIN_SCALE), MAX_SCALE)
+		cam.scale *= 1 + (0.1 * zoom_velocity * dt)
+		cam.scale = min(max(cam.scale, MIN_SCALE), MAX_SCALE)
 	}
 	zoom_velocity = 0
 
@@ -269,113 +329,176 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
 	if is_mouse_down {
 		if pt_in_rect(clicked_pos, trace_display_rect) {
 			pan_delta = mouse_pos - last_mouse_pos
+			cam.vel.y = -pan_delta.y / dt
 		}
 		last_mouse_pos = mouse_pos
 	}
-	pan.x += pan_delta.x
-	pan.y -= pan_delta.y
 
-	start_y := toolbar_height + y_pad_size
+	generate_lod_rects(&processes, rect_height)
+
+	cam.pan.x += pan_delta.x
+	cam.pan.y = cam.pan.y + (cam.vel.y * dt)
+	cam.vel.y *= _pow(0.1, dt)
+
+	max_y_pan := get_max_y_pan(processes[:], rect_height) - display_height
+
+	if cam.pan.y < 0 {
+		cam.pan.y = cam.pan.y * _pow(0.00001, dt)
+		cam.vel.y *= _pow(0.0001, dt)
+	}
+	if cam.pan.y > max_y_pan {
+		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * _pow(0.00001, dt)
+		cam.vel.y *= _pow(0.0001, dt)
+	}
 
 	graph_start_y := start_y
 	header_height := top_line_gap + em
 	max_x := width - x_pad_size
-	display_width := width - (x_pad_size * 2)
 
-	cur_y := graph_start_y + header_height + header_pad - pan.y
+	top_pad := graph_start_y + header_height + header_pad 
+	cur_y := top_pad - cam.pan.y
 
     canvas_clear()
 
 	// Render background
     draw_rect(rect(0, toolbar_height, width, height), bg_color2)
 
-	count_width := measure_text("100000.0 ms", p_font_size, monospace_font)
-	slice_count := int(display_width / count_width)
+/*
+	We want between 3 and 6 major line segments on the screen 
+	at a time the segments need to line up with the world-space 
+	ms markers, so we'll need to rescale when we hit our minimum
+
+
+	worldspace min -> max ... range
+	where's the camera in the range?
+	0 -> display width ... disp_range
+	
+|-total-min-time-------------------------------------------------------total-max-time-|
+	             |-range-start-----------------------------range-end-|
+|-----------|-----------|----------|-------|--------|--------|--------|--------|--------|
+
+
+
+
+
+have you ever seen a thing move? Now think about thinking about it moving, and now you're there. - NeGate
+*/
+
+	cam.scale = 1
+	cam.pan.x = f32(total_min_time)
+
+	//start_x := ((10 * cam.scale) + cam.pan.x)
+
+	display_range_start := (0 - cam.pan.x) / cam.scale
+	display_range_end := (display_width - cam.pan.x) / cam.scale
+
+	division = 5 
+
+	draw_tick_start := round_down(int(display_range_start), division)
+	draw_tick_end := round_up(int(display_range_end), division)
+	tick_range := draw_tick_end - draw_tick_start
+
+	ticks := int(tick_range / division) + 1
+	if ticks > 6 {
+		division = tick_range / 3
+		draw_tick_start = round_down(int(display_range_start), division)
+		draw_tick_end = round_down(int(display_range_end), division)
+		tick_range = draw_tick_end - draw_tick_start
+	} else if ticks < 3 {
+		division = tick_range / 6
+		draw_tick_start = round_down(int(display_range_start), division)
+		draw_tick_end = round_down(int(display_range_end), division)
+		tick_range = draw_tick_end - draw_tick_start
+	}
+	ticks = int(tick_range / division) + 1
+
+	//fmt.printf("displayed range: %f μs -> %f μs, ticks: %d, division: %d μs\n", display_range_start, display_range_end, ticks, division)
 
 	// draw lines for time markings
-	max_time := rescale(f64(slice_count), 0, f64(slice_count), start_time, end_time)
-	for i := 0; i <= slice_count; i += 1 {
-		off_x := f32(i) * (f32(display_width) / f32(slice_count))
-		draw_line(Vec2{start_x + off_x, graph_start_y + header_height}, Vec2{start_x + off_x, info_pane_y}, 0.5, line_color)
+	for i := 0; i < ticks; i += 1 {
+		x_off := display_range_start + f32(i * division)
+		x_off = (x_off * cam.scale) + cam.pan.x
+		draw_line(Vec2{x_off, graph_start_y + header_height}, Vec2{x_off, info_pane_y}, 0.5, line_color)
 	}
+
+	ch_width := measure_text("a", p_font_size, monospace_font)
 
 	// Render flamegraphs
 	clicked_on_rect := false
 	proc_loop: for proc_v, p_idx in processes {
+		h1_size : f32 = 0
 		if len(processes) > 1 {
 			row_text := fmt.tprintf("PID: %d", proc_v.process_id)
-			header_text_height := get_text_height(h1_font_size, default_font)
+			h1_height := get_text_height(h1_font_size, default_font)
 			draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
-			cur_y += header_text_height + (header_text_height / 2)
+
+			h1_size = h1_height + (h1_height / 2)
+			cur_y += h1_size
 		}
 
 		thread_loop: for tm, t_idx in proc_v.threads {
-			header_text_height := get_text_height(h2_font_size, default_font)
+			h2_height := get_text_height(h2_font_size, default_font)
 
 			last_cur_y := cur_y
-			cur_y += header_text_height + (header_text_height / 2)
+			h2_size := h2_height + (h2_height / 2)
+			cur_y += h2_size
+
+			thread_advance := ((f32(tm.max_depth) * rect_height) + thread_gap)
+
 			if cur_y > info_pane_y {
 				break proc_loop
+			}
+			if cur_y + thread_advance < 0 {
+				cur_y += thread_advance
+				continue
 			}
 
 			row_text := fmt.tprintf("TID: %d", tm.thread_id)
 			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
 
-			for event, e_idx in tm.events {
-				cur_start := event.timestamp - total_min_time
-				cur_end   := cur_start + event.duration
+			for er, idx in tm.rects {
+				dr := er.r
+				dr.pos.x  = start_x + (dr.pos.x * cam.scale) + cam.pan.x
+				dr.pos.y  = (dr.pos.y + cur_y)
+				dr.size.x = (dr.size.x * cam.scale)
 
-				rect_x := rescale(f32(cur_start), f32(start_time), f32(end_time), 0, display_width)
-				rect_end := rescale(f32(cur_end), f32(start_time), f32(end_time), 0, display_width)
-				rect_width := rect_end - rect_x
-
-				if rect_width < 0.1 {
+				if dr.size.x < 0.1 || !rect_in_rect(dr, trace_display_rect) {
 					continue
 				}
 
-				y := cur_y + (rect_height * f32(event.depth - 1))
-
-				entry_rect := rect(start_x + rect_x + pan.x, y, rect_width, rect_height)
-				if (entry_rect.pos.y + entry_rect.size.y) < graph_start_y + header_height || 
-					entry_rect.pos.x > (display_width + x_pad_size) ||
-					entry_rect.pos.x + entry_rect.size.x < x_pad_size {
-					continue
-				}
-
-				rect_color := color_choices[event.depth - 1]
-				if pt_in_rect(mouse_pos, entry_rect) {
+				rect_color := color_choices[er.depth - 1]
+				if pt_in_rect(mouse_pos, dr) {
 					set_cursor("pointer")
 					if clicked {
-						selected_event = {i64(p_idx), i64(t_idx), i64(e_idx)}
+						selected_event = {i64(p_idx), i64(t_idx), i64(er.idx)}
 						clicked_on_rect = true
 					}
 				}
 				if int(selected_event.pid) == p_idx && 
 				   int(selected_event.tid) == t_idx && 
-				   int(selected_event.eid) == e_idx {
+				   int(selected_event.eid) == er.idx {
 					rect_color.x += 30
 					rect_color.y += 30
 					rect_color.z += 30
 				}
-				draw_rect(entry_rect, rect_color)
+
+				draw_rect(dr, rect_color)
 
 				text_pad : f32 = 10
-				max_chars := max(0, min(len(event.name), int(math.floor((rect_width - (text_pad * 2)) / ch_width))))
-				name_str := event.name[:max_chars]
+				max_chars := max(0, min(len(er.name), int(math.floor((dr.size.x - (text_pad * 2)) / ch_width))))
+				name_str := er.name[:max_chars]
 
-				if len(name_str) > 4 || max_chars == len(event.name) {
-					if max_chars != len(event.name) {
-						name_str = fmt.tprintf("%s...", event.name[:max_chars-3])
+				if len(name_str) > 4 || max_chars == len(er.name) {
+					if max_chars != len(er.name) {
+						name_str = fmt.tprintf("%s...", er.name[:max_chars-3])
 					}
 
 					ev_width := measure_text(name_str, p_font_size, monospace_font)
 					ev_height := get_text_height(p_font_size, monospace_font)
-					draw_text(name_str, Vec2{(start_x + rect_x + pan.x) + (rect_width / 2) - (ev_width / 2), y + (rect_height / 2) - (ev_height / 2)}, p_font_size, monospace_font, text_color3)
+					draw_text(name_str, Vec2{(dr.pos.x) + (dr.size.x / 2) - (ev_width / 2), dr.pos.y + (rect_height / 2) - (ev_height / 2)}, p_font_size, monospace_font, text_color3)
 				}
-
 			}
-
-			cur_y += ((f32(tm.max_depth) * rect_height) + thread_gap)
+			cur_y += thread_advance
 		}
 	}
 
@@ -390,24 +513,18 @@ frame :: proc "contextless" (width, height: f32, dt: f64) -> bool {
     draw_rect(rect(0, toolbar_height, x_pad_size - 1, height), bg_color2) // left
     draw_rect(rect(0, info_pane_y, width, height), bg_color2) // bottom
 
-	for i := 0; i <= slice_count; i += 1 {
-		off_x := f32(i) * (f32(display_width) / f32(slice_count))
-
-		time_off := rescale(f64(pan.x), 0, f64(display_width), start_time, end_time)
-		reranged_i := rescale(f64(i), 0, f64(slice_count), start_time, end_time)  
-		cur_time := reranged_i - time_off
+/*
+	for i := total_min_time; i < total_max_time; i += step_size {
+		off_x := rescale(f32(i), f32(total_min_time), f32(total_max_time), range_start, range_end)
 
 		time_str: string
-		if max_time < 5000 {
-			time_str = fmt.tprintf("%.1f μs", cur_time)
-		} else {
-			cur_time = cur_time / 1000
-			time_str = fmt.tprintf("%.1f ms", cur_time)
-		}
+		cur_time := i / 1000
+		time_str = fmt.tprintf("%d ms", i)
 
 		text_width := measure_text(time_str, p_font_size, default_font)
 		draw_text(time_str, Vec2{start_x + off_x - (text_width / 2), graph_start_y}, p_font_size, default_font, text_color)
 	}
+*/
 
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
@@ -519,16 +636,18 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 
 rect_in_rect :: proc(a, b: Rect) -> bool {
 	a_left := a.pos.x
-	a_top := a.pos.y
 	a_right := a.pos.x + a.size.x
+
+	a_top := a.pos.y
 	a_bottom := a.pos.y + a.size.y
 
 	b_left := b.pos.x
-	b_top := b.pos.y
 	b_right := b.pos.x + b.size.x
+
+	b_top := b.pos.y
 	b_bottom := b.pos.y + b.size.y
 
-	return !(b_left > a_right || b_right < a_left || b_top < a_top || b_bottom > a_top)
+	return !(b_left > a_right || a_left > b_right || a_top > b_bottom || b_top > a_bottom)
 }
 
 button :: proc(in_rect: Rect, text: string, font: string) -> bool {

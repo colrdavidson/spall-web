@@ -26,3 +26,11 @@ rescale :: proc(val, old_min, old_max, new_min, new_max: $T) -> T {
 	new_range := new_max - new_min
 	return (((val - old_min) * new_range) / old_range) + new_min
 }
+
+round_down :: proc(x, align: $T) -> T {
+	return x - (x %% align)
+}
+
+round_up :: proc(x, align: $T) -> T {
+	return x + (x %% align)
+}
