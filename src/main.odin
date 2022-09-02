@@ -59,7 +59,7 @@ mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
 zoom_velocity: f32 = 0
 cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 1}
-division: int = 0
+division: f32 = 0
 
 is_mouse_down := false
 clicked       := false
@@ -312,7 +312,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		start_time : f32 = 0
 		end_time   : f32 = f32(total_max_time - total_min_time)
 		cam.scale = rescale(cam.scale, start_time, end_time, 0, display_width)
-		division  = int(display_width / 6)
+		division  = (display_width / 6)
 
 		finished_loading = false
 	}
@@ -368,43 +368,37 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// Render background
     draw_rect(rect(0, toolbar_height, width, height), bg_color2)
 
-/*
-	cam.scale = 1
-	cam.pan.x = f32(total_min_time)
-*/
+	display_range_start := f32((0 - cam.pan.x) / cam.scale)
+	display_range_end := f32((display_width - cam.pan.x) / cam.scale)
 
-	//start_x := ((10 * cam.scale) + cam.pan.x)
-
-	display_range_start := (0 - cam.pan.x) / cam.scale
-	display_range_end := (display_width - cam.pan.x) / cam.scale
-
-	division = 5 
-
-	draw_tick_start := round_down(int(display_range_start), division)
-	draw_tick_end := round_up(int(display_range_end), division)
+	draw_tick_start := round_down(display_range_start, division)
+	draw_tick_end := round_up(display_range_end, division)
 	tick_range := draw_tick_end - draw_tick_start
 
 	ticks := int(tick_range / division) + 1
-	if ticks > 6 {
-		division = tick_range / 3
-		draw_tick_start = round_down(int(display_range_start), division)
-		draw_tick_end = round_down(int(display_range_end), division)
+	MAX_TICKS :: 7
+	MIN_TICKS :: 5
+	if ticks > MAX_TICKS {
+		division = tick_range / MIN_TICKS
+		draw_tick_start = round_down(display_range_start, division)
+		draw_tick_end = round_up(display_range_end, division)
 		tick_range = draw_tick_end - draw_tick_start
-	} else if ticks < 3 {
-		division = tick_range / 6
-		draw_tick_start = round_down(int(display_range_start), division)
-		draw_tick_end = round_down(int(display_range_end), division)
+		ticks = int(tick_range / division) + 1
+	} else if ticks < MIN_TICKS {
+		division = tick_range / MAX_TICKS
+		draw_tick_start = round_down(display_range_start, division)
+		draw_tick_end = round_up(display_range_end, division)
 		tick_range = draw_tick_end - draw_tick_start
+		ticks = int(tick_range / division) + 1
 	}
-	ticks = int(tick_range / division) + 1
 
 	//fmt.printf("displayed range: %f μs -> %f μs, ticks: %d, division: %d μs\n", display_range_start, display_range_end, ticks, division)
 
 	// draw lines for time markings
 	for i := 0; i < ticks; i += 1 {
-		x_off := display_range_start + f32(i * division)
-		x_off = (x_off * cam.scale) + cam.pan.x
-		draw_line(Vec2{x_off, graph_start_y + header_height}, Vec2{x_off, info_pane_y}, 0.5, line_color)
+		tick_time := f32(draw_tick_start + (f32(i) * division))
+		x_off := (f32(tick_time) * cam.scale) + cam.pan.x
+		draw_line(Vec2{start_x + x_off, graph_start_y + header_height}, Vec2{start_x + x_off, info_pane_y}, 0.5, line_color)
 	}
 
 
@@ -494,18 +488,26 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(0, toolbar_height, x_pad_size - 1, height), bg_color2) // left
     draw_rect(rect(0, info_pane_y, width, height), bg_color2) // bottom
 
-/*
-	for i := total_min_time; i < total_max_time; i += step_size {
-		off_x := rescale(f32(i), f32(total_min_time), f32(total_max_time), range_start, range_end)
+	ONE_SECOND :: 1000 * 1000
+	ONE_MILLI :: 1000
+	for i := 0; i < ticks; i += 1 {
+		tick_time := (draw_tick_start) + (f32(i) * division)
+		x_off := (tick_time * cam.scale) + cam.pan.x
 
 		time_str: string
-		cur_time := i / 1000
-		time_str = fmt.tprintf("%d ms", i)
+		if tick_time > ONE_SECOND {
+			cur_time := tick_time / ONE_SECOND
+			time_str = fmt.tprintf("%.2f s", cur_time)
+		} else if tick_time > ONE_MILLI {
+			cur_time := tick_time / ONE_MILLI
+			time_str = fmt.tprintf("%.2f ms", cur_time)
+		} else {
+			time_str = fmt.tprintf("%.2f μs", tick_time)
+		}
 
 		text_width := measure_text(time_str, p_font_size, default_font)
-		draw_text(time_str, Vec2{start_x + off_x - (text_width / 2), graph_start_y}, p_font_size, default_font, text_color)
+		draw_text(time_str, Vec2{start_x + x_off - (text_width / 2), graph_start_y}, p_font_size, default_font, text_color)
 	}
-*/
 
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
@@ -519,10 +521,14 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		y := info_pane_y + y_pad_size
 
 		time_fmt :: proc(time: u64) -> string {
-			if time < 1000 {
-				return fmt.tprintf("%d μs", time)
+			if time > ONE_SECOND {
+				cur_time := f64(time) / ONE_SECOND
+				return fmt.tprintf("%.2f s", cur_time)
+			} else if time > ONE_MILLI {
+				cur_time := f64(time) / ONE_MILLI
+				return fmt.tprintf("%.2f ms", cur_time)
 			} else {
-				return fmt.tprintf("%.1f ms", f32(time) / 1000)
+				return fmt.tprintf("%.2f μs", f64(time))
 			}
 		}
 
