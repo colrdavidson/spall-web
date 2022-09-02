@@ -8,12 +8,13 @@ import "core:strings"
 import "core:strconv"
 import "core:c"
 
-shift_down := false
+update_font_cache :: proc "contextless" () {
+	context = wasmContext
 
-@export
-set_text_height :: proc "contextless" (_height: f32) {
-	text_height = _height
-	line_gap = _height / 1.5
+	em = get_text_height(p_font_size, monospace_font)
+	h1_height = get_text_height(h1_font_size, default_font)
+	h2_height = get_text_height(h2_font_size, default_font)
+	ch_width = measure_text("a", p_font_size, monospace_font)
 }
 
 // eww, this is not a good way to do it
@@ -318,7 +319,7 @@ foreign js {
     _canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
     _measure_text :: proc(str: string, scale: f32, font: string) -> f32 ---
     _get_text_height :: proc(scale: f32, font: string) -> f32 ---
-	_pow :: proc(x, power: f32) -> f32 ---
+	_pow :: proc(x, power: f64) -> f64 ---
 
     debugger :: proc() ---
     log_string :: proc(str: string) ---
@@ -333,40 +334,40 @@ foreign js {
 	get_chunk :: proc(offset, size: u32) ---
 }
 
-get_text_height :: #force_inline proc(scale: f32, font: string) -> f32 {
+get_text_height :: #force_inline proc "contextless" (scale: f32, font: string) -> f32 {
 	return _get_text_height(scale, font)
 }
 
-measure_text :: #force_inline proc(str: string, scale: f32, font: string) -> f32 {
+measure_text :: #force_inline proc "contextless" (str: string, scale: f32, font: string) -> f32 {
 	return _measure_text(str, scale, font)
 }
 
-canvas_clear :: #force_inline proc() {
+canvas_clear :: #force_inline proc "contextless" () {
 	_canvas_clear()
 }
-draw_clip :: #force_inline proc(x, y, w, h: f32) {
+draw_clip :: #force_inline proc "contextless" (x, y, w, h: f32) {
 	_canvas_clip(x * dpr, y * dpr, w * dpr, h * dpr)
 }
-draw_rect :: #force_inline proc(rect: Rect, color: Vec3, a: f32 = 255) {
+draw_rect :: #force_inline proc "contextless" (rect: Rect, color: Vec3, a: f32 = 255) {
     _canvas_rect(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, color.x, color.y, color.z, a)
 }
-draw_rectc :: #force_inline proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {
+draw_rectc :: #force_inline proc "contextless" (rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {
     _canvas_rectc(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, radius * dpr, color.x, color.y, color.z, a)
 }
-draw_circle :: #force_inline proc(center: Vec2, radius: f32, color: Vec3, a: f32 = 255) {
+draw_circle :: #force_inline proc "contextless" (center: Vec2, radius: f32, color: Vec3, a: f32 = 255) {
     _canvas_circle(center.x * dpr, center.y * dpr, radius * dpr, color.x, color.y, color.z, a)
 }
-draw_text :: #force_inline proc(str: string, pos: Vec2, scale: f32, font: string, color: Vec3, a: f32 = 255) {
+draw_text :: #force_inline proc "contextless" (str: string, pos: Vec2, scale: f32, font: string, color: Vec3, a: f32 = 255) {
     _canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, a, scale, font)
 }
-draw_line :: #force_inline proc(start, end: Vec2, strokeWidth: f32, color: Vec3, a: f32 = 255) {
+draw_line :: #force_inline proc "contextless" (start, end: Vec2, strokeWidth: f32, color: Vec3, a: f32 = 255) {
     _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, color.x, color.y, color.z, a, strokeWidth * dpr * dpr)
 }
-draw_arc :: #force_inline proc(center: Vec2, radius, angleStart, angleEnd: f32, strokeWidth: f32, color: Vec3, a: f32) {
+draw_arc :: #force_inline proc "contextless" (center: Vec2, radius, angleStart, angleEnd: f32, strokeWidth: f32, color: Vec3, a: f32) {
     _canvas_arc(center.x * dpr, center.y * dpr, radius * dpr, angleStart, angleEnd, color.x, color.y, color.z, a, strokeWidth * dpr)
 }
 
-draw_rect_outline :: proc(rect: Rect, width: f32, color: Vec3, a: f32 = 255) {
+draw_rect_outline :: proc "contextless" (rect: Rect, width: f32, color: Vec3, a: f32 = 255) {
 	x1 := rect.pos.x
 	y1 := rect.pos.y
 	x2 := rect.pos.x + rect.size.x
@@ -378,16 +379,17 @@ draw_rect_outline :: proc(rect: Rect, width: f32, color: Vec3, a: f32 = 255) {
 	draw_line(Vec2{x1, y2}, Vec2{x2, y2}, width, color, a)
 }
 
-set_cursor :: proc(cursor: string) {
+set_cursor :: proc "contextless" (cursor: string) {
 	change_cursor(cursor)
 	is_hovering = true
 }
 
-reset_cursor :: proc() {
+reset_cursor :: proc "contextless" () {
 	change_cursor("auto")
 }
 
 @export
 set_dpr :: proc "contextless" (v: f32) {
 	dpr = v
+	update_fonts = true
 }

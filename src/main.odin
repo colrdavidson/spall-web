@@ -72,6 +72,7 @@ p: Parser
 first_frame := true
 loading_config := true
 finished_loading := false
+update_fonts := true
 colormode := ColorMode.Dark
 
 ColorMode :: enum {
@@ -80,9 +81,10 @@ ColorMode :: enum {
 	Auto
 }
 
-text_height    : f32 = 0
 em             : f32 = 0
-line_gap       : f32 = 0
+h1_height      : f32 = 0
+h2_height      : f32 = 0
+ch_width       : f32 = 0
 thread_gap     : f32 = 8
 
 trace_config : string
@@ -131,8 +133,6 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 get_max_y_pan :: proc(processes: []Process, rect_height: f32) -> f32 {
 	cur_y : f32 = 0
 
-	h1_height := get_text_height(h1_font_size, default_font)
-	h2_height := get_text_height(h2_font_size, default_font)
 	for proc_v, _ in processes {
 		h1_size := h1_height + (h1_height / 2)
 		cur_y += h1_size
@@ -217,20 +217,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	if first_frame {
 		random_seed = u64(get_time())
 		fmt.printf("Seed is 0x%X\n", random_seed)
-
-
 		rand.set_global_seed(random_seed)
-		first_frame = false
-	}
 
-	if (width / dpr) < 400 {
-		p_font_size = _p_font_size * dpr
-		h1_font_size = _h1_font_size * dpr
-		h2_font_size = _h2_font_size * dpr
-	} else {
-		p_font_size = _p_font_size
-		h1_font_size = _h1_font_size
-		h2_font_size = _h2_font_size
+		first_frame = false
 	}
 
 	// render loading screen
@@ -268,22 +257,37 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     t += dt
 
+	if (width / dpr) < 400 {
+		p_font_size = _p_font_size * dpr
+		h1_font_size = _h1_font_size * dpr
+		h2_font_size = _h2_font_size * dpr
+	} else {
+		p_font_size = _p_font_size
+		h1_font_size = _h1_font_size
+		h2_font_size = _h2_font_size
+	}
+
+	if update_fonts {
+		update_font_cache()
+		update_fonts = false
+	}
+
 	header_pad : f32 = 10
+	line_gap : f32 = (em / 1.5)
 	top_line_gap : f32 = line_gap
 
-	em := get_text_height(p_font_size, monospace_font)
 	rect_height := em + (0.75 * em)
 	toolbar_height : f32 = 4 * em
 
 	pane_y : f32 = 0
-	next_line := proc(y: ^f32) -> f32 {
+	next_line := proc(y: ^f32, h: f32) -> f32 {
 		res := y^
-		y^ += text_height + line_gap
+		y^ += h + (h / 1.5)
 		return res
 	}
 
 	for i := 0; i < 4; i += 1 {
-		next_line(&pane_y)
+		next_line(&pane_y, em)
 	}
 
 	x_pad_size : f32 = 3 * em
@@ -330,25 +334,26 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		if pt_in_rect(clicked_pos, trace_display_rect) {
 			pan_delta = mouse_pos - last_mouse_pos
 			cam.vel.y = -pan_delta.y / dt
+			cam.vel.x = pan_delta.x / dt
 		}
 		last_mouse_pos = mouse_pos
 	}
 
 	generate_lod_rects(&processes, rect_height)
 
-	cam.pan.x += pan_delta.x
-	cam.pan.y = cam.pan.y + (cam.vel.y * dt)
-	cam.vel.y *= _pow(0.1, dt)
+	cam.pan = cam.pan + (cam.vel * dt)
+	cam.vel *= f32(_pow(0.005, f64(dt)))
 
 	max_y_pan := get_max_y_pan(processes[:], rect_height) - display_height
 
+	edge_sproing : f64 = 0.0001
 	if cam.pan.y < 0 {
-		cam.pan.y = cam.pan.y * _pow(0.00001, dt)
-		cam.vel.y *= _pow(0.0001, dt)
+		cam.pan.y = cam.pan.y * f32(_pow(edge_sproing, f64(dt)))
+		cam.vel.y *= f32(_pow(0.0001, f64(dt)))
 	}
 	if cam.pan.y > max_y_pan {
-		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * _pow(0.00001, dt)
-		cam.vel.y *= _pow(0.0001, dt)
+		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * f32(_pow(edge_sproing, f64(dt)))
+		cam.vel.y *= f32(_pow(0.0001, f64(dt)))
 	}
 
 	graph_start_y := start_y
@@ -364,28 +369,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(0, toolbar_height, width, height), bg_color2)
 
 /*
-	We want between 3 and 6 major line segments on the screen 
-	at a time the segments need to line up with the world-space 
-	ms markers, so we'll need to rescale when we hit our minimum
-
-
-	worldspace min -> max ... range
-	where's the camera in the range?
-	0 -> display width ... disp_range
-	
-|-total-min-time-------------------------------------------------------total-max-time-|
-	             |-range-start-----------------------------range-end-|
-|-----------|-----------|----------|-------|--------|--------|--------|--------|--------|
-
-
-
-
-
-have you ever seen a thing move? Now think about thinking about it moving, and now you're there. - NeGate
-*/
-
 	cam.scale = 1
 	cam.pan.x = f32(total_min_time)
+*/
 
 	//start_x := ((10 * cam.scale) + cam.pan.x)
 
@@ -421,7 +407,6 @@ have you ever seen a thing move? Now think about thinking about it moving, and n
 		draw_line(Vec2{x_off, graph_start_y + header_height}, Vec2{x_off, info_pane_y}, 0.5, line_color)
 	}
 
-	ch_width := measure_text("a", p_font_size, monospace_font)
 
 	// Render flamegraphs
 	clicked_on_rect := false
@@ -429,7 +414,6 @@ have you ever seen a thing move? Now think about thinking about it moving, and n
 		h1_size : f32 = 0
 		if len(processes) > 1 {
 			row_text := fmt.tprintf("PID: %d", proc_v.process_id)
-			h1_height := get_text_height(h1_font_size, default_font)
 			draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
 
 			h1_size = h1_height + (h1_height / 2)
@@ -437,8 +421,6 @@ have you ever seen a thing move? Now think about thinking about it moving, and n
 		}
 
 		thread_loop: for tm, t_idx in proc_v.threads {
-			h2_height := get_text_height(h2_font_size, default_font)
-
 			last_cur_y := cur_y
 			h2_size := h2_height + (h2_height / 2)
 			cur_y += h2_size
@@ -494,8 +476,7 @@ have you ever seen a thing move? Now think about thinking about it moving, and n
 					}
 
 					ev_width := measure_text(name_str, p_font_size, monospace_font)
-					ev_height := get_text_height(p_font_size, monospace_font)
-					draw_text(name_str, Vec2{(dr.pos.x) + (dr.size.x / 2) - (ev_width / 2), dr.pos.y + (rect_height / 2) - (ev_height / 2)}, p_font_size, monospace_font, text_color3)
+					draw_text(name_str, Vec2{(dr.pos.x) + (dr.size.x / 2) - (ev_width / 2), dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 				}
 			}
 			cur_y += thread_advance
@@ -546,12 +527,11 @@ have you ever seen a thing move? Now think about thinking about it moving, and n
 		}
 
 		event := processes[p_idx].threads[t_idx].events[e_idx]
-		text_height = get_text_height(p_font_size, monospace_font)
-		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("start timestamp: %d", event.timestamp), Vec2{x_subpad, next_line(&y)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("start timestamp: %d", event.timestamp), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 
-		draw_text(fmt.tprintf("duration: %s", time_fmt(event.duration)), Vec2{x_subpad, next_line(&y)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("duration: %s", time_fmt(event.duration)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 	}
 
 	// Render toolbar background
@@ -605,9 +585,9 @@ have you ever seen a thing move? Now think about thinking about it moving, and n
 		reset_cursor()
 	}
 
-	prev_line := proc(y: ^f32) -> f32 {
+	prev_line := proc(y: ^f32, h: f32) -> f32 {
 		res := y^
-		y^ -= text_height + line_gap
+		y^ -= h + (h / 1.5)
 		return res
 	}
 
@@ -616,11 +596,11 @@ have you ever seen a thing move? Now think about thinking about it moving, and n
 
 	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
 	hash_width := measure_text(hash_str, p_font_size, monospace_font)
-	draw_text(hash_str, Vec2{width - hash_width - x_subpad, prev_line(&y)}, p_font_size, monospace_font, text_color2)
+	draw_text(hash_str, Vec2{width - hash_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
 	seed_str := fmt.tprintf("Seed: 0x%X", random_seed)
 	seed_width := measure_text(seed_str, p_font_size, monospace_font)
-	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y)}, p_font_size, monospace_font, text_color2)
+	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
     return true
 }
@@ -653,8 +633,7 @@ rect_in_rect :: proc(a, b: Rect) -> bool {
 button :: proc(in_rect: Rect, text: string, font: string) -> bool {
 	draw_rectc(in_rect, 3, button_color)
 	text_width := measure_text(text, p_font_size, font)
-	text_height = get_text_height(p_font_size, font)
-	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, p_font_size, font, text_color3)
+	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (em / 2)}, p_font_size, font, text_color3)
 
 	if pt_in_rect(mouse_pos, in_rect) {
 		set_cursor("pointer")
