@@ -28,11 +28,19 @@ rescale :: proc(val, old_min, old_max, new_min, new_max: $T) -> T {
 	return (((val - old_min) * new_range) / old_range) + new_min
 }
 
-round_down :: proc(x, align: f32) -> f32 {
+i_round_down :: proc(x, align: $T) -> T {
+	return x - (x %% align)
+}
+
+i_round_up :: proc(x, align: $T) -> T {
+	return x - (x %% align)
+}
+
+f_round_down :: proc(x, align: $T) -> T {
 	return x - math.mod(x, align)
 }
 
-round_up :: proc(x, align: f32) -> f32 {
+f_round_up :: proc(x, align: $T) -> T {
 	return x - math.mod(x, align)
 }
 

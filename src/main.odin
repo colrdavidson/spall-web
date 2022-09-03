@@ -15,6 +15,7 @@ scratch_arena := Arena{}
 global_allocator: mem.Allocator
 scratch_allocator: mem.Allocator
 temp_allocator: mem.Allocator
+current_alloc_offset := 0
 
 wasmContext := runtime.default_context()
 
@@ -58,8 +59,11 @@ last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
 zoom_velocity: f32 = 0
+
+old_scale: f32
+old_pan: Vec2
 cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 1}
-division: f32 = 0
+division: f64 = 0
 
 is_mouse_down := false
 clicked       := false
@@ -168,36 +172,26 @@ to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
 	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
 }
 
-generate_lod_rects :: proc(processes: ^[dynamic]Process, display_rect: Rect, cam: Camera, rect_height: f32) {
-	//start_bench("generate LOD", context.temp_allocator)
+generate_lod_rects :: proc(processes: ^[dynamic]Process, scale: f32, start_time, end_time: i64, rect_height: f32) {
+	arena := cast(^Arena)context.allocator.data
+	arena.offset = current_alloc_offset 
 
-	cur_y : f32 = display_rect.pos.y
+	// WARNING, ALLOC'ing on the main alloc during frametime is a NONO
+	// Wipe anything we've used in main memory since last LOD gen.
+
+	//start_bench("generate LOD", context.allocator)
+
 	for proc_v, p_idx in processes {
-		if len(processes) > 1 {
-			h1_size := h1_height + (h1_height / 2)
-			cur_y += h1_size
-		}
-
 		for tm, t_idx in &proc_v.threads {
-			event_rects := make([dynamic]EventRect, 0, context.temp_allocator)
-
-			h2_size := h2_height + (h2_height / 2)
-			cur_y += h2_size
+			event_rects := make([dynamic]EventRect, 0, context.allocator)
 			for event, e_idx in tm.events {
 				x := f32(event.timestamp - total_min_time)
 				y := (rect_height * f32(event.depth - 1))
 			  	w := f32(event.duration)
 				h := rect_height
 
-				pos_in_cam := to_cam_pos(cam, Vec2{x, y})
-				pos_in_cam.x += display_rect.pos.x
-				pos_in_cam.y += cur_y
-
-				r := Rect{pos_in_cam, Vec2{w * cam.scale, h}}
+				r := Rect{Vec2{x, y}, Vec2{w * scale, h}}
 				if r.size.x < 0.1 {
-					continue
-				}
-				if !rect_in_rect(r, display_rect) {
 					continue
 				}
 
@@ -211,7 +205,6 @@ generate_lod_rects :: proc(processes: ^[dynamic]Process, display_rect: Rect, cam
 				)
 			}
 
-			cur_y += ((f32(tm.max_depth) * rect_height) + thread_gap)
 			tm.rects = event_rects[:]
 		}
 	}
@@ -223,8 +216,8 @@ CHUNK_SIZE :: 10 * 1024 * 1024
 main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
-	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 11)
-	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 2)
+	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 20)
+	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 10)
 
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
@@ -251,6 +244,12 @@ main :: proc() {
 }
 
 random_seed: u64
+
+get_current_window :: proc(cam: Camera, display_width: f32) -> (i64, i64) {
+	display_range_start := i64(to_world_x(cam, 0))
+	display_range_end   := i64(math.ceil(to_world_x(cam, display_width)))
+	return display_range_start, display_range_end
+}
 
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
@@ -353,7 +352,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		start_time : f32 = 0
 		end_time   : f32 = f32(total_max_time - total_min_time)
 		cam.scale = rescale(cam.scale, start_time, end_time, 0, display_width)
-		division  = (display_width / 6)
+
+		arena := cast(^Arena)context.allocator.data
+		current_alloc_offset = arena.offset
 
 		finished_loading = false
 	}
@@ -396,9 +397,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		last_mouse_pos = mouse_pos
 	}
 
+	start_time, end_time := get_current_window(cam, display_width)
 	max_y_pan := get_max_y_pan(processes[:], rect_height) - graph_rect.size.y
+
 	cam.pan = cam.pan + (cam.vel * dt)
-	cam.vel *= f32(_pow(0.005, f64(dt)))
+	cam.vel *= f32(_pow(0.0001, f64(dt)))
 
 	edge_sproing : f64 = 0.0001
 	if cam.pan.y < 0 {
@@ -410,38 +413,48 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		cam.vel.y *= f32(_pow(0.0001, f64(dt)))
 	}
 
-	generate_lod_rects(&processes, graph_rect, cam, rect_height)
+	if cam.scale != old_scale || cam.pan != old_pan {
+		//fmt.printf("current window: %d -> %d\n", start_time, end_time)
+	}
 
-	display_range_start := f32((0 - cam.pan.x) / cam.scale)
-	display_range_end := f32((display_width - cam.pan.x) / cam.scale)
+	if cam.pan != old_pan {
+		old_pan = cam.pan
+	}
+	if cam.scale != old_scale {
+		generate_lod_rects(&processes, cam.scale, start_time, end_time, rect_height)
+		fmt.printf("now at %f scale, width is %d\n", cam.scale, end_time - start_time)
+		old_scale = cam.scale
+	}
 
-	draw_tick_start := round_down(display_range_start, division)
-	draw_tick_end := round_up(display_range_end, division)
+	mus_range := f64(end_time - start_time)
+	v1 := math.log10(mus_range)
+	v2 := math.floor(v1)
+	rem := v1 - v2
+
+	division = _pow(10, v2)
+	if rem < 0.3 {
+		division -= (division * 0.8)
+	} else if rem < 0.6 {
+		division -= (division / 2)
+	}
+
+	division = max(1, division)
+
+	display_range_start := (0 - f64(cam.pan.x)) / f64(cam.scale)
+	display_range_end := (f64(display_width) - f64(cam.pan.x)) / f64(cam.scale)
+
+	draw_tick_start := f_round_down(display_range_start, division)
+	draw_tick_end := f_round_down(display_range_end, division)
 	tick_range := draw_tick_end - draw_tick_start
 
 	ticks := int(tick_range / division) + 1
-	MAX_TICKS :: 7
-	MIN_TICKS :: 5
-	if ticks > MAX_TICKS {
-		division = tick_range / MIN_TICKS
-		draw_tick_start = round_down(display_range_start, division)
-		draw_tick_end = round_up(display_range_end, division)
-		tick_range = draw_tick_end - draw_tick_start
-		ticks = int(tick_range / division) + 1
-	} else if ticks < MIN_TICKS {
-		division = tick_range / MAX_TICKS
-		draw_tick_start = round_down(display_range_start, division)
-		draw_tick_end = round_up(display_range_end, division)
-		tick_range = draw_tick_end - draw_tick_start
-		ticks = int(tick_range / division) + 1
-	}
 
 	//fmt.printf("displayed range: %f μs -> %f μs, ticks: %d, division: %d μs\n", display_range_start, display_range_end, ticks, division)
 
 	// draw lines for time markings
 	for i := 0; i < ticks; i += 1 {
-		tick_time := f32(draw_tick_start + (f32(i) * division))
-		x_off := (f32(tick_time) * cam.scale) + cam.pan.x
+		tick_time := f64(f64(draw_tick_start) + (f64(i) * f64(division)))
+		x_off := f32((f64(tick_time) * f64(cam.scale)) + f64(cam.pan.x))
 
 		line_start := disp_rect.pos.y + graph_header_height - top_line_gap
 		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, line_color)
@@ -481,6 +494,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			for er, idx in tm.rects {
 				dr := er.r
+
+				pos_in_cam := to_cam_pos(cam, Vec2{dr.pos.x, dr.pos.y})
+				pos_in_cam.x += disp_rect.pos.x
+				pos_in_cam.y += cur_y + cam.pan.y
+				dr.pos = pos_in_cam
+
+				if !rect_in_rect(dr, disp_rect) {
+					continue
+				}
 
 				rect_color := color_choices[er.depth - 1]
 				if int(selected_event.pid) == p_idx && 
@@ -528,21 +550,22 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(0, disp_rect.pos.y, graph_rect.pos.x, height), bg_color2) // left
     draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
 
+	
 	ONE_SECOND :: 1000 * 1000
 	ONE_MILLI :: 1000
 	for i := 0; i < ticks; i += 1 {
-		tick_time := (draw_tick_start) + (f32(i) * division)
-		x_off := (tick_time * cam.scale) + cam.pan.x
+		tick_time := draw_tick_start + (f64(i) * division)
+		x_off := f32(f64(tick_time) * f64(cam.scale)) + cam.pan.x
 
 		time_str: string
-		if abs(tick_time) > ONE_SECOND {
-			cur_time := tick_time / ONE_SECOND
-			time_str = fmt.tprintf("%.2f s", cur_time)
-		} else if abs(tick_time) > ONE_MILLI {
-			cur_time := tick_time / ONE_MILLI
-			time_str = fmt.tprintf("%.2f ms", cur_time)
+		if abs(tick_range) > ONE_SECOND {
+			cur_time := f64(tick_time) / ONE_SECOND
+			time_str = fmt.tprintf("%.3f s", cur_time)
+		} else if abs(tick_range) > ONE_MILLI {
+			cur_time := f64(tick_time) / f64(ONE_MILLI)
+			time_str = fmt.tprintf("%.3f ms", cur_time)
 		} else {
-			time_str = fmt.tprintf("%.2f μs", tick_time)
+			time_str = fmt.tprintf("%.0f μs", tick_time)
 		}
 
 		text_width := measure_text(time_str, p_font_size, default_font)

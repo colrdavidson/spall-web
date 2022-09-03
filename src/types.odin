@@ -9,6 +9,8 @@ Rect :: struct {
 	pos: Vec2,
 	size: Vec2,
 }
+Window :: [2]i64
+
 rect :: #force_inline proc(x, y, w, h: f32) -> Rect {
 	return Rect{Vec2{x, y}, Vec2{w, h}}
 }
