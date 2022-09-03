@@ -152,16 +152,6 @@ get_max_y_pan :: proc(processes: []Process, rect_height: f32) -> f32 {
 	return cur_y
 }
 
-to_cam_x :: proc(cam: Camera, x: f32) -> f32 {
-	return (x * cam.scale) + cam.pan.x
-}
-to_cam_y :: proc(cam: Camera, y: f32) -> f32 {
-	return y - cam.pan.y
-}
-to_cam_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
-	return Vec2{to_cam_x(cam, pos.x), to_cam_y(cam, pos.y)}
-}
-
 to_world_x :: proc(cam: Camera, x: f32) -> f32 {
 	return (x - cam.pan.x) / cam.scale
 }
@@ -185,12 +175,12 @@ generate_lod_rects :: proc(processes: ^[dynamic]Process, scale: f32, start_time,
 		for tm, t_idx in &proc_v.threads {
 			event_rects := make([dynamic]EventRect, 0, context.allocator)
 			for event, e_idx in tm.events {
-				x := f32(event.timestamp - total_min_time)
-				y := (rect_height * f32(event.depth - 1))
-			  	w := f32(event.duration)
+				x := f64(event.timestamp - total_min_time)
+				y := rect_height * f32(event.depth - 1)
+			  	w := f32(f64(event.duration) * f64(scale))
 				h := rect_height
 
-				r := Rect{Vec2{x, y}, Vec2{w * scale, h}}
+				r := DRect{x, y, Vec2{w, h}}
 				if r.size.x < 0.1 {
 					continue
 				}
@@ -493,12 +483,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
 
 			for er, idx in tm.rects {
-				dr := er.r
+				r := er.r
 
-				pos_in_cam := to_cam_pos(cam, Vec2{dr.pos.x, dr.pos.y})
-				pos_in_cam.x += disp_rect.pos.x
-				pos_in_cam.y += cur_y + cam.pan.y
-				dr.pos = pos_in_cam
+				x := f32(((r.x * f64(cam.scale)) + f64(cam.pan.x)) + f64(disp_rect.pos.x))
+				y := r.y + f32(cur_y)
+				dr := Rect{Vec2{x, y}, Vec2{r.size.x, r.size.y}}
 
 				if !rect_in_rect(dr, disp_rect) {
 					continue
@@ -591,7 +580,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				cur_time := f64(time) / ONE_MILLI
 				return fmt.tprintf("%.2f ms", cur_time)
 			} else {
-				return fmt.tprintf("%.2f μs", f64(time))
+				return fmt.tprintf("%d μs", time)
 			}
 		}
 

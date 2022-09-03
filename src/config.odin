@@ -5841,6 +5841,7 @@ default_config := `
 {"cat":"function", "dur":585108, "name":"linker", "ph":"X", "pid":0, "tid": 10732, "ts": 631033},
 {"cat":"function", "dur":1217665, "name":"libCuik", "ph":"X", "pid":0, "tid": 10732, "ts": 10}
 {"cat":"function", "dur":1, "name":"test me", "ph":"X", "pid":0, "tid": 10732, "ts": 0}
-{"cat":"function", "dur":5, "name":"test me2", "ph":"X", "pid":0, "tid": 10732, "ts": 20}
+{"cat":"function", "dur":2, "name":"test me2", "ph":"X", "pid":0, "tid": 10732, "ts": 10}
+{"cat":"function", "dur":3000, "name":"test me3", "ph":"X", "pid":0, "tid": 10732, "ts": 500000}
 ]}
 `

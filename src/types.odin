@@ -9,6 +9,11 @@ Rect :: struct {
 	pos: Vec2,
 	size: Vec2,
 }
+DRect :: struct {
+	x: f64,
+	y: f32,
+	size: Vec2,
+}
 Window :: [2]i64
 
 rect :: #force_inline proc(x, y, w, h: f32) -> Rect {
@@ -22,7 +27,7 @@ Camera :: struct {
 }
 
 EventRect :: struct {
-	r: Rect,
+	r: DRect,
 	name: string,
 	idx: int,
 	depth: int,
