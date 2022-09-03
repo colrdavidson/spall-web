@@ -442,12 +442,14 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	//fmt.printf("displayed range: %f μs -> %f μs, ticks: %d, division: %d μs\n", display_range_start, display_range_end, ticks, division)
 
 	// draw lines for time markings
-	for i := 0; i < ticks; i += 1 {
-		tick_time := f64(f64(draw_tick_start) + (f64(i) * f64(division)))
+	for i := 0; i < (ticks * 2); i += 1 {
+		tick_time := f64(f64(draw_tick_start) + (f64(i) * (f64(division) / 2)))
 		x_off := f32((f64(tick_time) * f64(cam.scale)) + f64(cam.pan.x))
 
+		color := (i % 2) == 1 ? line_color : text_color
+
 		line_start := disp_rect.pos.y + graph_header_height - top_line_gap
-		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, line_color)
+		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, color)
 	}
 
 	cur_y := graph_rect.pos.y - cam.pan.y
@@ -575,10 +577,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		time_fmt :: proc(time: u64) -> string {
 			if time > ONE_SECOND {
 				cur_time := f64(time) / ONE_SECOND
-				return fmt.tprintf("%.2f s", cur_time)
+				return fmt.tprintf("%.3f s", cur_time)
 			} else if time > ONE_MILLI {
 				cur_time := f64(time) / ONE_MILLI
-				return fmt.tprintf("%.2f ms", cur_time)
+				return fmt.tprintf("%.3f ms", cur_time)
 			} else {
 				return fmt.tprintf("%d μs", time)
 			}
