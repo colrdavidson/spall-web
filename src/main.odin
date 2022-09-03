@@ -134,8 +134,11 @@ get_max_y_pan :: proc(processes: []Process, rect_height: f32) -> f32 {
 	cur_y : f32 = 0
 
 	for proc_v, _ in processes {
-		h1_size := h1_height + (h1_height / 2)
-		cur_y += h1_size
+		if len(processes) > 1 {
+			h1_size := h1_height + (h1_height / 2)
+			cur_y += h1_size
+		}
+
 		for tm, _ in proc_v.threads {
 			h2_size := h2_height + (h2_height / 2)
 			cur_y += h2_size + ((f32(tm.max_depth) * rect_height) + thread_gap)
@@ -145,22 +148,62 @@ get_max_y_pan :: proc(processes: []Process, rect_height: f32) -> f32 {
 	return cur_y
 }
 
-generate_lod_rects :: proc(processes: ^[dynamic]Process, rect_height: f32) {
+to_cam_x :: proc(cam: Camera, x: f32) -> f32 {
+	return (x * cam.scale) + cam.pan.x
+}
+to_cam_y :: proc(cam: Camera, y: f32) -> f32 {
+	return y - cam.pan.y
+}
+to_cam_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
+	return Vec2{to_cam_x(cam, pos.x), to_cam_y(cam, pos.y)}
+}
+
+to_world_x :: proc(cam: Camera, x: f32) -> f32 {
+	return (x - cam.pan.x) / cam.scale
+}
+to_world_y :: proc(cam: Camera, y: f32) -> f32 {
+	return y + cam.pan.y
+}
+to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
+	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
+}
+
+generate_lod_rects :: proc(processes: ^[dynamic]Process, display_rect: Rect, cam: Camera, rect_height: f32) {
 	//start_bench("generate LOD", context.temp_allocator)
 
+	cur_y : f32 = display_rect.pos.y
 	for proc_v, p_idx in processes {
+		if len(processes) > 1 {
+			h1_size := h1_height + (h1_height / 2)
+			cur_y += h1_size
+		}
+
 		for tm, t_idx in &proc_v.threads {
 			event_rects := make([dynamic]EventRect, 0, context.temp_allocator)
 
+			h2_size := h2_height + (h2_height / 2)
+			cur_y += h2_size
 			for event, e_idx in tm.events {
 				x := f32(event.timestamp - total_min_time)
 				y := (rect_height * f32(event.depth - 1))
-				w := f32(event.duration)
+			  	w := f32(event.duration)
 				h := rect_height
+
+				pos_in_cam := to_cam_pos(cam, Vec2{x, y})
+				pos_in_cam.x += display_rect.pos.x
+				pos_in_cam.y += cur_y
+
+				r := Rect{pos_in_cam, Vec2{w * cam.scale, h}}
+				if r.size.x < 0.1 {
+					continue
+				}
+				if !rect_in_rect(r, display_rect) {
+					continue
+				}
 
 				append(&event_rects, 
 					EventRect{
-						r = rect(x, y, w, h),
+						r = r,
 						name = event.name,
 						idx = e_idx,
 						depth = event.depth,
@@ -168,6 +211,7 @@ generate_lod_rects :: proc(processes: ^[dynamic]Process, rect_height: f32) {
 				)
 			}
 
+			cur_y += ((f32(tm.max_depth) * rect_height) + thread_gap)
 			tm.rects = event_rects[:]
 		}
 	}
@@ -272,9 +316,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		update_fonts = false
 	}
 
-	header_pad : f32 = 10
-	line_gap : f32 = (em / 1.5)
-	top_line_gap : f32 = line_gap
+	top_line_gap : f32 = (em / 1.5)
 
 	rect_height := em + (0.75 * em)
 	toolbar_height : f32 = 4 * em
@@ -292,15 +334,14 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	x_pad_size : f32 = 3 * em
 	x_subpad : f32 = em
-	y_pad_size : f32 = em
 
-	info_pane_height : f32 = pane_y + y_pad_size + line_gap
+	info_pane_height : f32 = pane_y + top_line_gap
 	info_pane_y := height - info_pane_height
 
 	start_x := x_pad_size
 	end_x := width - x_pad_size
 	display_width := end_x - start_x
-	start_y := toolbar_height + y_pad_size
+	start_y := toolbar_height
 	end_y   := info_pane_y
 	display_height := end_y - start_y
 
@@ -317,12 +358,28 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		finished_loading = false
 	}
 
-	trace_display_rect := rect(0, toolbar_height, width, info_pane_y)
+    canvas_clear()
+
+	// Render background
+    draw_rect(rect(0, toolbar_height, width, height), bg_color2)
+
+	graph_header_text_height := (top_line_gap * 2) + em
+	graph_header_line_gap := em
+	graph_header_height := graph_header_text_height + graph_header_line_gap
+	max_x := width - x_pad_size
+
+	disp_rect := rect(start_x, start_y, display_width, display_height)
+	//draw_rect_outline(rect(disp_rect.pos.x, disp_rect.pos.y, disp_rect.size.x, disp_rect.size.y - 1), 1, Vec3{255, 0, 0})
+
+	graph_rect := disp_rect
+	graph_rect.pos.y += graph_header_height
+	graph_rect.size.y -= graph_header_height
+	//draw_rect_outline(rect(graph_rect.pos.x, graph_rect.pos.y, graph_rect.size.x, graph_rect.size.y - 1), 1, Vec3{0, 0, 255})
 
 	// compute scale + scroll
 	MIN_SCALE :: 0.00001
 	MAX_SCALE :: 100000
-	if pt_in_rect(mouse_pos, trace_display_rect) {
+	if pt_in_rect(mouse_pos, disp_rect) {
 		cam.scale *= 1 + (0.1 * zoom_velocity * dt)
 		cam.scale = min(max(cam.scale, MIN_SCALE), MAX_SCALE)
 	}
@@ -331,7 +388,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// compute pan
 	pan_delta := Vec2{}
 	if is_mouse_down {
-		if pt_in_rect(clicked_pos, trace_display_rect) {
+		if pt_in_rect(clicked_pos, disp_rect) {
 			pan_delta = mouse_pos - last_mouse_pos
 			cam.vel.y = -pan_delta.y / dt
 			cam.vel.x = pan_delta.x / dt
@@ -339,12 +396,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		last_mouse_pos = mouse_pos
 	}
 
-	generate_lod_rects(&processes, rect_height)
-
+	max_y_pan := get_max_y_pan(processes[:], rect_height) - graph_rect.size.y
 	cam.pan = cam.pan + (cam.vel * dt)
 	cam.vel *= f32(_pow(0.005, f64(dt)))
-
-	max_y_pan := get_max_y_pan(processes[:], rect_height) - display_height
 
 	edge_sproing : f64 = 0.0001
 	if cam.pan.y < 0 {
@@ -356,17 +410,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		cam.vel.y *= f32(_pow(0.0001, f64(dt)))
 	}
 
-	graph_start_y := start_y
-	header_height := top_line_gap + em
-	max_x := width - x_pad_size
-
-	top_pad := graph_start_y + header_height + header_pad 
-	cur_y := top_pad - cam.pan.y
-
-    canvas_clear()
-
-	// Render background
-    draw_rect(rect(0, toolbar_height, width, height), bg_color2)
+	generate_lod_rects(&processes, graph_rect, cam, rect_height)
 
 	display_range_start := f32((0 - cam.pan.x) / cam.scale)
 	display_range_end := f32((display_width - cam.pan.x) / cam.scale)
@@ -398,9 +442,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	for i := 0; i < ticks; i += 1 {
 		tick_time := f32(draw_tick_start + (f32(i) * division))
 		x_off := (f32(tick_time) * cam.scale) + cam.pan.x
-		draw_line(Vec2{start_x + x_off, graph_start_y + header_height}, Vec2{start_x + x_off, info_pane_y}, 0.5, line_color)
+
+		line_start := disp_rect.pos.y + graph_header_height - top_line_gap
+		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, line_color)
 	}
 
+	cur_y := graph_rect.pos.y - cam.pan.y
 
 	// Render flamegraphs
 	clicked_on_rect := false
@@ -434,22 +481,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			for er, idx in tm.rects {
 				dr := er.r
-				dr.pos.x  = start_x + (dr.pos.x * cam.scale) + cam.pan.x
-				dr.pos.y  = (dr.pos.y + cur_y)
-				dr.size.x = (dr.size.x * cam.scale)
-
-				if dr.size.x < 0.1 || !rect_in_rect(dr, trace_display_rect) {
-					continue
-				}
 
 				rect_color := color_choices[er.depth - 1]
-				if pt_in_rect(mouse_pos, dr) {
-					set_cursor("pointer")
-					if clicked {
-						selected_event = {i64(p_idx), i64(t_idx), i64(er.idx)}
-						clicked_on_rect = true
-					}
-				}
 				if int(selected_event.pid) == p_idx && 
 				   int(selected_event.tid) == t_idx && 
 				   int(selected_event.eid) == er.idx {
@@ -459,6 +492,14 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				}
 
 				draw_rect(dr, rect_color)
+
+				if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
+					set_cursor("pointer")
+					if clicked {
+						selected_event = {i64(p_idx), i64(t_idx), i64(er.idx)}
+						clicked_on_rect = true
+					}
+				}
 
 				text_pad : f32 = 10
 				max_chars := max(0, min(len(er.name), int(math.floor((dr.size.x - (text_pad * 2)) / ch_width))))
@@ -483,10 +524,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 
 	// Chop sides of screen
-    draw_rect(rect(0, toolbar_height, width, y_pad_size + header_height), bg_color2) // top
-    draw_rect(rect(max_x + 1, toolbar_height, width, height), bg_color2) // right
-    draw_rect(rect(0, toolbar_height, x_pad_size - 1, height), bg_color2) // left
-    draw_rect(rect(0, info_pane_y, width, height), bg_color2) // bottom
+    draw_rect(rect(0, disp_rect.pos.y, width, graph_header_text_height), bg_color2) // top
+    draw_rect(rect(0, disp_rect.pos.y, graph_rect.pos.x, height), bg_color2) // left
+    draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
 
 	ONE_SECOND :: 1000 * 1000
 	ONE_MILLI :: 1000
@@ -495,10 +535,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		x_off := (tick_time * cam.scale) + cam.pan.x
 
 		time_str: string
-		if tick_time > ONE_SECOND {
+		if abs(tick_time) > ONE_SECOND {
 			cur_time := tick_time / ONE_SECOND
 			time_str = fmt.tprintf("%.2f s", cur_time)
-		} else if tick_time > ONE_MILLI {
+		} else if abs(tick_time) > ONE_MILLI {
 			cur_time := tick_time / ONE_MILLI
 			time_str = fmt.tprintf("%.2f ms", cur_time)
 		} else {
@@ -506,7 +546,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		}
 
 		text_width := measure_text(time_str, p_font_size, default_font)
-		draw_text(time_str, Vec2{start_x + x_off - (text_width / 2), graph_start_y}, p_font_size, default_font, text_color)
+		draw_text(time_str, Vec2{start_x + x_off - (text_width / 2), disp_rect.pos.y + (graph_header_text_height / 2) - (em / 2)}, p_font_size, default_font, text_color)
 	}
 
 	// Render info pane
@@ -518,7 +558,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		t_idx := int(selected_event.tid)
 		e_idx := int(selected_event.eid)
 
-		y := info_pane_y + y_pad_size
+		y := info_pane_y + top_line_gap
 
 		time_fmt :: proc(time: u64) -> string {
 			if time > ONE_SECOND {
@@ -598,7 +638,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
 	// Render debug info
-	y := height - em - y_pad_size
+	y := height - em - top_line_gap
 
 	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
 	hash_width := measure_text(hash_str, p_font_size, monospace_font)
@@ -609,31 +649,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
     return true
-}
-
-pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
-	x1 := box.pos.x
-	y1 := box.pos.y
-	x2 := box.pos.x + box.size.x
-	y2 := box.pos.y + box.size.y
-
-	return x1 <= pt.x && pt.x <= x2 && y1 <= pt.y && pt.y <= y2
-}
-
-rect_in_rect :: proc(a, b: Rect) -> bool {
-	a_left := a.pos.x
-	a_right := a.pos.x + a.size.x
-
-	a_top := a.pos.y
-	a_bottom := a.pos.y + a.size.y
-
-	b_left := b.pos.x
-	b_right := b.pos.x + b.size.x
-
-	b_top := b.pos.y
-	b_bottom := b.pos.y + b.size.y
-
-	return !(b_left > a_right || a_left > b_right || a_top > b_bottom || b_top > a_bottom)
 }
 
 button :: proc(in_rect: Rect, text: string, font: string) -> bool {

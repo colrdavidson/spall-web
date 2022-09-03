@@ -35,3 +35,28 @@ round_down :: proc(x, align: f32) -> f32 {
 round_up :: proc(x, align: f32) -> f32 {
 	return x - math.mod(x, align)
 }
+
+pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
+	x1 := box.pos.x
+	y1 := box.pos.y
+	x2 := box.pos.x + box.size.x
+	y2 := box.pos.y + box.size.y
+
+	return x1 <= pt.x && pt.x <= x2 && y1 <= pt.y && pt.y <= y2
+}
+
+rect_in_rect :: proc(a, b: Rect) -> bool {
+	a_left := a.pos.x
+	a_right := a.pos.x + a.size.x
+
+	a_top := a.pos.y
+	a_bottom := a.pos.y + a.size.y
+
+	b_left := b.pos.x
+	b_right := b.pos.x + b.size.x
+
+	b_top := b.pos.y
+	b_bottom := b.pos.y + b.size.y
+
+	return !(b_left > a_right || a_left > b_right || a_top > b_bottom || b_top > a_bottom)
+}
