@@ -8,18 +8,12 @@ import random
 import shutil
 import string
 import sys
+import time
 
 RELEASE = len(sys.argv) > 1 and sys.argv[1] == 'release'
 
 odin = 'odin'
-wasmld = 'wasm-ld'
 program_name = 'foobar'
-
-try:
-    subprocess.run(['wasm-ld-10', '-v'], stdout=subprocess.DEVNULL)
-    wasmld = 'wasm-ld-10'
-except FileNotFoundError:
-    pass
 
 [os.remove(f) for f in glob.iglob('build/dist/*', recursive=True)]
 for ext in ['*.o', '*.wasm', '*.wat']:
@@ -27,6 +21,7 @@ for ext in ['*.o', '*.wasm', '*.wat']:
 
 os.makedirs('build', exist_ok=True)
 
+start_time = time.time()
 print('Compiling...')
 subprocess.run([
     odin,
@@ -35,6 +30,7 @@ subprocess.run([
     f"-out:build/{program_name}.wasm",
     '-o:speed', '-debug'
 ])
+print("Compiled in {:.1f} seconds".format(time.time() - start_time))
 
 # Optimize output WASM file
 if RELEASE:
@@ -48,6 +44,7 @@ if RELEASE:
     ])
 
 # Patch memcpy and memmove
+start_time = time.time()
 print('Patching WASM...')
 subprocess.run([
     'wasm2wat',
@@ -77,6 +74,7 @@ subprocess.run([
     '-o', f"build/{program_name}_patched.wasm",
     f"build/{program_name}_patched.wat",
 ])
+print("Patched in {:.1f} seconds".format(time.time() - start_time))
 
 #
 # Output the dist folder for upload
