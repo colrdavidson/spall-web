@@ -97,8 +97,8 @@ processes: [dynamic]Process
 process_map: map[u64]int
 color_choices: [dynamic]Vec3
 event_count: i64
-total_max_time: u64
-total_min_time: u64
+total_max_time: f64
+total_min_time: f64
 total_max_depth: int
 
 @export
@@ -338,7 +338,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	if finished_loading {
 		cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 1}
 
-		fmt.printf("min %d μs, max %d μs, range %d μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
+		fmt.printf("min %f μs, max %f μs, range %f μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
 		start_time : f32 = 0
 		end_time   : f32 = f32(total_max_time - total_min_time)
 		cam.scale = rescale(cam.scale, start_time, end_time, 0, display_width)
@@ -595,22 +595,22 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		y := info_pane_y + top_line_gap
 
-		time_fmt :: proc(time: u64) -> string {
+		time_fmt :: proc(time: f64) -> string {
 			if time > ONE_SECOND {
-				cur_time := f64(time) / ONE_SECOND
+				cur_time := time / ONE_SECOND
 				return fmt.tprintf("%.3f s", cur_time)
 			} else if time > ONE_MILLI {
-				cur_time := f64(time) / ONE_MILLI
+				cur_time := time / ONE_MILLI
 				return fmt.tprintf("%.3f ms", cur_time)
 			} else {
-				return fmt.tprintf("%d μs", time)
+				return fmt.tprintf("%f μs", time)
 			}
 		}
 
 		event := processes[p_idx].threads[t_idx].events[e_idx]
 		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("start timestamp: %d", event.timestamp), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("start timestamp: %s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 
 		draw_text(fmt.tprintf("duration: %s", time_fmt(event.duration)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 	}

@@ -31,7 +31,7 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 	p_idx, ok1 := process_map[event.process_id]
 	if !ok1 {
 		append(processes, Process{
-			min_time = c.UINT64_MAX, 
+			min_time = 0x7fefffffffffffff, 
 			process_id = event.process_id,
 			threads = make([dynamic]Thread),
 			thread_map = make(map[u64]int, 0, scratch_allocator),
@@ -45,7 +45,7 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 		threads := &processes[p_idx].threads
 
 		append(threads, Thread{ 
-			min_time = c.UINT64_MAX, 
+			min_time = 0x7fefffffffffffff, 
 			thread_id = event.thread_id,
 			events = make([dynamic]Event),
 		})

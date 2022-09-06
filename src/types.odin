@@ -35,17 +35,24 @@ EventRect :: struct {
 	collated: bool,
 }
 
+EventType :: enum {
+	Complete,
+	Begin,
+	End
+}
+
 Event :: struct {
 	name: string,
-	duration: u64,
-	timestamp: u64,
+	type: EventType,
+	duration: f64,
+	timestamp: f64,
 	thread_id: u64,
 	process_id: u64,
 	depth: int,
 }
 
 Thread :: struct {
-	min_time: u64,
+	min_time: f64,
 	max_depth: int,
 
 	thread_id: u64,
@@ -54,7 +61,7 @@ Thread :: struct {
 }
 
 Process :: struct {
-	min_time: u64,
+	min_time: f64,
 
 	process_id: u64,
 	threads: [dynamic]Thread,

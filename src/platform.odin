@@ -122,7 +122,7 @@ manual_load :: proc(config: string) {
 	load_config_chunk(0, u32(len(config)), transmute([]u8)config)
 }
 
-fields := []string{ "dur", "name", "pid", "tid", "ts" }
+fields := []string{ "dur", "name", "pid", "tid", "ts", "ph" }
 init_loading_state :: proc(size: u32) {
 	loading_config = true
 
@@ -132,7 +132,7 @@ init_loading_state :: proc(size: u32) {
 	processes = make([dynamic]Process)
 	process_map = make(map[u64]int, 0, scratch_allocator)
 	total_max_time = 0
-	total_min_time = c.UINT64_MAX
+	total_min_time = 0x7fefffffffffffff
 
 	obj_map = make(map[string]string, 0, scratch_allocator)
 	for field in fields {
@@ -269,12 +269,20 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			}
 
 			switch key {
+			case "ph":
+				if value == "X" {
+					cur_event.type = .Complete
+				} else if value == "B" {
+					cur_event.type = .Begin
+				} else if value == "E" {
+					cur_event.type = .End
+				}
 			case "dur": 
-				dur, ok := strconv.parse_u64(value)
+				dur, ok := strconv.parse_f64(value)
 				if !ok { continue }
 				cur_event.duration = dur
 			case "ts": 
-				ts, ok := strconv.parse_u64(value)
+				ts, ok := strconv.parse_f64(value)
 				if !ok { continue }
 				cur_event.timestamp = ts
 			case "tid": 
