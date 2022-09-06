@@ -3,27 +3,25 @@ package main
 import "core:container/queue"
 import "core:fmt"
 
-Vec2 :: [2]f32
-Vec3 :: [3]f32
+Vec2 :: [2]f64
+Vec3 :: [3]f64
 Rect :: struct {
 	pos: Vec2,
 	size: Vec2,
 }
-DRect :: struct {
-	x: f64,
-	y: f32,
-	size: Vec2,
-}
-Window :: [2]i64
 
-rect :: #force_inline proc(x, y, w, h: f32) -> Rect {
+rect :: #force_inline proc(x, y, w, h: f64) -> Rect {
 	return Rect{Vec2{x, y}, Vec2{w, h}}
 }
 
+DVec2 :: [2]f64
 Camera :: struct {
 	pan: Vec2,
 	vel: Vec2,
-	scale: f32,
+	target_pan_x: f64,
+
+	current_scale: f64,
+	target_scale: f64,
 }
 
 EventType :: enum u8 {

@@ -19,7 +19,7 @@ current_alloc_offset := 0
 
 wasmContext := runtime.default_context()
 
-t           : f32
+t           : f64
 frame_count : int
 
 bg_color      := Vec3{}
@@ -45,24 +45,22 @@ EventID :: struct {
 
 selected_event := EventID{-1, -1, -1}
 
-dpr: f32
+dpr: f64
 
-_p_font_size : f32 = 1
-_h1_font_size : f32 = 1.25
-_h2_font_size : f32 = 1.0625
+_p_font_size : f64 = 1
+_h1_font_size : f64 = 1.25
+_h2_font_size : f64 = 1.0625
 
-p_font_size: f32
-h1_font_size: f32
-h2_font_size: f32
+p_font_size: f64
+h1_font_size: f64
+h2_font_size: f64
 
-last_mouse_pos := Vec2{}
-mouse_pos      := Vec2{}
-clicked_pos    := Vec2{}
-zoom_velocity: f32 = 0
+last_mouse_pos := DVec2{}
+mouse_pos      := DVec2{}
+clicked_pos    := DVec2{}
+scroll_val_y: f64 = 0
 
-old_scale: f32
-old_pan: Vec2
-cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 1}
+cam := Camera{DVec2{0, 0}, DVec2{0, 0}, 0, 1, 1}
 division: f64 = 0
 
 is_mouse_down := false
@@ -85,11 +83,11 @@ ColorMode :: enum {
 	Auto
 }
 
-em             : f32 = 0
-h1_height      : f32 = 0
-h2_height      : f32 = 0
-ch_width       : f32 = 0
-thread_gap     : f32 = 8
+em             : f64 = 0
+h1_height      : f64 = 0
+h2_height      : f64 = 0
+ch_width       : f64 = 0
+thread_gap     : f64 = 8
 
 trace_config : string
 
@@ -134,8 +132,8 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 	}
 }
 
-get_max_y_pan :: proc(processes: []Process, rect_height: f32) -> f32 {
-	cur_y : f32 = 0
+get_max_y_pan :: proc(processes: []Process, rect_height: f64) -> f64 {
+	cur_y : f64 = 0
 
 	for proc_v, _ in processes {
 		if len(processes) > 1 {
@@ -145,21 +143,21 @@ get_max_y_pan :: proc(processes: []Process, rect_height: f32) -> f32 {
 
 		for tm, _ in proc_v.threads {
 			h2_size := h2_height + (h2_height / 2)
-			cur_y += h2_size + ((f32(tm.max_depth) * rect_height) + thread_gap)
+			cur_y += h2_size + ((f64(tm.max_depth) * rect_height) + thread_gap)
 		}
 	}
 
 	return cur_y
 }
 
-to_world_x :: proc(cam: Camera, x: f32) -> f32 {
-	return (x - cam.pan.x) / cam.scale
+to_world_x :: proc(cam: Camera, x: f64) -> f64 {
+	return (x - cam.pan.x) / cam.current_scale
 }
-to_world_y :: proc(cam: Camera, y: f32) -> f32 {
+to_world_y :: proc(cam: Camera, y: f64) -> f64 {
 	return y + cam.pan.y
 }
-to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
-	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
+to_world_pos :: proc(cam: Camera, pos: DVec2) -> DVec2 {
+	return DVec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
 }
 
 CHUNK_SIZE :: 10 * 1024 * 1024
@@ -195,14 +193,14 @@ main :: proc() {
 
 random_seed: u64
 
-get_current_window :: proc(cam: Camera, display_width: f32) -> (i64, i64) {
+get_current_window :: proc(cam: Camera, display_width: f64) -> (i64, i64) {
 	display_range_start := i64(to_world_x(cam, 0))
 	display_range_end   := i64(math.ceil(to_world_x(cam, display_width)))
 	return display_range_start, display_range_end
 }
 
 @export
-frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
+frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
     context = wasmContext
 	defer frame_count += 1
 
@@ -217,22 +215,22 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// render loading screen
 	if loading_config {
-		pad_size : f32 = 3
-		chunk_size : f32 = 10
+		pad_size : f64 = 3
+		chunk_size : f64 = 10
 
 		load_box := rect(0, 0, 100, 100)
 		load_box = rect((width / 2) - (load_box.size.x / 2) - pad_size, (height / 2) - (load_box.size.y / 2) - pad_size, load_box.size.x + pad_size, load_box.size.y + pad_size)
 
 		draw_rectc(load_box, 3, Vec3{50, 50, 50})
 
-		chunk_count := int(rescale(f32(p.offset), 0, f32(p.total_size), 0, 100))
+		chunk_count := int(rescale(f64(p.offset), 0, f64(p.total_size), 0, 100))
 
 		chunk := rect(0, 0, chunk_size, chunk_size)
 		start_x := load_box.pos.x + pad_size
 		start_y := load_box.pos.y + pad_size
 		for i := chunk_count; i >= 0; i -= 1 {
-			cur_x := f32(i %% int(chunk_size))
-			cur_y := f32(i /  int(chunk_size))
+			cur_x := f64(i %% int(chunk_size))
+			cur_y := f64(i /  int(chunk_size))
 			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), Vec3{0, 255, 0})
 		}
 		
@@ -265,13 +263,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		update_fonts = false
 	}
 
-	top_line_gap : f32 = (em / 1.5)
+	top_line_gap : f64 = (em / 1.5)
 
 	rect_height := em + (0.75 * em)
-	toolbar_height : f32 = 4 * em
+	toolbar_height : f64 = 4 * em
 
-	pane_y : f32 = 0
-	next_line := proc(y: ^f32, h: f32) -> f32 {
+	pane_y : f64 = 0
+	next_line := proc(y: ^f64, h: f64) -> f64 {
 		res := y^
 		y^ += h + (h / 1.5)
 		return res
@@ -281,10 +279,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		next_line(&pane_y, em)
 	}
 
-	x_pad_size : f32 = 3 * em
-	x_subpad : f32 = em
+	x_pad_size : f64 = 3 * em
+	x_subpad : f64 = em
 
-	info_pane_height : f32 = pane_y + top_line_gap
+	info_pane_height : f64 = pane_y + top_line_gap
 	info_pane_y := height - info_pane_height
 
 	start_x := x_pad_size
@@ -296,12 +294,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 
 	if finished_loading {
-		cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 1}
+		cam = Camera{DVec2{0, 0}, DVec2{0, 0}, 0, 1, 1}
 
 		fmt.printf("min %f μs, max %f μs, range %f μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
-		start_time : f32 = 0
-		end_time   : f32 = f32(total_max_time - total_min_time)
-		cam.scale = rescale(cam.scale, start_time, end_time, 0, display_width)
+		start_time : f64 = 0
+		end_time   : f64 = f64(total_max_time - total_min_time)
+		cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, f64(display_width))
+		cam.target_scale = cam.current_scale
 
 		arena := cast(^Arena)context.allocator.data
 		current_alloc_offset = arena.offset
@@ -329,7 +328,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 
 	// compute pan
-	pan_delta := Vec2{}
+	pan_delta := DVec2{}
 	if is_mouse_down {
 		if pt_in_rect(clicked_pos, disp_rect) {
 			pan_delta = mouse_pos - last_mouse_pos
@@ -339,48 +338,46 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		last_mouse_pos = mouse_pos
 	}
 
-	zoom_vel : f32 = 0
+
+	old_scale := cam.target_scale
 
 	// compute scale + scroll
 	MIN_SCALE :: 0.00001
 	MAX_SCALE :: 100000
 	if pt_in_rect(mouse_pos, disp_rect) {
-		zoom_vel = zoom_velocity
+		cam.target_scale *= _pow(1.003, scroll_val_y)
+		scroll_val_y = 0
 	}
-	zoom_velocity = 0
 
-	cam.scale *= 1 + (0.1 * zoom_vel * dt)
-	cam.scale = min(max(cam.scale, MIN_SCALE), MAX_SCALE)
+	cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
+	cam.current_scale = min(max(cam.current_scale, MIN_SCALE), MAX_SCALE)
 
 	start_time, end_time := get_current_window(cam, display_width)
 
 	max_height := get_max_y_pan(processes[:], rect_height)
 	max_y_pan := max(max_height - graph_rect.size.y, 0)
 
-	if zoom_vel != 0 {
-		cam_mouse_x := mouse_pos.x - start_x
-		cam.pan.x = ((cam.pan.x - cam_mouse_x) * (cam.scale / old_scale)) + cam_mouse_x
+	cam_mouse_x := mouse_pos.x - start_x
+
+	if cam.target_scale != old_scale {
+		cam.target_pan_x = ((cam.target_pan_x - cam_mouse_x) * (cam.target_scale / old_scale)) + cam_mouse_x
 	}
 
-	cam.pan = cam.pan + (cam.vel * dt)
-	cam.vel *= f32(_pow(0.0001, f64(dt)))
+	cam.target_pan_x = cam.target_pan_x + (cam.vel.x * dt)
+	cam.pan.y = cam.pan.y + (cam.vel.y * dt)
+	cam.vel *= _pow(0.0001, dt)
 
 	edge_sproing : f64 = 0.0001
 	if cam.pan.y < 0 {
-		cam.pan.y = cam.pan.y * f32(_pow(edge_sproing, f64(dt)))
-		cam.vel.y *= f32(_pow(0.0001, f64(dt)))
+		cam.pan.y = cam.pan.y * _pow(edge_sproing, (dt))
+		cam.vel.y *= _pow(0.0001, dt)
 	}
 	if cam.pan.y > max_y_pan {
-		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * f32(_pow(edge_sproing, f64(dt)))
-		cam.vel.y *= f32(_pow(0.0001, f64(dt)))
+		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * _pow(edge_sproing, dt)
+		cam.vel.y *= _pow(0.0001, dt)
 	}
 
-	if cam.pan != old_pan {
-		old_pan = cam.pan
-	}
-	if cam.scale != old_scale {
-		old_scale = cam.scale
-	}
+	cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 
 	mus_range := f64(end_time - start_time)
 	v1 := math.log10(mus_range)
@@ -396,8 +393,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	division = max(1, division)
 
-	display_range_start := (0 - f64(cam.pan.x)) / f64(cam.scale)
-	display_range_end := (f64(display_width) - f64(cam.pan.x)) / f64(cam.scale)
+	display_range_start := (0 - f64(cam.pan.x)) / f64(cam.current_scale)
+	display_range_end := (f64(display_width) - f64(cam.pan.x)) / f64(cam.current_scale)
 
 	draw_tick_start := f_round_down(display_range_start, division)
 	draw_tick_end := f_round_down(display_range_end, division)
@@ -409,8 +406,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// draw lines for time markings
 	for i := 0; i < (ticks * 2); i += 1 {
-		tick_time := f64(f64(draw_tick_start) + (f64(i) * (f64(division) / 2)))
-		x_off := f32((f64(tick_time) * f64(cam.scale)) + f64(cam.pan.x))
+		tick_time := f64(f64(draw_tick_start) + (f64(i) * (division / 2)))
+		x_off := (f64(tick_time) * f64(cam.current_scale)) + f64(cam.pan.x)
 
 		color := (i % 2) == 1 ? line_color : text_color
 
@@ -423,7 +420,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// Render flamegraphs
 	clicked_on_rect := false
 	proc_loop: for proc_v, p_idx in processes {
-		h1_size : f32 = 0
+		h1_size : f64 = 0
 		if len(processes) > 1 {
 			row_text := fmt.tprintf("PID: %d", proc_v.process_id)
 			draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
@@ -437,7 +434,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			h2_size := h2_height + (h2_height / 2)
 			cur_y += h2_size
 
-			thread_advance := ((f32(tm.max_depth) * rect_height) + thread_gap)
+			thread_advance := ((f64(tm.max_depth) * rect_height) + thread_gap)
 
 			if cur_y > info_pane_y {
 				break proc_loop
@@ -452,18 +449,18 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			for ev, e_idx in tm.events {
 				x := f64(ev.timestamp - total_min_time)
-				y := rect_height * f32(ev.depth - 1)
-			  	w := f32(f64(ev.duration) * f64(cam.scale))
+				y := rect_height * f64(ev.depth - 1)
+			  	w := f64(f64(ev.duration) * f64(cam.current_scale))
 				h := rect_height
 
 				if w < 0.1 {
 					continue
 				}
 
-				r := DRect{x, y, Vec2{w, h}}
+				r := Rect{Vec2{x, y}, Vec2{w, h}}
 
-				r_x := f32(((r.x * f64(cam.scale)) + f64(cam.pan.x)) + f64(disp_rect.pos.x))
-				r_y := r.y + f32(cur_y)
+				r_x := (r.pos.x * cam.current_scale) + cam.pan.x + disp_rect.pos.x
+				r_y := r.pos.y + cur_y
 				dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
 
 				if !rect_in_rect(dr, disp_rect) {
@@ -489,7 +486,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					}
 				}
 
-				text_pad : f32 = 10
+				text_pad : f64 = 10
 				max_chars := max(0, min(len(ev.name), int(math.floor((dr.size.x - (text_pad * 2)) / ch_width))))
 				name_str := ev.name[:max_chars]
 
@@ -524,7 +521,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	ONE_MILLI :: 1000
 	for i := 0; i < ticks; i += 1 {
 		tick_time := draw_tick_start + (f64(i) * division)
-		x_off := f32(f64(tick_time) * f64(cam.scale)) + cam.pan.x
+		x_off := (tick_time * cam.current_scale) + cam.pan.x
 
 		time_str: string
 		if abs(tick_range) > ONE_SECOND {
@@ -576,10 +573,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
 
 	// draw toolbar
-	edge_pad : f32 = 1 * em
-	button_height : f32 = 2.5 * em
-	button_width  : f32 = 2.5 * em
-	button_pad    : f32 = 0.5 * em
+	edge_pad : f64 = 1 * em
+	button_height : f64 = 2.5 * em
+	button_width  : f64 = 2.5 * em
+	button_pad    : f64 = 0.5 * em
 
 	color_text : string
 	switch colormode {
@@ -623,7 +620,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		reset_cursor()
 	}
 
-	prev_line := proc(y: ^f32, h: f32) -> f32 {
+	prev_line := proc(y: ^f64, h: f64) -> f64 {
 		res := y^
 		y^ -= h + (h / 1.5)
 		return res
