@@ -263,10 +263,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		update_fonts = false
 	}
 
-	top_line_gap : f64 = (em / 1.5)
+	top_line_gap := (em / 1.5)
 
 	rect_height := em + (0.75 * em)
-	toolbar_height : f64 = 4 * em
+	toolbar_height := 4 * em
 
 	pane_y : f64 = 0
 	next_line := proc(y: ^f64, h: f64) -> f64 {
@@ -279,10 +279,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		next_line(&pane_y, em)
 	}
 
-	x_pad_size : f64 = 3 * em
-	x_subpad : f64 = em
+	x_pad_size := 3 * em
+	x_subpad := em
 
-	info_pane_height : f64 = pane_y + top_line_gap
+	info_pane_height := pane_y + top_line_gap
 	info_pane_y := height - info_pane_height
 
 	start_x := x_pad_size
@@ -298,8 +298,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 		fmt.printf("min %f μs, max %f μs, range %f μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
 		start_time : f64 = 0
-		end_time   : f64 = f64(total_max_time - total_min_time)
-		cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, f64(display_width))
+		end_time   := total_max_time - total_min_time
+		cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, display_width)
 		cam.target_scale = cam.current_scale
 
 		arena := cast(^Arena)context.allocator.data
@@ -393,8 +393,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	division = max(1, division)
 
-	display_range_start := (0 - f64(cam.pan.x)) / f64(cam.current_scale)
-	display_range_end := (f64(display_width) - f64(cam.pan.x)) / f64(cam.current_scale)
+	display_range_start := -cam.pan.x / cam.current_scale
+	display_range_end := (display_width - cam.pan.x) / cam.current_scale
 
 	draw_tick_start := f_round_down(display_range_start, division)
 	draw_tick_end := f_round_down(display_range_end, division)
@@ -406,8 +406,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	// draw lines for time markings
 	for i := 0; i < (ticks * 2); i += 1 {
-		tick_time := f64(f64(draw_tick_start) + (f64(i) * (division / 2)))
-		x_off := (f64(tick_time) * f64(cam.current_scale)) + f64(cam.pan.x)
+		tick_time := draw_tick_start + (f64(i) * (division / 2))
+		x_off := (tick_time * cam.current_scale) + cam.pan.x
 
 		color := (i % 2) == 1 ? line_color : text_color
 
@@ -448,9 +448,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
 
 			for ev, e_idx in tm.events {
-				x := f64(ev.timestamp - total_min_time)
+				x := ev.timestamp - total_min_time
 				y := rect_height * f64(ev.depth - 1)
-			  	w := f64(f64(ev.duration) * f64(cam.current_scale))
+			  	w := ev.duration * cam.current_scale
 				h := rect_height
 
 				if w < 0.1 {
@@ -525,10 +525,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 		time_str: string
 		if abs(tick_range) > ONE_SECOND {
-			cur_time := f64(tick_time) / ONE_SECOND
+			cur_time := tick_time / ONE_SECOND
 			time_str = fmt.tprintf("%.3f s", cur_time)
 		} else if abs(tick_range) > ONE_MILLI {
-			cur_time := f64(tick_time) / f64(ONE_MILLI)
+			cur_time := tick_time / ONE_MILLI
 			time_str = fmt.tprintf("%.3f ms", cur_time)
 		} else {
 			time_str = fmt.tprintf("%.0f μs", tick_time)
@@ -573,10 +573,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
     draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
 
 	// draw toolbar
-	edge_pad : f64 = 1 * em
-	button_height : f64 = 2.5 * em
-	button_width  : f64 = 2.5 * em
-	button_pad    : f64 = 0.5 * em
+	edge_pad := 1 * em
+	button_height := 2.5 * em
+	button_width  := 2.5 * em
+	button_pad    := 0.5 * em
 
 	color_text : string
 	switch colormode {
@@ -629,11 +629,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	// Render debug info
 	y := height - em - top_line_gap
 
-/*
 	fps_str := fmt.tprintf("FPS: %.0f", 1/dt)
 	fps_width := measure_text(fps_str, p_font_size, monospace_font)
 	draw_text(fps_str, Vec2{width - fps_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
-*/
 
 	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
 	hash_width := measure_text(hash_str, p_font_size, monospace_font)
