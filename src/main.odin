@@ -367,14 +367,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	graph_rect.size.y -= graph_header_height
 	//draw_rect_outline(rect(graph_rect.pos.x, graph_rect.pos.y, graph_rect.size.x, graph_rect.size.y - 1), 1, Vec3{0, 0, 255})
 
-	// compute scale + scroll
-	MIN_SCALE :: 0.00001
-	MAX_SCALE :: 100000
-	if pt_in_rect(mouse_pos, disp_rect) {
-		cam.scale *= 1 + (0.1 * zoom_velocity * dt)
-		cam.scale = min(max(cam.scale, MIN_SCALE), MAX_SCALE)
-	}
-	zoom_velocity = 0
 
 	// compute pan
 	pan_delta := Vec2{}
@@ -387,8 +379,35 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		last_mouse_pos = mouse_pos
 	}
 
+	zoom_vel : f32 = 0
+
+	// compute scale + scroll
+	MIN_SCALE :: 0.00001
+	MAX_SCALE :: 100000
+	if pt_in_rect(mouse_pos, disp_rect) {
+		zoom_vel = zoom_velocity
+	}
+	zoom_velocity = 0
+
+	cam.scale *= 1 + (0.1 * zoom_vel * dt)
+	cam.scale = min(max(cam.scale, MIN_SCALE), MAX_SCALE)
+
 	start_time, end_time := get_current_window(cam, display_width)
-	max_y_pan := get_max_y_pan(processes[:], rect_height) - graph_rect.size.y
+
+	max_height := get_max_y_pan(processes[:], rect_height)
+	max_y_pan := max(max_height - graph_rect.size.y, 0)
+
+/*
+	cam_middle_x := f64(cam.pan.x)
+	// -(display_width / 2) <- 0 -> (display_width / 2)
+	mouse_middle_x := (f64(mouse_pos.x - start_x) - f64(display_width / 2))
+	fmt.printf("screen middle: %f, mouse middle: %f, screen width: %f\n", cam_middle_x, mouse_middle_x, display_width)
+	if zoom_vel != 0 {
+		pos_x := f32(math.lerp(cam_middle_x, mouse_middle_x, f64(cam.scale)))
+		fmt.printf("old pos: %f, old scale: %f, new pos: %f, new scale: %f\n", cam.pan.x, old_scale, pos_x, cam.scale)
+		cam.pan.x = pos_x
+	}
+*/
 
 	cam.pan = cam.pan + (cam.vel * dt)
 	cam.vel *= f32(_pow(0.0001, f64(dt)))
@@ -412,7 +431,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 	if cam.scale != old_scale {
 		generate_lod_rects(&processes, cam.scale, start_time, end_time, rect_height)
-		fmt.printf("now at %f scale, width is %d\n", cam.scale, end_time - start_time)
 		old_scale = cam.scale
 	}
 
@@ -523,8 +541,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 						name_str = fmt.tprintf("%s...", er.name[:max_chars-3])
 					}
 
-					ev_width := measure_text(name_str, p_font_size, monospace_font)
-					draw_text(name_str, Vec2{(dr.pos.x) + (dr.size.x / 2) - (ev_width / 2), dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
+
+					str_width := measure_text(name_str, p_font_size, monospace_font)
+					str_x := dr.pos.x + (dr.size.x / 2) - (str_width / 2)
+
+					draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 				}
 			}
 			cur_y += thread_advance
@@ -668,7 +689,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 button :: proc(in_rect: Rect, text: string, font: string) -> bool {
 	draw_rectc(in_rect, 3, button_color)
 	text_width := measure_text(text, p_font_size, font)
-	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (em / 2)}, p_font_size, font, text_color3)
+	text_height := get_text_height(p_font_size, font)
+	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, p_font_size, font, text_color3)
 
 	if pt_in_rect(mouse_pos, in_rect) {
 		set_cursor("pointer")

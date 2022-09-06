@@ -210,7 +210,9 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 		// get start of traceEvents
 		if events_id == -1 {
-			if state == .ScopeEntered && tok.type == .Array && depth == 3 {
+			if state == .ScopeEntered && tok.type == .Array && depth == 1 {
+				events_id = tok.id
+			} else if state == .ScopeEntered && tok.type == .Array && depth == 3 {
 				parent := queue.get_ptr(&p.parent_stack, depth - 2)
 				if "traceEvents" == get_token_str(&p, parent^) {
 					events_id = tok.id
