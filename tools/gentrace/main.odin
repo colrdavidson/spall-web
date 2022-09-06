@@ -11,6 +11,7 @@ main :: proc() {
 
 	fmt.fprintf(json_fd, "{{\n\t\"traceEvents\": [\n")
 
+	size := 100
 	//size := 24_000_000
 	//size := 1
 	ts_count := 0

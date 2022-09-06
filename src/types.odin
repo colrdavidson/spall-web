@@ -48,7 +48,6 @@ Thread :: struct {
 
 	thread_id: u64,
 	events: [dynamic]Event,
-	rects: []EventRect,
 }
 
 Process :: struct {
