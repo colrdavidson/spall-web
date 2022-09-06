@@ -397,17 +397,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	max_height := get_max_y_pan(processes[:], rect_height)
 	max_y_pan := max(max_height - graph_rect.size.y, 0)
 
-/*
-	cam_middle_x := f64(cam.pan.x)
-	// -(display_width / 2) <- 0 -> (display_width / 2)
-	mouse_middle_x := (f64(mouse_pos.x - start_x) - f64(display_width / 2))
-	fmt.printf("screen middle: %f, mouse middle: %f, screen width: %f\n", cam_middle_x, mouse_middle_x, display_width)
 	if zoom_vel != 0 {
-		pos_x := f32(math.lerp(cam_middle_x, mouse_middle_x, f64(cam.scale)))
-		fmt.printf("old pos: %f, old scale: %f, new pos: %f, new scale: %f\n", cam.pan.x, old_scale, pos_x, cam.scale)
-		cam.pan.x = pos_x
+		cam_mouse_x := mouse_pos.x - start_x
+		cam.pan.x = ((cam.pan.x - cam_mouse_x) * (cam.scale / old_scale)) + cam_mouse_x
 	}
-*/
 
 	cam.pan = cam.pan + (cam.vel * dt)
 	cam.vel *= f32(_pow(0.0001, f64(dt)))
