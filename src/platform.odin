@@ -187,7 +187,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 			// reset render state
 			color_choices = make([dynamic]Vec3)
-			for i := 0; i < total_max_depth; i += 1 {
+			for i : u16 = 0; i < total_max_depth; i += 1 {
 				r := f32(205 + rand_int(0, 50))
 				g := f32(0 + rand_int(0, 230))
 				b := f32(0 + rand_int(0, 55))

@@ -84,8 +84,8 @@ event_sort_proc :: proc(a, b: Event) -> bool {
 	}
 	return false
 }
-process_events :: proc(processes: ^[dynamic]Process) -> int {
-	total_max_depth := 0
+process_events :: proc(processes: ^[dynamic]Process) -> u16 {
+	total_max_depth : u16 = 0
 
 	ev_stack: queue.Queue(int)
 	queue.init(&ev_stack, 0, context.temp_allocator)
@@ -134,7 +134,7 @@ process_events :: proc(processes: ^[dynamic]Process) -> int {
 					}
 				}
 
-				event.depth = queue.len(ev_stack)
+				event.depth = u16(queue.len(ev_stack))
 				tm.max_depth = max(tm.max_depth, event.depth)
 			}
 			total_max_depth = max(total_max_depth, tm.max_depth)

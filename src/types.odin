@@ -26,16 +26,7 @@ Camera :: struct {
 	scale: f32,
 }
 
-EventRect :: struct {
-	r: DRect,
-	name: string,
-	idx: int,
-	depth: int,
-
-	collated: bool,
-}
-
-EventType :: enum {
+EventType :: enum u8 {
 	Complete,
 	Begin,
 	End
@@ -48,12 +39,12 @@ Event :: struct {
 	timestamp: f64,
 	thread_id: u64,
 	process_id: u64,
-	depth: int,
+	depth: u16,
 }
 
 Thread :: struct {
 	min_time: f64,
-	max_depth: int,
+	max_depth: u16,
 
 	thread_id: u64,
 	events: [dynamic]Event,

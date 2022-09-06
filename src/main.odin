@@ -99,7 +99,7 @@ color_choices: [dynamic]Vec3
 event_count: i64
 total_max_time: f64
 total_min_time: f64
-total_max_depth: int
+total_max_depth: u16
 
 @export
 set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
@@ -160,46 +160,6 @@ to_world_y :: proc(cam: Camera, y: f32) -> f32 {
 }
 to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
 	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
-}
-
-generate_lod_rects :: proc(processes: ^[dynamic]Process, scale: f32, start_time, end_time: i64, rect_height: f32) {
-	arena := cast(^Arena)context.allocator.data
-	arena.offset = current_alloc_offset 
-
-	// WARNING, ALLOC'ing on the main alloc during frametime is a NONO
-	// Wipe anything we've used in main memory since last LOD gen.
-
-	//start_bench("generate LOD", context.allocator)
-
-	for proc_v, p_idx in processes {
-		for tm, t_idx in &proc_v.threads {
-			event_rects := make([dynamic]EventRect, 0, context.allocator)
-			for event, e_idx in tm.events {
-				x := f64(event.timestamp - total_min_time)
-				y := rect_height * f32(event.depth - 1)
-			  	w := f32(f64(event.duration) * f64(scale))
-				h := rect_height
-
-				r := DRect{x, y, Vec2{w, h}}
-				if r.size.x < 0.1 {
-					continue
-				}
-
-				append(&event_rects, 
-					EventRect{
-						r = r,
-						name = event.name,
-						idx = e_idx,
-						depth = event.depth,
-					}
-				)
-			}
-
-			tm.rects = event_rects[:]
-		}
-	}
-
-	//stop_bench("generate LOD")
 }
 
 CHUNK_SIZE :: 10 * 1024 * 1024
@@ -415,15 +375,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		cam.vel.y *= f32(_pow(0.0001, f64(dt)))
 	}
 
-	if cam.scale != old_scale || cam.pan != old_pan {
-		//fmt.printf("current window: %d -> %d\n", start_time, end_time)
-	}
-
 	if cam.pan != old_pan {
 		old_pan = cam.pan
 	}
 	if cam.scale != old_scale {
-		generate_lod_rects(&processes, cam.scale, start_time, end_time, rect_height)
 		old_scale = cam.scale
 	}
 
@@ -495,21 +450,30 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			row_text := fmt.tprintf("TID: %d", tm.thread_id)
 			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
 
-			for er, idx in tm.rects {
-				r := er.r
+			for ev, e_idx in tm.events {
+				x := f64(ev.timestamp - total_min_time)
+				y := rect_height * f32(ev.depth - 1)
+			  	w := f32(f64(ev.duration) * f64(cam.scale))
+				h := rect_height
 
-				x := f32(((r.x * f64(cam.scale)) + f64(cam.pan.x)) + f64(disp_rect.pos.x))
-				y := r.y + f32(cur_y)
-				dr := Rect{Vec2{x, y}, Vec2{r.size.x, r.size.y}}
+				if w < 0.1 {
+					continue
+				}
+
+				r := DRect{x, y, Vec2{w, h}}
+
+				r_x := f32(((r.x * f64(cam.scale)) + f64(cam.pan.x)) + f64(disp_rect.pos.x))
+				r_y := r.y + f32(cur_y)
+				dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
 
 				if !rect_in_rect(dr, disp_rect) {
 					continue
 				}
 
-				rect_color := color_choices[er.depth - 1]
+				rect_color := color_choices[ev.depth - 1]
 				if int(selected_event.pid) == p_idx && 
 				   int(selected_event.tid) == t_idx && 
-				   int(selected_event.eid) == er.idx {
+				   int(selected_event.eid) == e_idx {
 					rect_color.x += 30
 					rect_color.y += 30
 					rect_color.z += 30
@@ -520,18 +484,18 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
 					set_cursor("pointer")
 					if clicked {
-						selected_event = {i64(p_idx), i64(t_idx), i64(er.idx)}
+						selected_event = {i64(p_idx), i64(t_idx), i64(e_idx)}
 						clicked_on_rect = true
 					}
 				}
 
 				text_pad : f32 = 10
-				max_chars := max(0, min(len(er.name), int(math.floor((dr.size.x - (text_pad * 2)) / ch_width))))
-				name_str := er.name[:max_chars]
+				max_chars := max(0, min(len(ev.name), int(math.floor((dr.size.x - (text_pad * 2)) / ch_width))))
+				name_str := ev.name[:max_chars]
 
-				if len(name_str) > 4 || max_chars == len(er.name) {
-					if max_chars != len(er.name) {
-						name_str = fmt.tprintf("%s...", er.name[:max_chars-3])
+				if len(name_str) > 4 || max_chars == len(ev.name) {
+					if max_chars != len(ev.name) {
+						name_str = fmt.tprintf("%s...", ev.name[:max_chars-3])
 					}
 
 
