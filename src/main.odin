@@ -629,6 +629,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	// Render debug info
 	y := height - em - top_line_gap
 
+/*
+	fps_str := fmt.tprintf("FPS: %.0f", 1/dt)
+	fps_width := measure_text(fps_str, p_font_size, monospace_font)
+	draw_text(fps_str, Vec2{width - fps_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+*/
+
 	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
 	hash_width := measure_text(hash_str, p_font_size, monospace_font)
 	draw_text(hash_str, Vec2{width - hash_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
