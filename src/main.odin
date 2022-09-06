@@ -264,7 +264,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	top_line_gap := (em / 1.5)
-
 	rect_height := em + (0.75 * em)
 	toolbar_height := 4 * em
 
@@ -291,7 +290,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	start_y := toolbar_height
 	end_y   := info_pane_y
 	display_height := end_y - start_y
-
 
 	if finished_loading {
 		cam = Camera{DVec2{0, 0}, DVec2{0, 0}, 0, 1, 1}
@@ -327,7 +325,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	//draw_rect_outline(rect(graph_rect.pos.x, graph_rect.pos.y, graph_rect.size.x, graph_rect.size.y - 1), 1, Vec3{0, 0, 255})
 
 
-	// compute pan
+	// compute pan, scale + scroll
 	pan_delta := DVec2{}
 	if is_mouse_down {
 		if pt_in_rect(clicked_pos, disp_rect) {
@@ -338,10 +336,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		last_mouse_pos = mouse_pos
 	}
 
-
 	old_scale := cam.target_scale
 
-	// compute scale + scroll
 	MIN_SCALE :: 0.00001
 	MAX_SCALE :: 100000
 	if pt_in_rect(mouse_pos, disp_rect) {
@@ -376,9 +372,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * _pow(edge_sproing, dt)
 		cam.vel.y *= _pow(0.0001, dt)
 	}
-
 	cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 
+
+	// Draw time subdivision lines
 	mus_range := f64(end_time - start_time)
 	v1 := math.log10(mus_range)
 	v2 := math.floor(v1)
@@ -402,9 +399,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	ticks := int(tick_range / division) + 1
 
-	//fmt.printf("displayed range: %f μs -> %f μs, ticks: %d, division: %d μs\n", display_range_start, display_range_end, ticks, division)
-
-	// draw lines for time markings
 	for i := 0; i < (ticks * 2); i += 1 {
 		tick_time := draw_tick_start + (f64(i) * (division / 2))
 		x_off := (tick_time * cam.current_scale) + cam.pan.x
@@ -415,10 +409,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, color)
 	}
 
-	cur_y := graph_rect.pos.y - cam.pan.y
-
 	// Render flamegraphs
 	clicked_on_rect := false
+	cur_y := graph_rect.pos.y - cam.pan.y
 	proc_loop: for proc_v, p_idx in processes {
 		h1_size : f64 = 0
 		if len(processes) > 1 {
@@ -517,6 +510,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
     draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
 
 	
+	// Draw timestamps on subdivision lines
 	ONE_SECOND :: 1000 * 1000
 	ONE_MILLI :: 1000
 	for i := 0; i < ticks; i += 1 {
@@ -578,6 +572,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	button_width  := 2.5 * em
 	button_pad    := 0.5 * em
 
+	// colormode button nonsense
 	color_text : string
 	switch colormode {
 	case .Auto:
