@@ -479,8 +479,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					}
 				}
 
-				text_pad : f64 = 10
-				max_chars := max(0, min(len(ev.name), int(math.floor((dr.size.x - (text_pad * 2)) / ch_width))))
+				underhang := start_x - dr.pos.x
+				disp_w := min(dr.size.x - underhang, dr.size.x)
+
+				text_pad := (em / 2)
+				text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
+				max_chars := max(0, min(len(ev.name), text_width))
 				name_str := ev.name[:max_chars]
 
 				if len(name_str) > 4 || max_chars == len(ev.name) {
@@ -490,7 +494,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 
 					str_width := measure_text(name_str, p_font_size, monospace_font)
-					str_x := dr.pos.x + (dr.size.x / 2) - (str_width / 2)
+					str_x := max(dr.pos.x, start_x) + text_pad
 
 					draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 				}

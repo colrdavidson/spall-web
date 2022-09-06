@@ -331,9 +331,14 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 		// got the whole event
 		if state == .ScopeExited && tok.id == cur_event_id {
-			if ("dur" in seen_pair_map) {
-				event_count += 1
-				push_event(&processes, cur_event)
+			switch cur_event.type {
+			case .Complete:
+				if "dur" in seen_pair_map {
+					event_count += 1
+					push_event(&processes, cur_event)
+				}
+			case .Begin:
+			case .End:
 			}
 
 			cur_event = Event{}
@@ -345,9 +350,6 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 	return
 }
-
-//default_config := `{"otherData": {}, "traceEvents": [{"name": "foo", "dur": 95, "pid": 0, "tid": 1, "ts": 2325}]}`
-//default_config := `{"foo": {}, "bar": [{"cab": 1}, {"cab": 2}]}`
 
 // default config courtesy of NeGate
 default_config := `

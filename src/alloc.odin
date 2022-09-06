@@ -132,7 +132,7 @@ growing_arena_allocator_proc :: proc(
 
 			head_ptr := raw_data(arena.data)
 			arena.data = head_ptr[:len(arena.data)+len(new_tail)]
-			fmt.printf("resized to %f MB\n", f64(len(arena.data)) / 1024 / 1024)
+			//fmt.printf("resized to %f MB\n", f64(len(arena.data)) / 1024 / 1024)
 		}
 
 		arena.offset += total_size
