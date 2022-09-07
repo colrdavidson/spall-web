@@ -140,6 +140,7 @@ cur_event_id: int
 obj_map: map[string]string
 parent_map: map[int]string
 seen_pair_map: map[string]bool
+bande_map: map[string]^queue.Queue(Event)
 cur_event: Event
 
 reset_token_maps :: proc() {
@@ -171,6 +172,8 @@ init_loading_state :: proc(size: u32) {
 
 	parent_map    = make(map[int]string, 0, scratch_allocator)
 	seen_pair_map = make(map[string]bool, 0, scratch_allocator)
+	bande_map     = make(map[string]^queue.Queue(Event), 0, scratch_allocator)
+
 	cur_event = Event{}
 	events_id    = -1
 	cur_event_id = -1
@@ -338,7 +341,33 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 					push_event(&processes, cur_event)
 				}
 			case .Begin:
+				ts, ok := bande_map[cur_event.name]
+				if !ok {
+					token_stack := new(queue.Queue(Event), scratch_allocator)
+					queue.init(token_stack, 0, scratch_allocator)
+					bande_map[cur_event.name] = token_stack
+					ts = token_stack
+				}
+
+				queue.push_back(ts, cur_event)
 			case .End:
+				ts, ok := bande_map[cur_event.name]
+				if ok && queue.len(ts^) > 0 {
+					ev := queue.pop_back(ts)
+					assert(ev.thread_id == cur_event.thread_id && ev.process_id == cur_event.process_id)
+
+					new_event := Event{
+						name = ev.name,
+						type = .Complete,
+						duration = cur_event.timestamp - ev.timestamp,
+						timestamp = ev.timestamp,
+						thread_id = ev.thread_id,
+						process_id = ev.process_id,
+					}
+
+					event_count += 1
+					push_event(&processes, new_event)
+				}
 			}
 
 			cur_event = Event{}

@@ -165,7 +165,7 @@ main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
 	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 20)
-	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 10)
+	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 20)
 
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
