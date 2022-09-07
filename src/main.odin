@@ -55,12 +55,12 @@ p_font_size: f64
 h1_font_size: f64
 h2_font_size: f64
 
-last_mouse_pos := DVec2{}
-mouse_pos      := DVec2{}
-clicked_pos    := DVec2{}
+last_mouse_pos := Vec2{}
+mouse_pos      := Vec2{}
+clicked_pos    := Vec2{}
 scroll_val_y: f64 = 0
 
-cam := Camera{DVec2{0, 0}, DVec2{0, 0}, 0, 1, 1}
+cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
 division: f64 = 0
 
 is_mouse_down := false
@@ -156,8 +156,8 @@ to_world_x :: proc(cam: Camera, x: f64) -> f64 {
 to_world_y :: proc(cam: Camera, y: f64) -> f64 {
 	return y + cam.pan.y
 }
-to_world_pos :: proc(cam: Camera, pos: DVec2) -> DVec2 {
-	return DVec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
+to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
+	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
 }
 
 CHUNK_SIZE :: 10 * 1024 * 1024
@@ -292,7 +292,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	display_height := end_y - start_y
 
 	if finished_loading {
-		cam = Camera{DVec2{0, 0}, DVec2{0, 0}, 0, 1, 1}
+		cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
 
 		fmt.printf("min %f μs, max %f μs, range %f μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
 		start_time : f64 = 0
@@ -326,7 +326,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 
 	// compute pan, scale + scroll
-	pan_delta := DVec2{}
+	pan_delta := Vec2{}
 	if is_mouse_down {
 		if pt_in_rect(clicked_pos, disp_rect) {
 			pan_delta = mouse_pos - last_mouse_pos

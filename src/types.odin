@@ -14,7 +14,6 @@ rect :: #force_inline proc(x, y, w, h: f64) -> Rect {
 	return Rect{Vec2{x, y}, Vec2{w, h}}
 }
 
-DVec2 :: [2]f64
 Camera :: struct {
 	pan: Vec2,
 	vel: Vec2,
