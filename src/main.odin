@@ -338,7 +338,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	old_scale := cam.target_scale
 
-	MIN_SCALE :: 0.00001
 	MAX_SCALE :: 100000
 	if pt_in_rect(mouse_pos, disp_rect) {
 		cam.target_scale *= _pow(1.003, scroll_val_y)
@@ -346,7 +345,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
-	cam.current_scale = min(max(cam.current_scale, MIN_SCALE), MAX_SCALE)
+	cam.current_scale = min(max(cam.current_scale, _pow(0.1, 12)), MAX_SCALE)
 
 	start_time, end_time := get_current_window(cam, display_width)
 
