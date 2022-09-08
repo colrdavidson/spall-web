@@ -170,12 +170,12 @@ main :: proc() {
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
 
-	// This must be init last, because it grows infinitely. 
+	// This must be init last, because it grows infinitely.
 	// We don't want it accidentally growing into anything useful.
     growing_arena_init(&global_arena)
 
-	// I'm doing olympic-level memory juggling BS in the ingest system because 
-	// arenas are *special*, and memory is *precious*. Beware free_all()'ing 
+	// I'm doing olympic-level memory juggling BS in the ingest system because
+	// arenas are *special*, and memory is *precious*. Beware free_all()'ing
 	// the wrong one at the wrong time, here thar be dragons. Once you're in
 	// normal render/frame space, I free_all temp once per frame, and I shouldn't
 	// need to touch scratch
@@ -233,7 +233,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			cur_y := f64(i /  int(chunk_size))
 			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), Vec3{0, 255, 0})
 		}
-		
+
 		return true
 	}
 
@@ -460,8 +460,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				}
 
 				rect_color := color_choices[ev.depth - 1]
-				if int(selected_event.pid) == p_idx && 
-				   int(selected_event.tid) == t_idx && 
+				if int(selected_event.pid) == p_idx &&
+				   int(selected_event.tid) == t_idx &&
 				   int(selected_event.eid) == e_idx {
 					rect_color.x += 30
 					rect_color.y += 30
@@ -512,7 +512,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
     draw_rect(rect(0, disp_rect.pos.y, graph_rect.pos.x, height), bg_color2) // left
     draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
 
-	
+
 	// Draw timestamps on subdivision lines
 	ONE_SECOND :: 1000 * 1000
 	ONE_MILLI :: 1000
@@ -581,9 +581,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	case .Auto:
 		color_text = "\uf042"
 	case .Dark:
-		color_text = "\uf10c" 
+		color_text = "\uf10c"
 	case .Light:
-		color_text = "\uf111" 
+		color_text = "\uf111"
 	}
 
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
