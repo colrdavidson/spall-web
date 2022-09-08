@@ -212,6 +212,7 @@ get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 			return
 		// spaces are nops
 		case '\t': fallthrough
+		case '\r': fallthrough
 		case '\n': fallthrough
 		case ' ':
 		case ':':
@@ -261,10 +262,7 @@ get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 
 	depth := queue.len(p.parent_stack)
 	if depth != 0 {
-		if p.pos == p.total_size {
-			fmt.printf("unexpected leftovers?\n")
-			return
-		} else {
+		if p.pos != p.total_size {
 			state = .PartialRead
 			return
 		}
