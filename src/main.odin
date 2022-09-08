@@ -167,26 +167,26 @@ main :: proc() {
 	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 15)
 	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 10)
 
-    arena_init(&temp_arena, temp_data)
-    arena_init(&scratch_arena, scratch_data)
+	arena_init(&temp_arena, temp_data)
+	arena_init(&scratch_arena, scratch_data)
 
 	// This must be init last, because it grows infinitely.
 	// We don't want it accidentally growing into anything useful.
-    growing_arena_init(&global_arena)
+	growing_arena_init(&global_arena)
 
 	// I'm doing olympic-level memory juggling BS in the ingest system because
 	// arenas are *special*, and memory is *precious*. Beware free_all()'ing
 	// the wrong one at the wrong time, here thar be dragons. Once you're in
 	// normal render/frame space, I free_all temp once per frame, and I shouldn't
 	// need to touch scratch
-    temp_allocator = arena_allocator(&temp_arena)
-    scratch_allocator = arena_allocator(&scratch_arena)
-    global_allocator = growing_arena_allocator(&global_arena)
+	temp_allocator = arena_allocator(&temp_arena)
+	scratch_allocator = arena_allocator(&scratch_arena)
+	global_allocator = growing_arena_allocator(&global_arena)
 
 	wasmContext.allocator = global_allocator
 	wasmContext.temp_allocator = temp_allocator
 
-    context = wasmContext
+	context = wasmContext
 
 	manual_load(default_config)
 }
@@ -201,7 +201,7 @@ get_current_window :: proc(cam: Camera, display_width: f64) -> (i64, i64) {
 
 @export
 frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
-    context = wasmContext
+	context = wasmContext
 	defer frame_count += 1
 
 	// This is nasty code that allows me to do load-time things once the wasm context is init
@@ -246,7 +246,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		is_hovering = false
 	}
 
-    t += dt
+	t += dt
 
 	if (width / dpr) < 400 {
 		p_font_size = _p_font_size * dpr
@@ -306,10 +306,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		finished_loading = false
 	}
 
-    canvas_clear()
+	canvas_clear()
 
 	// Render background
-    draw_rect(rect(0, toolbar_height, width, height), bg_color2)
+	draw_rect(rect(0, toolbar_height, width, height), bg_color2)
 
 	graph_header_text_height := (top_line_gap * 2) + em
 	graph_header_line_gap := em
@@ -508,9 +508,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 
 	// Chop sides of screen
-    draw_rect(rect(0, disp_rect.pos.y, width, graph_header_text_height), bg_color2) // top
-    draw_rect(rect(0, disp_rect.pos.y, graph_rect.pos.x, height), bg_color2) // left
-    draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
+	draw_rect(rect(0, disp_rect.pos.y, width, graph_header_text_height), bg_color2) // top
+	draw_rect(rect(0, disp_rect.pos.y, graph_rect.pos.x, height), bg_color2) // left
+	draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
 
 
 	// Draw timestamps on subdivision lines
@@ -537,7 +537,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
-    draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
+	draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
 
 	if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.eid != -1 {
 		p_idx := int(selected_event.pid)
@@ -567,7 +567,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	// Render toolbar background
-    draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
+	draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
 
 	// draw toolbar
 	edge_pad := 1 * em
@@ -639,7 +639,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	seed_width := measure_text(seed_str, p_font_size, monospace_font)
 	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
-    return true
+	return true
 }
 
 button :: proc(in_rect: Rect, text: string, font: string) -> bool {
