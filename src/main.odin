@@ -339,10 +339,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	start_time, end_time := get_current_window(cam, display_width)
 
 	max_height := get_max_y_pan(processes[:], rect_height)
-	max_y_pan := max(max_height - graph_rect.size.y, 0)
-	min_y_pan := min(0, max_y_pan)
-	max_x_pan := max(display_width / 2, 0)
-	min_x_pan := display_width / 2 + min(-(total_max_time - total_min_time) * cam.target_scale, 0)
+	max_y_pan := max(+20 * em + max_height - graph_rect.size.y, 0)
+	min_y_pan := min(-20 * em, max_y_pan)
+	max_x_pan := max(+20 * em, 0)
+	min_x_pan := min(-20 * em + display_width + -(total_max_time - total_min_time) * cam.target_scale, max_x_pan)
 
 	//draw_line(Vec2{start_x + max_x_pan, 0}, Vec2{start_x + max_x_pan, display_height}, 2, Vec3{0,255,0})
 	//draw_line(Vec2{start_x + min_x_pan, 0}, Vec2{start_x + min_x_pan, display_height}, 2, Vec3{255,0,0})
@@ -399,11 +399,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		cam.vel.y *= _pow(0.0001, dt)
 	}
 
+	if cam.target_pan_x < min_x_pan && !is_mouse_down {
+		cam.target_pan_x = min_x_pan + (cam.target_pan_x - min_x_pan) * _pow(edge_sproing, dt)
+		cam.vel.x *= _pow(0.0001, dt)
+	}
 	if cam.target_pan_x > max_x_pan && !is_mouse_down {
 		cam.target_pan_x = max_x_pan + (cam.target_pan_x - max_x_pan) * _pow(edge_sproing, dt)
-		cam.vel.x *= _pow(0.0001, dt)
-	} else if cam.target_pan_x < min_x_pan && !is_mouse_down {
-		cam.target_pan_x = min_x_pan + (cam.target_pan_x - min_x_pan) * _pow(edge_sproing, dt)
 		cam.vel.x *= _pow(0.0001, dt)
 	}
 
