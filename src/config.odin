@@ -108,7 +108,8 @@ process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 							prev_start = prev_ev.timestamp
 							prev_end   = prev_ev.timestamp + prev_ev.duration
 
-							if cur_start >= prev_start && cur_end >= prev_end {
+
+							if cur_start >= prev_start && cur_end > prev_end {
 								queue.pop_back(&ev_stack)
 							} else {
 								break;
@@ -214,6 +215,35 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			trap()
 			return
 		case .Finished:
+
+			for k, v in &bande_p_to_t {
+				for q, v2 in &v {
+					qlen := queue.len(v2^)
+					for i := 0; i < qlen; i += 1 {
+						ev := queue.pop_back(v2)
+
+						mod_name, err := strings.intern_get(&p.intern, fmt.tprintf("%s (Did Not Finish)", ev.name))
+						if err != nil {
+							fmt.printf("OOM!\n")
+							trap()
+						}
+
+						new_event := Event{
+							name = mod_name,
+							type = .Complete,
+							duration = total_max_time - ev.timestamp,
+							timestamp = ev.timestamp,
+							thread_id = ev.thread_id,
+							process_id = ev.process_id,
+						}
+
+						event_count += 1
+						push_event(&processes, new_event)
+					}
+
+				}
+			}
+
 			stop_bench("parse config")
 			fmt.printf("Got %d events and %d tokens!\n", event_count, p.tok_count)
 
