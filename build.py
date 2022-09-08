@@ -28,7 +28,7 @@ subprocess.run([
     'build', 'src',
     '-target:js_wasm32',
     f"-out:build/{program_name}.wasm",
-    '-o:speed', '-debug'
+    '-o:speed'
 ])
 print("Compiled in {:.1f} seconds".format(time.time() - start_time))
 

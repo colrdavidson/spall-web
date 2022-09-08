@@ -67,7 +67,12 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 
 pid_sort_proc :: proc(a, b: Process) -> bool { return a.min_time < b.min_time }
 tid_sort_proc :: proc(a, b: Thread) -> bool  { return a.min_time < b.min_time }
-event_sort_proc :: proc(a, b: Event) -> bool { return a.timestamp < b.timestamp }
+event_sort_proc :: proc(a, b: Event) -> bool {
+	if a.timestamp == b.timestamp {
+		return a.duration > b.duration
+	}
+	return a.timestamp < b.timestamp
+}
 process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 	total_max_depth : u16 = 0
 

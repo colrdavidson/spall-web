@@ -167,26 +167,26 @@ main :: proc() {
 	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 15)
 	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 10)
 
-    arena_init(&temp_arena, temp_data)
-    arena_init(&scratch_arena, scratch_data)
+	arena_init(&temp_arena, temp_data)
+	arena_init(&scratch_arena, scratch_data)
 
-	// This must be init last, because it grows infinitely. 
+	// This must be init last, because it grows infinitely.
 	// We don't want it accidentally growing into anything useful.
-    growing_arena_init(&global_arena)
+	growing_arena_init(&global_arena)
 
-	// I'm doing olympic-level memory juggling BS in the ingest system because 
-	// arenas are *special*, and memory is *precious*. Beware free_all()'ing 
+	// I'm doing olympic-level memory juggling BS in the ingest system because
+	// arenas are *special*, and memory is *precious*. Beware free_all()'ing
 	// the wrong one at the wrong time, here thar be dragons. Once you're in
 	// normal render/frame space, I free_all temp once per frame, and I shouldn't
 	// need to touch scratch
-    temp_allocator = arena_allocator(&temp_arena)
-    scratch_allocator = arena_allocator(&scratch_arena)
-    global_allocator = growing_arena_allocator(&global_arena)
+	temp_allocator = arena_allocator(&temp_arena)
+	scratch_allocator = arena_allocator(&scratch_arena)
+	global_allocator = growing_arena_allocator(&global_arena)
 
 	wasmContext.allocator = global_allocator
 	wasmContext.temp_allocator = temp_allocator
 
-    context = wasmContext
+	context = wasmContext
 
 	manual_load(default_config)
 }
@@ -201,7 +201,7 @@ get_current_window :: proc(cam: Camera, display_width: f64) -> (i64, i64) {
 
 @export
 frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
-    context = wasmContext
+	context = wasmContext
 	defer frame_count += 1
 
 	// This is nasty code that allows me to do load-time things once the wasm context is init
@@ -233,7 +233,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			cur_y := f64(i /  int(chunk_size))
 			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), Vec3{0, 255, 0})
 		}
-		
+
 		return true
 	}
 
@@ -246,7 +246,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		is_hovering = false
 	}
 
-    t += dt
+	t += dt
 
 	if (width / dpr) < 400 {
 		p_font_size = _p_font_size * dpr
@@ -306,10 +306,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		finished_loading = false
 	}
 
-    canvas_clear()
+	canvas_clear()
 
 	// Render background
-    draw_rect(rect(0, toolbar_height, width, height), bg_color2)
+	draw_rect(rect(0, toolbar_height, width, height), bg_color2)
 
 	graph_header_text_height := (top_line_gap * 2) + em
 	graph_header_line_gap := em
@@ -324,25 +324,13 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	graph_rect.size.y -= graph_header_height
 	//draw_rect_outline(rect(graph_rect.pos.x, graph_rect.pos.y, graph_rect.size.x, graph_rect.size.y - 1), 1, Vec3{0, 0, 255})
 
-
-	// compute pan, scale + scroll
-	pan_delta := Vec2{}
-	if is_mouse_down {
-		if pt_in_rect(clicked_pos, disp_rect) {
-			pan_delta = mouse_pos - last_mouse_pos
-			cam.vel.y = -pan_delta.y / dt
-			cam.vel.x = pan_delta.x / dt
-		}
-		last_mouse_pos = mouse_pos
-	}
-
 	old_scale := cam.target_scale
 
 	MAX_SCALE :: 100000
 	if pt_in_rect(mouse_pos, disp_rect) {
-		cam.target_scale *= _pow(1.003, scroll_val_y)
-		scroll_val_y = 0
+		cam.target_scale *= _pow(1.0025, -scroll_val_y)
 	}
+	scroll_val_y = 0
 
 	cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
 	cam.current_scale = min(max(cam.current_scale, _pow(0.1, 12)), MAX_SCALE)
@@ -351,11 +339,49 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	max_height := get_max_y_pan(processes[:], rect_height)
 	max_y_pan := max(max_height - graph_rect.size.y, 0)
+	min_y_pan := min(0, max_y_pan)
+	max_x_pan := max(display_width / 2, 0)
+	min_x_pan := display_width / 2 + min(-(total_max_time - total_min_time) * cam.target_scale, 0)
+
+	//draw_line(Vec2{start_x + max_x_pan, 0}, Vec2{start_x + max_x_pan, display_height}, 2, Vec3{0,255,0})
+	//draw_line(Vec2{start_x + min_x_pan, 0}, Vec2{start_x + min_x_pan, display_height}, 2, Vec3{255,0,0})
+
+	// compute pan, scale + scroll
+	pan_delta := Vec2{}
+	if is_mouse_down {
+		if pt_in_rect(clicked_pos, disp_rect) {
+			pan_delta = mouse_pos - last_mouse_pos
+			
+			if cam.target_pan_x < min_x_pan {
+				pan_delta.x *= _pow(2, (cam.target_pan_x - min_x_pan) / 32)
+			}
+			if cam.target_pan_x > max_x_pan {
+				pan_delta.x *= _pow(2, (max_x_pan - cam.target_pan_x) / 32)
+			}
+			if cam.pan.y < min_y_pan {
+				pan_delta.y *= _pow(2, (cam.pan.y - min_y_pan) / 32)
+			}
+			if cam.pan.y > max_y_pan {
+				pan_delta.y *= _pow(2, (max_y_pan - cam.pan.y) / 32)
+			}
+			
+			cam.vel.y = -pan_delta.y / dt
+			cam.vel.x = pan_delta.x / dt
+		}
+		last_mouse_pos = mouse_pos
+	}
+
 
 	cam_mouse_x := mouse_pos.x - start_x
 
 	if cam.target_scale != old_scale {
 		cam.target_pan_x = ((cam.target_pan_x - cam_mouse_x) * (cam.target_scale / old_scale)) + cam_mouse_x
+		if cam.target_pan_x < min_x_pan {
+			cam.target_pan_x = min_x_pan
+		}
+		if cam.target_pan_x > max_x_pan {
+			cam.target_pan_x = max_x_pan
+		}
 	}
 
 	cam.target_pan_x = cam.target_pan_x + (cam.vel.x * dt)
@@ -363,14 +389,23 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	cam.vel *= _pow(0.0001, dt)
 
 	edge_sproing : f64 = 0.0001
-	if cam.pan.y < 0 {
-		cam.pan.y = cam.pan.y * _pow(edge_sproing, (dt))
+	if cam.pan.y < min_y_pan && !is_mouse_down {
+		cam.pan.y = min_y_pan + (cam.pan.y - min_y_pan) * _pow(edge_sproing, dt)
 		cam.vel.y *= _pow(0.0001, dt)
 	}
-	if cam.pan.y > max_y_pan {
+	if cam.pan.y > max_y_pan && !is_mouse_down {
 		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * _pow(edge_sproing, dt)
 		cam.vel.y *= _pow(0.0001, dt)
 	}
+
+	if cam.target_pan_x > max_x_pan && !is_mouse_down {
+		cam.target_pan_x = max_x_pan + (cam.target_pan_x - max_x_pan) * _pow(edge_sproing, dt)
+		cam.vel.x *= _pow(0.0001, dt)
+	} else if cam.target_pan_x < min_x_pan && !is_mouse_down {
+		cam.target_pan_x = min_x_pan + (cam.target_pan_x - min_x_pan) * _pow(edge_sproing, dt)
+		cam.vel.x *= _pow(0.0001, dt)
+	}
+
 	cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 
 
@@ -460,8 +495,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				}
 
 				rect_color := color_choices[ev.depth - 1]
-				if int(selected_event.pid) == p_idx && 
-				   int(selected_event.tid) == t_idx && 
+				if int(selected_event.pid) == p_idx &&
+				   int(selected_event.tid) == t_idx &&
 				   int(selected_event.eid) == e_idx {
 					rect_color.x += 30
 					rect_color.y += 30
@@ -508,11 +543,11 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 
 	// Chop sides of screen
-    draw_rect(rect(0, disp_rect.pos.y, width, graph_header_text_height), bg_color2) // top
-    draw_rect(rect(0, disp_rect.pos.y, graph_rect.pos.x, height), bg_color2) // left
-    draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
+	draw_rect(rect(0, disp_rect.pos.y, width, graph_header_text_height), bg_color2) // top
+	draw_rect(rect(0, disp_rect.pos.y, graph_rect.pos.x, height), bg_color2) // left
+	draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
 
-	
+
 	// Draw timestamps on subdivision lines
 	ONE_SECOND :: 1000 * 1000
 	ONE_MILLI :: 1000
@@ -537,7 +572,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
-    draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
+	draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
 
 	if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.eid != -1 {
 		p_idx := int(selected_event.pid)
@@ -567,7 +602,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	// Render toolbar background
-    draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
+	draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
 
 	// draw toolbar
 	edge_pad := 1 * em
@@ -581,9 +616,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	case .Auto:
 		color_text = "\uf042"
 	case .Dark:
-		color_text = "\uf10c" 
+		color_text = "\uf10c"
 	case .Light:
-		color_text = "\uf111" 
+		color_text = "\uf111"
 	}
 
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
@@ -639,7 +674,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	seed_width := measure_text(seed_str, p_font_size, monospace_font)
 	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
-    return true
+	return true
 }
 
 button :: proc(in_rect: Rect, text: string, font: string) -> bool {
