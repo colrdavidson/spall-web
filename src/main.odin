@@ -340,7 +340,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	MAX_SCALE :: 100000
 	if pt_in_rect(mouse_pos, disp_rect) {
-		cam.target_scale *= _pow(1.003, scroll_val_y)
+		cam.target_scale *= _pow(1.0025, -scroll_val_y)
 		scroll_val_y = 0
 	}
 
