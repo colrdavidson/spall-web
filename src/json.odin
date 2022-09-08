@@ -135,36 +135,6 @@ parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 
 		if ch == '\\' && (chunk_pos(p) + 1) < u32(len(p.data)) {
 			p.pos += 1
-			switch p.data[chunk_pos(p)] {
-			case '\"': fallthrough
-			case '/': fallthrough
-			case '\\': fallthrough
-			case 'b': fallthrough
-			case 'f': fallthrough
-			case 'r': fallthrough
-			case 'n': fallthrough
-			case 't':
-
-			case 'u':
-				p.pos += 1
-				for i := 0; i < 4 && chunk_pos(p) < u32(len(p.data)); i += 1 {
-					if (!((p.data[chunk_pos(p)] >= 48 && p.data[chunk_pos(p)] <= 57) ||
-					   (p.data[chunk_pos(p)] >= 65 && p.data[chunk_pos(p)] <= 70) ||
-					   (p.data[chunk_pos(p)] >= 97 && p.data[chunk_pos(p)] <= 102))) {
-						p.pos = start
-						fmt.printf("Failed to parse token! 3\n")
-
-						return
-					}
-					p.pos += 1
-				}
-				p.pos -= 1
-			case:
-				p.pos = start
-				fmt.printf("Failed to parse token! 4\n")
-
-				return
-			}
 		}
 	}
 
