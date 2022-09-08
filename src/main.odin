@@ -324,25 +324,13 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	graph_rect.size.y -= graph_header_height
 	//draw_rect_outline(rect(graph_rect.pos.x, graph_rect.pos.y, graph_rect.size.x, graph_rect.size.y - 1), 1, Vec3{0, 0, 255})
 
-
-	// compute pan, scale + scroll
-	pan_delta := Vec2{}
-	if is_mouse_down {
-		if pt_in_rect(clicked_pos, disp_rect) {
-			pan_delta = mouse_pos - last_mouse_pos
-			cam.vel.y = -pan_delta.y / dt
-			cam.vel.x = pan_delta.x / dt
-		}
-		last_mouse_pos = mouse_pos
-	}
-
 	old_scale := cam.target_scale
 
 	MAX_SCALE :: 100000
 	if pt_in_rect(mouse_pos, disp_rect) {
 		cam.target_scale *= _pow(1.0025, -scroll_val_y)
-		scroll_val_y = 0
 	}
+	scroll_val_y = 0
 
 	cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
 	cam.current_scale = min(max(cam.current_scale, _pow(0.1, 12)), MAX_SCALE)
@@ -351,11 +339,49 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	max_height := get_max_y_pan(processes[:], rect_height)
 	max_y_pan := max(max_height - graph_rect.size.y, 0)
+	min_y_pan := min(0, max_y_pan)
+	max_x_pan := max(display_width / 2, 0)
+	min_x_pan := display_width / 2 + min(-(total_max_time - total_min_time) * cam.target_scale, 0)
+
+	//draw_line(Vec2{start_x + max_x_pan, 0}, Vec2{start_x + max_x_pan, display_height}, 2, Vec3{0,255,0})
+	//draw_line(Vec2{start_x + min_x_pan, 0}, Vec2{start_x + min_x_pan, display_height}, 2, Vec3{255,0,0})
+
+	// compute pan, scale + scroll
+	pan_delta := Vec2{}
+	if is_mouse_down {
+		if pt_in_rect(clicked_pos, disp_rect) {
+			pan_delta = mouse_pos - last_mouse_pos
+			
+			if cam.target_pan_x < min_x_pan {
+				pan_delta.x *= _pow(2, (cam.target_pan_x - min_x_pan) / 32)
+			}
+			if cam.target_pan_x > max_x_pan {
+				pan_delta.x *= _pow(2, (max_x_pan - cam.target_pan_x) / 32)
+			}
+			if cam.pan.y < min_y_pan {
+				pan_delta.y *= _pow(2, (cam.pan.y - min_y_pan) / 32)
+			}
+			if cam.pan.y > max_y_pan {
+				pan_delta.y *= _pow(2, (max_y_pan - cam.pan.y) / 32)
+			}
+			
+			cam.vel.y = -pan_delta.y / dt
+			cam.vel.x = pan_delta.x / dt
+		}
+		last_mouse_pos = mouse_pos
+	}
+
 
 	cam_mouse_x := mouse_pos.x - start_x
 
 	if cam.target_scale != old_scale {
 		cam.target_pan_x = ((cam.target_pan_x - cam_mouse_x) * (cam.target_scale / old_scale)) + cam_mouse_x
+		if cam.target_pan_x < min_x_pan {
+			cam.target_pan_x = min_x_pan
+		}
+		if cam.target_pan_x > max_x_pan {
+			cam.target_pan_x = max_x_pan
+		}
 	}
 
 	cam.target_pan_x = cam.target_pan_x + (cam.vel.x * dt)
@@ -363,14 +389,23 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	cam.vel *= _pow(0.0001, dt)
 
 	edge_sproing : f64 = 0.0001
-	if cam.pan.y < 0 {
-		cam.pan.y = cam.pan.y * _pow(edge_sproing, (dt))
+	if cam.pan.y < min_y_pan && !is_mouse_down {
+		cam.pan.y = min_y_pan + (cam.pan.y - min_y_pan) * _pow(edge_sproing, dt)
 		cam.vel.y *= _pow(0.0001, dt)
 	}
-	if cam.pan.y > max_y_pan {
+	if cam.pan.y > max_y_pan && !is_mouse_down {
 		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * _pow(edge_sproing, dt)
 		cam.vel.y *= _pow(0.0001, dt)
 	}
+
+	if cam.target_pan_x > max_x_pan && !is_mouse_down {
+		cam.target_pan_x = max_x_pan + (cam.target_pan_x - max_x_pan) * _pow(edge_sproing, dt)
+		cam.vel.x *= _pow(0.0001, dt)
+	} else if cam.target_pan_x < min_x_pan && !is_mouse_down {
+		cam.target_pan_x = min_x_pan + (cam.target_pan_x - min_x_pan) * _pow(edge_sproing, dt)
+		cam.vel.x *= _pow(0.0001, dt)
+	}
+
 	cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 
 
