@@ -351,7 +351,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	if is_mouse_down {
 		if pt_in_rect(clicked_pos, disp_rect) {
 			pan_delta = mouse_pos - last_mouse_pos
-			
+
 			if cam.target_pan_x < min_x_pan {
 				pan_delta.x *= _pow(2, (cam.target_pan_x - min_x_pan) / 32)
 			}
@@ -364,7 +364,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			if cam.pan.y > max_y_pan {
 				pan_delta.y *= _pow(2, (max_y_pan - cam.pan.y) / 32)
 			}
-			
+
 			cam.vel.y = -pan_delta.y / dt
 			cam.vel.x = pan_delta.x / dt
 		}
