@@ -21,6 +21,10 @@ for ext in ['*.o', '*.wasm', '*.wat']:
 
 os.makedirs('build', exist_ok=True)
 
+build_str = ''
+if RELEASE:
+    build_str = '-o:speed'
+
 start_time = time.time()
 print('Compiling...')
 subprocess.run([
@@ -28,20 +32,9 @@ subprocess.run([
     'build', 'src',
     '-target:js_wasm32',
     f"-out:build/{program_name}.wasm",
-    '-o:speed'
+    build_str,
 ])
 print("Compiled in {:.1f} seconds".format(time.time() - start_time))
-
-# Optimize output WASM file
-if RELEASE:
-    print('Optimizing WASM...')
-    subprocess.run([
-        'wasm-opt', f"build/{program_name}.wasm",
-        '-o', f"build/{program_name}.wasm",
-        '-O4', # general perf optimizations
-        '--memory-packing', # remove unnecessary and extremely large .bss segment
-        '--zero-filled-memory',
-    ])
 
 # Patch memcpy and memmove
 start_time = time.time()
