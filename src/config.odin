@@ -142,8 +142,7 @@ parent_map: map[int]string
 seen_pair_map: map[string]bool
 cur_event: Event
 
-BandeMap :: distinct map[string]^queue.Queue(Event)
-ThreadMap :: distinct map[u64]BandeMap
+ThreadMap :: distinct map[u64]^queue.Queue(Event)
 bande_p_to_t: map[u64]ThreadMap
 
 reset_token_maps :: proc() {
@@ -351,28 +350,20 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 					tm = &bande_p_to_t[cur_event.process_id]
 				}
 
-				tksk, ok2 := &tm[cur_event.thread_id]
+				ts, ok2 := tm[cur_event.thread_id]
 				if !ok2 {
-					tm[cur_event.thread_id] = make(BandeMap, 0, scratch_allocator)
-					tksk = &tm[cur_event.thread_id]
-				}
-
-				ts, ok3 := tksk[cur_event.name]
-				if !ok3 {
 					token_stack := new(queue.Queue(Event), scratch_allocator)
 					queue.init(token_stack, 0, scratch_allocator)
-					tksk[cur_event.name] = token_stack
+					tm[cur_event.thread_id] = token_stack
 					ts = token_stack
 				}
 
 				queue.push_back(ts, cur_event)
 			case .End:
 				if tm, ok1 := &bande_p_to_t[cur_event.process_id]; ok1 {
-					if tksk, ok2 := &tm[cur_event.thread_id]; ok2 {
-						ts, ok3 := tksk[cur_event.name]
-						if ok3 && queue.len(ts^) > 0 {
+					if ts, ok2 := tm[cur_event.thread_id]; ok2 {
+						if queue.len(ts^) > 0 {
 							ev := queue.pop_back(ts)
-							assert(ev.thread_id == cur_event.thread_id && ev.process_id == cur_event.process_id)
 
 							new_event := Event{
 								name = ev.name,

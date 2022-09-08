@@ -164,8 +164,8 @@ CHUNK_SIZE :: 10 * 1024 * 1024
 main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
-	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 20)
-	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 20)
+	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 15)
+	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 10)
 
     arena_init(&temp_arena, temp_data)
     arena_init(&scratch_arena, scratch_data)
@@ -488,7 +488,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 				if len(name_str) > 4 || max_chars == len(ev.name) {
 					if max_chars != len(ev.name) {
-						name_str = fmt.tprintf("%s...", ev.name[:max_chars-3])
+						name_str = fmt.tprintf("%s…", ev.name[:max_chars-1])
 					}
 
 
