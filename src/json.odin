@@ -45,7 +45,6 @@ JSONParser :: struct {
 	events_id: int,
 	cur_event_id: int,
 	obj_map: map[string]string,
-	cur_event: Event,
 	seen_dur: bool,
 	current_parent: IdPair,
 }
@@ -157,22 +156,21 @@ parse_string :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 }
 
 init_json_parser :: proc(total_size: u32) -> JSONParser {
-	p := JSONParser{}
-	p.p = init_parser(total_size)
-	queue.init(&p.parent_stack)
+	jp := JSONParser{}
+	jp.p = init_parser(total_size)
+	queue.init(&jp.parent_stack)
 
-	p.obj_map = make(map[string]string, 0, scratch_allocator)
+	jp.obj_map = make(map[string]string, 0, scratch_allocator)
 	for field in fields {
-		p.obj_map[field] = field
+		jp.obj_map[field] = field
 	}
 
-	p.cur_event = Event{}
-	p.events_id    = -1
-	p.cur_event_id = -1
-	p.seen_dur = false
-	p.current_parent = IdPair{}
+	jp.events_id    = -1
+	jp.cur_event_id = -1
+	jp.seen_dur = false
+	jp.current_parent = IdPair{}
 
-	return p
+	return jp
 }
 
 get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
@@ -366,35 +364,35 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 					return
 				}
 
-				jp.cur_event.name = str
+				p.cur_event.name = str
 			}
 
 			switch key {
 			case "ph":
 				if value == "X" {
-					jp.cur_event.type = .Complete
+					p.cur_event.type = .Complete
 				} else if value == "B" {
-					jp.cur_event.type = .Begin
+					p.cur_event.type = .Begin
 				} else if value == "E" {
-					jp.cur_event.type = .End
+					p.cur_event.type = .End
 				}
 			case "dur": 
 				dur, ok := strconv.parse_f64(value)
 				if !ok { continue }
-				jp.cur_event.duration = dur
+				p.cur_event.duration = dur
 				jp.seen_dur = true
 			case "ts": 
 				ts, ok := strconv.parse_f64(value)
 				if !ok { continue }
-				jp.cur_event.timestamp = ts
+				p.cur_event.timestamp = ts
 			case "tid": 
 				tid, ok := strconv.parse_u64(value)
 				if !ok { continue }
-				jp.cur_event.thread_id = tid
+				p.cur_event.thread_id = tid
 			case "pid": 
 				pid, ok := strconv.parse_u64(value)
 				if !ok { continue }
-				jp.cur_event.process_id = pid
+				p.cur_event.process_id = pid
 			}
 
 			continue
@@ -402,38 +400,38 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 
 		// got the whole event
 		if state == .ScopeExited && tok.id == jp.cur_event_id {
-			switch jp.cur_event.type {
+			switch p.cur_event.type {
 			case .Complete:
 				if jp.seen_dur {
 					event_count += 1
-					push_event(&processes, jp.cur_event)
+					push_event(&processes, p.cur_event)
 				}
 			case .Begin:
-				tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]
+				tm, ok1 := &bande_p_to_t[p.cur_event.process_id]
 				if !ok1 {
-					bande_p_to_t[jp.cur_event.process_id] = make(ThreadMap, 0, scratch_allocator)
-					tm = &bande_p_to_t[jp.cur_event.process_id]
+					bande_p_to_t[p.cur_event.process_id] = make(ThreadMap, 0, scratch_allocator)
+					tm = &bande_p_to_t[p.cur_event.process_id]
 				}
 
-				ts, ok2 := tm[jp.cur_event.thread_id]
+				ts, ok2 := tm[p.cur_event.thread_id]
 				if !ok2 {
 					token_stack := new(queue.Queue(Event), scratch_allocator)
 					queue.init(token_stack, 0, scratch_allocator)
-					tm[jp.cur_event.thread_id] = token_stack
+					tm[p.cur_event.thread_id] = token_stack
 					ts = token_stack
 				}
 
-				queue.push_back(ts, jp.cur_event)
+				queue.push_back(ts, p.cur_event)
 			case .End:
-				if tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]; ok1 {
-					if ts, ok2 := tm[jp.cur_event.thread_id]; ok2 {
+				if tm, ok1 := &bande_p_to_t[p.cur_event.process_id]; ok1 {
+					if ts, ok2 := tm[p.cur_event.thread_id]; ok2 {
 						if queue.len(ts^) > 0 {
 							ev := queue.pop_back(ts)
 
 							new_event := Event{
 								name = ev.name,
 								type = .Complete,
-								duration = jp.cur_event.timestamp - ev.timestamp,
+								duration = p.cur_event.timestamp - ev.timestamp,
 								timestamp = ev.timestamp,
 								thread_id = ev.thread_id,
 								process_id = ev.process_id,
@@ -446,7 +444,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				}
 			}
 
-			jp.cur_event = Event{}
+			p.cur_event = Event{}
 			jp.cur_event_id = -1
 			jp.seen_dur = false
 			jp.current_parent = IdPair{}

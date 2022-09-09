@@ -242,13 +242,23 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 	defer free_all(context.temp_allocator)
 
 	if first_chunk {
+		header_sz := size_of(BinHeader)
+		if len(chunk) < header_sz {
+			return
+		}
 		magic := (^u64)(raw_data(chunk))^
 
 		is_json = magic != 0x0BADF00D
 		if is_json {
 			jp = init_json_parser(total_size)
 		} else {
+			hdr := cast(^BinHeader)raw_data(chunk)
+			if hdr.version != 0 {
+				return
+			}
+
 			bp = init_parser(total_size)
+			bp.pos += u32(header_sz)
 		}
 
 		loading_config = true
