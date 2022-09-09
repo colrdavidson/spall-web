@@ -221,6 +221,13 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 		draw_rectc(load_box, 3, Vec3{50, 50, 50})
 
+		p: Parser
+		if is_json {
+			p = jp.p
+		} else {
+			p = bp
+		}
+
 		chunk_count := int(rescale(f64(p.offset), 0, f64(p.total_size), 0, 100))
 
 		chunk := rect(0, 0, chunk_size, chunk_size)
