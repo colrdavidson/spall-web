@@ -235,6 +235,7 @@ finish_loading :: proc (p: ^Parser) {
 	return
 }
 
+stamp_scale : f64 = 0
 is_json := false
 @export
 load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
@@ -256,6 +257,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			if hdr.version != 0 {
 				return
 			}
+			stamp_scale = hdr.timestamp_unit
 
 			bp = init_parser(total_size)
 			bp.pos += u32(header_sz)

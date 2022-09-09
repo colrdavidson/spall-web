@@ -177,8 +177,8 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 						new_event := Event{
 							name = ev.name,
 							type = .Complete,
-							duration = event.timestamp - ev.timestamp,
-							timestamp = ev.timestamp,
+							duration = (event.timestamp - ev.timestamp) * stamp_scale,
+							timestamp = (ev.timestamp) * stamp_scale,
 							thread_id = ev.thread_id,
 							process_id = ev.process_id,
 						}
