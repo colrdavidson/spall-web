@@ -34,8 +34,8 @@ Event :: struct {
 	type: EventType,
 	duration: f64,
 	timestamp: f64,
-	thread_id: u64,
-	process_id: u64,
+	thread_id: u32,
+	process_id: u32,
 	depth: u16,
 }
 
@@ -43,16 +43,16 @@ Thread :: struct {
 	min_time: f64,
 	max_depth: u16,
 
-	thread_id: u64,
+	thread_id: u32,
 	events: [dynamic]Event,
 }
 
 Process :: struct {
 	min_time: f64,
 
-	process_id: u64,
+	process_id: u32,
 	threads: [dynamic]Thread,
-	thread_map: map[u64]int,
+	thread_map: map[u32]int,
 }
 
 print_queue :: proc(q: ^$Q/queue.Queue($T)) {

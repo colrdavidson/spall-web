@@ -24,7 +24,7 @@ Parser :: struct {
 	cur_event: Event,
 }
 
-BinEventType :: enum u64 {
+BinEventType :: enum u8 {
 	Begin,
 	End,
 }
@@ -35,15 +35,15 @@ BinHeader :: struct #packed {
 }
 BeginEvent :: struct #packed {
 	type: BinEventType,
-	pid: u64,
-	tid: u64,
+	pid: u32,
+	tid: u32,
 	time: f64,
 	name_len: u8,
 }
 EndEvent :: struct #packed {
 	type: BinEventType,
-	pid: u64,
-	tid: u64,
+	pid: u32,
+	tid: u32,
 	time: f64,
 }
 

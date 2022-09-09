@@ -90,7 +90,7 @@ thread_gap     : f64 = 8
 trace_config : string
 
 processes: [dynamic]Process
-process_map: map[u64]int
+process_map: map[u32]int
 color_choices: [dynamic]Vec3
 event_count: i64
 total_max_time: f64

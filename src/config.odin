@@ -33,7 +33,7 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 			min_time = 0x7fefffffffffffff, 
 			process_id = event.process_id,
 			threads = make([dynamic]Thread),
-			thread_map = make(map[u64]int, 0, scratch_allocator),
+			thread_map = make(map[u32]int, 0, scratch_allocator),
 		})
 		p_idx = len(processes) - 1
 		process_map[event.process_id] = p_idx
@@ -135,8 +135,8 @@ process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 	return total_max_depth
 }
 
-ThreadMap :: distinct map[u64]^queue.Queue(Event)
-bande_p_to_t: map[u64]ThreadMap
+ThreadMap :: distinct map[u32]^queue.Queue(Event)
+bande_p_to_t: map[u32]ThreadMap
 jp: JSONParser
 bp: Parser
 
@@ -165,11 +165,11 @@ init_loading_state :: proc(size: u32) {
 	free_all(context.allocator)
 	free_all(context.temp_allocator)
 	processes = make([dynamic]Process)
-	process_map = make(map[u64]int, 0, scratch_allocator)
+	process_map = make(map[u32]int, 0, scratch_allocator)
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
 
-	bande_p_to_t  = make(map[u64]ThreadMap, 0, scratch_allocator)
+	bande_p_to_t  = make(map[u32]ThreadMap, 0, scratch_allocator)
 
 	first_chunk = true
 	event_count = 0
