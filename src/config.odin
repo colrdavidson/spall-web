@@ -194,8 +194,8 @@ finish_loading :: proc (p: ^Parser) {
 				new_event := Event{
 					name = mod_name,
 					type = .Complete,
-					duration = total_max_time - ev.timestamp,
-					timestamp = ev.timestamp,
+					duration = total_max_time - (ev.timestamp * stamp_scale),
+					timestamp = (ev.timestamp) * stamp_scale,
 					thread_id = ev.thread_id,
 					process_id = ev.process_id,
 				}
@@ -235,7 +235,7 @@ finish_loading :: proc (p: ^Parser) {
 	return
 }
 
-stamp_scale : f64 = 0
+stamp_scale: f64
 is_json := false
 @export
 load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
@@ -251,14 +251,15 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 		is_json = magic != 0x0BADF00D
 		if is_json {
+			stamp_scale = 1
 			jp = init_json_parser(total_size)
 		} else {
 			hdr := cast(^BinHeader)raw_data(chunk)
 			if hdr.version != 0 {
 				return
 			}
-			stamp_scale = hdr.timestamp_unit
 
+			stamp_scale = hdr.timestamp_unit
 			bp = init_parser(total_size)
 			bp.pos += u32(header_sz)
 		}
