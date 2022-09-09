@@ -271,7 +271,7 @@
 
 						let deltaY = new_dist - old_dist;
 
-						window.wasm.zoom(0, deltaY * 2);
+						window.wasm.zoom(0, -deltaY * 2);
 						pinch_start_pos = new_start_pos;
 					}
 				}, {passive: false});
@@ -403,10 +403,6 @@
 					e.preventDefault();
 					let x = e.deltaX;
 					let y = e.deltaY;
-
-					if (e.webkitDirectionInvertedFromDevice) {
-						y = -y;
-					}
 
 					if (e.deltaMode === 1) {
 						// "lines"
