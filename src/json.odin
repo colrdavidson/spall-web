@@ -95,10 +95,8 @@ parse_primitive :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		case '}':
 			found = true
 			break top_loop
+		case ' '..='~':
 		case:
-		}
-
-		if ch < 32 || ch >= 127 {
 			p.pos = start
 
 			fmt.printf("Failed to parse token! 1\n")

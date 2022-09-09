@@ -144,24 +144,24 @@ events_id: int
 cur_event_id: int
 
 obj_map: map[string]string
-parent_map: map[int]string
-seen_pair_map: map[string]bool
 cur_event: Event
 
 ThreadMap :: distinct map[u64]^queue.Queue(Event)
 bande_p_to_t: map[u64]ThreadMap
-
-reset_token_maps :: proc() {
-	clear_map(&parent_map)
-	clear_map(&seen_pair_map)
-}
 
 manual_load :: proc(config: string) {
 	init_loading_state(u32(len(config)))
 	load_config_chunk(0, u32(len(config)), transmute([]u8)config)
 }
 
+IdPair :: struct {
+	key: string,
+	id: int,
+}
+
 fields := []string{ "dur", "name", "pid", "tid", "ts", "ph" }
+seen_dur := false
+current_parent: IdPair
 init_loading_state :: proc(size: u32) {
 	loading_config = true
 
@@ -178,14 +178,13 @@ init_loading_state :: proc(size: u32) {
 		obj_map[field] = field
 	}
 
-	parent_map    = make(map[int]string, 0, scratch_allocator)
-	seen_pair_map = make(map[string]bool, 0, scratch_allocator)
-
 	bande_p_to_t  = make(map[u64]ThreadMap, 0, scratch_allocator)
 
 	cur_event = Event{}
 	events_id    = -1
 	cur_event_id = -1
+	seen_dur = false
+	current_parent = IdPair{}
 	event_count = 0
 
 	fmt.printf("Loading a %.1f MB config\n", f64(size) / 1024 / 1024)
@@ -314,7 +313,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			key := get_token_str(&p, tok)
 			val, ok := obj_map[key]
 			if ok {
-				parent_map[tok.id] = val
+				current_parent = IdPair{val, tok.id}
 			}
 			continue
 		}
@@ -323,11 +322,10 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 		// gather values for event
 		if state == .TokenDone &&
 		   (tok.type == .String || tok.type == .Primitive) {
-
-			key, ok := parent_map[parent.id]
-			if !ok {
+			if parent.id != current_parent.id {
 				continue
 			}
+			key := current_parent.key
 
 			value := get_token_str(&p, tok)
 			if key == "name" {
@@ -352,6 +350,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 				dur, ok := strconv.parse_f64(value)
 				if !ok { continue }
 				cur_event.duration = dur
+				seen_dur = true
 			case "ts": 
 				ts, ok := strconv.parse_f64(value)
 				if !ok { continue }
@@ -366,7 +365,6 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 				cur_event.process_id = pid
 			}
 
-			seen_pair_map[key] = true
 			continue
 		}
 
@@ -374,7 +372,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 		if state == .ScopeExited && tok.id == cur_event_id {
 			switch cur_event.type {
 			case .Complete:
-				if "dur" in seen_pair_map {
+				if seen_dur {
 					event_count += 1
 					push_event(&processes, cur_event)
 				}
@@ -417,8 +415,9 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			}
 
 			cur_event = Event{}
-			reset_token_maps()
 			cur_event_id = -1
+			seen_dur = false
+			current_parent = IdPair{}
 			continue
 		}
 	}

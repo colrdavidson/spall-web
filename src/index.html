@@ -84,7 +84,7 @@
 			}
 
 			async function init() {
-				window.wasm = await odin.runWasm(`foobar_patched.wasm`, null, {
+				window.wasm = await odin.runWasm(`foobar.wasm`, null, {
 					js: {
 						// Canvas
 						_canvas_clear() {
