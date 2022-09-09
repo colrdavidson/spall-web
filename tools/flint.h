@@ -39,8 +39,6 @@ typedef struct FlintBeginEvent {
 
 typedef struct FlintBeginCacheHitEvent {
     uint8_t type; // = FlintType_BeginCacheHit
-    uint32_t pid;
-    uint32_t tid;
     FlintTime when;
     uint16_t name_slot;
 } FlintBeginCacheHitEvent;
@@ -59,22 +57,22 @@ typedef struct FlintBeginEventMax {
 
 #pragma pack(pop)
 
-typedef struct FlintContext {
-    FILE *file;
-    double timestamp_unit;
-    bool is_json;
-} FlintContext;
-
-typedef struct NameCacheEntry {
+typedef struct FlintCacheEntry {
     uint32_t hash;
     uint32_t pid;
     uint32_t tid;
     uint8_t name_len;
     char name[255];
-} NameCacheEntry;
+} FlintCacheEntry;
 
-enum { NAME_CACHE_POWER = 10 };
-thread_local NameCacheEntry name_cache[1 << NAME_CACHE_POWER];
+enum { Flint_Cache_Power = 10 };
+
+typedef struct FlintContext {
+    FILE *file;
+    double timestamp_unit;
+    bool is_json;
+    FlintCacheEntry *cache;
+} FlintContext;
 
 inline bool FlintFlush(FlintContext *ctx) {
     if (!ctx) return false;
@@ -91,6 +89,9 @@ inline void FlintQuit(FlintContext *ctx) {
             fprintf(ctx->file, "\n]}\n");
         }
         fclose(ctx->file);
+    }
+    if (ctx->cache) {
+        free(ctx->cache);
     }
     memset(ctx, 0, sizeof(*ctx));
 }
@@ -116,17 +117,21 @@ inline FlintContext FlintInit_Impl(const char *filename, double timestamp_unit, 
             return ctx;
         }
     } else {
+        ctx.cache = (FlintCacheEntry *)calloc(1 << Flint_Cache_Power, sizeof(FlintCacheEntry));
+        if (!ctx.cache) {
+            FlintQuit(&ctx);
+            return ctx;
+        }
         FlintHeader header;
         header.magic_header = 0x0BADF00D;
         header.version = 0;
         header.timestamp_unit = timestamp_unit;
-        header.name_cache_power = NAME_CACHE_POWER;
+        header.name_cache_power = Flint_Cache_Power;
         if (fwrite(&header, sizeof(header), 1, ctx.file) != 1) {
             FlintQuit(&ctx);
             return ctx;
         }
     }
-    memset(name_cache, 0, sizeof(name_cache));
     return ctx;
 }
 
@@ -199,19 +204,19 @@ static inline uint32_t hash_entry(const char *name, uint8_t name_len, uint32_t t
     uint32_t result = murmur32(name, name_len, 2166136261);
     result = murmur32((char *)&pid, 4, result);
     result = murmur32((char *)&tid, 4, result);
-    result = murmur32((char *)&name_len, 1, result);
     return result;
 }
 
 static bool use_cache = false; // @Hack
 
-int string_payload_length = 0;
+int begin_payload_length = 0;
 
-// Caller has to take a lock if multiple threads submit a specific TID-PID combination.
+// Caller has to take a lock around this function!
 inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
     if (!ctx) return false;
     if (!name) return false;
     if (!ctx->file) return false;
+    if (!ctx->cache) return false;
     if (feof(ctx->file)) return false;
     if (ferror(ctx->file)) return false;
     // if (ctx->times_are_u64) return false;
@@ -229,9 +234,9 @@ inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char 
     } else {
         if (use_cache) {
             uint32_t hash = hash_entry(name, name_len, tid, pid);
-            int slot = hash & ((1 << NAME_CACHE_POWER) - 1);
+            int slot = hash & ((1 << Flint_Cache_Power) - 1);
             bool hit = false;
-            NameCacheEntry nce = name_cache[slot];
+            FlintCacheEntry nce = ctx->cache[slot];
             if (nce.hash == hash && nce.tid == tid && nce.pid == pid && nce.name_len == name_len && !memcmp(nce.name, name, name_len)) {
                 hit = true;
             }
@@ -239,11 +244,10 @@ inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char 
                 // Write cache hit position
                 FlintBeginCacheHitEvent ev;
                 ev.type = FlintType_BeginCacheHit;
-                ev.pid = pid;
-                ev.tid = tid;
                 ev.when.floating = when;
                 ev.name_slot = slot;
                 if (fwrite(&ev, sizeof(ev), 1, ctx->file) != 1) return false;
+                begin_payload_length += sizeof(ev);
             } else {
                 // Write new literal
                 FlintBeginEventMax ev;
@@ -254,12 +258,12 @@ inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char 
                 ev.event.name.length = (uint8_t)name_len;
                 memcpy(ev.event.name.bytes, name, name_len);
                 if (fwrite(&ev, sizeof(FlintBeginEvent) + name_len - 1, 1, ctx->file) != 1) return false;
-                string_payload_length += name_len - 1;
+                begin_payload_length += sizeof(FlintBeginEvent) + name_len - 1;
 
                 // Overwrite hash entry if longer
-                NameCacheEntry entry = {hash, pid, tid, (uint8_t)name_len};
+                FlintCacheEntry entry = {hash, pid, tid, (uint8_t)name_len};
                 memcpy(entry.name, name, name_len);
-                name_cache[slot] = entry;
+                ctx->cache[slot] = entry;
             }
 
         } else {
@@ -271,7 +275,7 @@ inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char 
             ev.event.name.length = (uint8_t)name_len;
             memcpy(ev.event.name.bytes, name, name_len);
             if (fwrite(&ev, sizeof(FlintBeginEvent) + name_len - 1, 1, ctx->file) != 1) return false;
-            string_payload_length += name_len - 1;
+            begin_payload_length += sizeof(FlintBeginEvent) + name_len - 1;
         }
 
     }
@@ -293,6 +297,7 @@ inline bool FlintTraceEndTidPid(FlintContext *ctx, double when, uint32_t tid, ui
     FlintEndEvent ev;
     if (!ctx) return false;
     if (!ctx->file) return false;
+    if (!ctx->cache) return false;
     if (feof(ctx->file)) return false;
     if (ferror(ctx->file)) return false;
     // if (ctx->times_are_u64) return false;
