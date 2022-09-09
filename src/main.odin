@@ -623,6 +623,11 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		color_text = "\uf111"
 	}
 
+	if button(rect(edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
+		// I'm sorry. this is a dumb hack
+		finished_loading = true		
+	}
+
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
 		new_colormode: ColorMode
 
