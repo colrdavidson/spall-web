@@ -135,33 +135,44 @@ process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 	return total_max_depth
 }
 
-get_token_str :: proc(p: ^Parser, tok: Token) -> string {
-	str := string(p.full_chunk[u32(tok.start)-p.chunk_start:u32(tok.end)-p.chunk_start])
-	return str
+Parser :: struct {
+	pos: u32,
+	offset: u32,
+
+	data: []u8,
+	full_chunk: []u8,
+	chunk_start: u32,
+	total_size: u32,
+
+	intern: strings.Intern,
 }
 
-events_id: int
-cur_event_id: int
-
-obj_map: map[string]string
-cur_event: Event
-
+p: Parser
 ThreadMap :: distinct map[u64]^queue.Queue(Event)
 bande_p_to_t: map[u64]ThreadMap
+
+@export
+start_loading_file :: proc "contextless" (size: u32) {
+	context = wasmContext
+
+	init_loading_state(size)
+	get_chunk(u32(p.pos), CHUNK_SIZE)
+}
 
 manual_load :: proc(config: string) {
 	init_loading_state(u32(len(config)))
 	load_config_chunk(0, u32(len(config)), transmute([]u8)config)
 }
 
-IdPair :: struct {
-	key: string,
-	id: int,
+jp: JSONParser
+bp: Parser
+
+set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
+	p.chunk_start = start
+	p.full_chunk = chunk
 }
 
-fields := []string{ "dur", "name", "pid", "tid", "ts", "ph" }
-seen_dur := false
-current_parent: IdPair
+first_chunk: bool
 init_loading_state :: proc(size: u32) {
 	loading_config = true
 
@@ -173,42 +184,78 @@ init_loading_state :: proc(size: u32) {
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
 
-	obj_map = make(map[string]string, 0, scratch_allocator)
-	for field in fields {
-		obj_map[field] = field
-	}
-
 	bande_p_to_t  = make(map[u64]ThreadMap, 0, scratch_allocator)
 
-	cur_event = Event{}
-	events_id    = -1
-	cur_event_id = -1
-	seen_dur = false
-	current_parent = IdPair{}
+	first_chunk = true
 	event_count = 0
 
 	fmt.printf("Loading a %.1f MB config\n", f64(size) / 1024 / 1024)
 	start_bench("parse config")
-	p = init_parser(size)
 }
 
-@export
-start_loading_file :: proc "contextless" (size: u32) {
-	context = wasmContext
+finish_loading :: proc () {
+	for k, v in &bande_p_to_t {
+		for q, v2 in &v {
+			qlen := queue.len(v2^)
+			for i := 0; i < qlen; i += 1 {
+				ev := queue.pop_back(v2)
 
-	init_loading_state(size)
-	get_chunk(u32(p.pos), CHUNK_SIZE)
+				mod_name, err := strings.intern_get(&p.intern, fmt.tprintf("%s (Did Not Finish)", ev.name))
+				if err != nil {
+					fmt.printf("OOM!\n")
+					trap()
+				}
+
+				new_event := Event{
+					name = mod_name,
+					type = .Complete,
+					duration = total_max_time - ev.timestamp,
+					timestamp = ev.timestamp,
+					thread_id = ev.thread_id,
+					process_id = ev.process_id,
+				}
+
+				event_count += 1
+				push_event(&processes, new_event)
+			}
+
+		}
+	}
+
+	stop_bench("parse config")
+	fmt.printf("Got %d events\n", event_count)
+
+	start_bench("process events")
+	total_max_depth = process_events(&processes)
+	stop_bench("process events")
+
+	// reset render state
+	color_choices = make([dynamic]Vec3)
+	for i : u16 = 0; i < total_max_depth; i += 1 {
+		r := f64(205 + rand_int(0, 50))
+		g := f64(0 + rand_int(0, 230))
+		b := f64(0 + rand_int(0, 55))
+
+		append(&color_choices, Vec3{r, g, b})
+	}
+
+	t = 0
+	frame_count = 0
+
+	free_all(context.temp_allocator)
+	free_all(scratch_allocator)
+
+	loading_config = false
+	finished_loading = true
+	return
 }
 
 // this is gross + brittle. I'm sorry. I need a better way to do JSON streaming
-@export
-load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
-	context = wasmContext
-	defer free_all(context.temp_allocator)
-
-	set_next_chunk(&p, start, chunk)
+load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
+	p := &jp.p
+	set_next_chunk(&jp.p, start, chunk)
 	hot_loop: for {
-		tok, state := get_next_token(&p)
+		tok, state := get_next_token(jp)
 
 		#partial switch state {
 		case .PartialRead:
@@ -219,189 +266,135 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			trap()
 			return
 		case .Finished:
-
-			for k, v in &bande_p_to_t {
-				for q, v2 in &v {
-					qlen := queue.len(v2^)
-					for i := 0; i < qlen; i += 1 {
-						ev := queue.pop_back(v2)
-
-						mod_name, err := strings.intern_get(&p.intern, fmt.tprintf("%s (Did Not Finish)", ev.name))
-						if err != nil {
-							fmt.printf("OOM!\n")
-							trap()
-						}
-
-						new_event := Event{
-							name = mod_name,
-							type = .Complete,
-							duration = total_max_time - ev.timestamp,
-							timestamp = ev.timestamp,
-							thread_id = ev.thread_id,
-							process_id = ev.process_id,
-						}
-
-						event_count += 1
-						push_event(&processes, new_event)
-					}
-
-				}
-			}
-
-			stop_bench("parse config")
-			fmt.printf("Got %d events and %d tokens!\n", event_count, p.tok_count)
-
-			start_bench("process events")
-			total_max_depth = process_events(&processes)
-			stop_bench("process events")
-
-			// reset render state
-			color_choices = make([dynamic]Vec3)
-			for i : u16 = 0; i < total_max_depth; i += 1 {
-				r := f64(205 + rand_int(0, 50))
-				g := f64(0 + rand_int(0, 230))
-				b := f64(0 + rand_int(0, 55))
-
-				append(&color_choices, Vec3{r, g, b})
-			}
-
-			t = 0
-			frame_count = 0
-
-			free_all(context.temp_allocator)
-			free_all(scratch_allocator)
-
-			loading_config = false
-			finished_loading = true
+			finish_loading()
 			return
 		}
 
-		depth := queue.len(p.parent_stack)
+		depth := queue.len(jp.parent_stack)
 
 		// get start of traceEvents
-		if events_id == -1 {
+		if jp.events_id == -1 {
 			if state == .ScopeEntered && tok.type == .Array && depth == 1 {
-				events_id = tok.id
+				jp.events_id = tok.id
 			} else if state == .ScopeEntered && tok.type == .Array && depth == 3 {
-				parent := queue.get_ptr(&p.parent_stack, depth - 2)
-				if "traceEvents" == get_token_str(&p, parent^) {
-					events_id = tok.id
+				parent := queue.get_ptr(&jp.parent_stack, depth - 2)
+				if "traceEvents" == get_token_str(jp, parent^) {
+					jp.events_id = tok.id
 				}
 			}
 			continue
 		}
 
 		// get start of an event
-		if cur_event_id == -1 {
+		if jp.cur_event_id == -1 {
 			if depth > 1 && state == .ScopeEntered && tok.type == .Object {
-				parent := queue.get_ptr(&p.parent_stack, depth - 2)
-				if parent.id == events_id {
-					cur_event_id = tok.id
+				parent := queue.get_ptr(&jp.parent_stack, depth - 2)
+				if parent.id == jp.events_id {
+					jp.cur_event_id = tok.id
 				}
 			}
 			continue
 		}
 
 		// eww.
-		parent := queue.get_ptr(&p.parent_stack, depth - 1)
+		parent := queue.get_ptr(&jp.parent_stack, depth - 1)
 		if parent.id == tok.id {
-			parent = queue.get_ptr(&p.parent_stack, depth - 2)
+			parent = queue.get_ptr(&jp.parent_stack, depth - 2)
 		}
 
 		// gather keys for event
-		if state == .TokenDone && tok.type == .String && parent.id == cur_event_id {
-			key := get_token_str(&p, tok)
-			val, ok := obj_map[key]
+		if state == .TokenDone && tok.type == .String && parent.id == jp.cur_event_id {
+			key := get_token_str(jp, tok)
+			val, ok := jp.obj_map[key]
 			if ok {
-				current_parent = IdPair{val, tok.id}
+				jp.current_parent = IdPair{val, tok.id}
 			}
 			continue
 		}
 
-
 		// gather values for event
 		if state == .TokenDone &&
 		   (tok.type == .String || tok.type == .Primitive) {
-			if parent.id != current_parent.id {
+			if parent.id != jp.current_parent.id {
 				continue
 			}
-			key := current_parent.key
+			key := jp.current_parent.key
 
-			value := get_token_str(&p, tok)
+			value := get_token_str(jp, tok)
 			if key == "name" {
 				str, err := strings.intern_get(&p.intern, value)
 				if err != nil {
 					return
 				}
 
-				cur_event.name = str
+				jp.cur_event.name = str
 			}
 
 			switch key {
 			case "ph":
 				if value == "X" {
-					cur_event.type = .Complete
+					jp.cur_event.type = .Complete
 				} else if value == "B" {
-					cur_event.type = .Begin
+					jp.cur_event.type = .Begin
 				} else if value == "E" {
-					cur_event.type = .End
+					jp.cur_event.type = .End
 				}
 			case "dur": 
 				dur, ok := strconv.parse_f64(value)
 				if !ok { continue }
-				cur_event.duration = dur
-				seen_dur = true
+				jp.cur_event.duration = dur
+				jp.seen_dur = true
 			case "ts": 
 				ts, ok := strconv.parse_f64(value)
 				if !ok { continue }
-				cur_event.timestamp = ts
+				jp.cur_event.timestamp = ts
 			case "tid": 
 				tid, ok := strconv.parse_u64(value)
 				if !ok { continue }
-				cur_event.thread_id = tid
+				jp.cur_event.thread_id = tid
 			case "pid": 
 				pid, ok := strconv.parse_u64(value)
 				if !ok { continue }
-				cur_event.process_id = pid
+				jp.cur_event.process_id = pid
 			}
 
 			continue
 		}
 
 		// got the whole event
-		if state == .ScopeExited && tok.id == cur_event_id {
-			switch cur_event.type {
+		if state == .ScopeExited && tok.id == jp.cur_event_id {
+			switch jp.cur_event.type {
 			case .Complete:
-				if seen_dur {
+				if jp.seen_dur {
 					event_count += 1
-					push_event(&processes, cur_event)
+					push_event(&processes, jp.cur_event)
 				}
 			case .Begin:
-				tm, ok1 := &bande_p_to_t[cur_event.process_id]
+				tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]
 				if !ok1 {
-					bande_p_to_t[cur_event.process_id] = make(ThreadMap, 0, scratch_allocator)
-					tm = &bande_p_to_t[cur_event.process_id]
+					bande_p_to_t[jp.cur_event.process_id] = make(ThreadMap, 0, scratch_allocator)
+					tm = &bande_p_to_t[jp.cur_event.process_id]
 				}
 
-				ts, ok2 := tm[cur_event.thread_id]
+				ts, ok2 := tm[jp.cur_event.thread_id]
 				if !ok2 {
 					token_stack := new(queue.Queue(Event), scratch_allocator)
 					queue.init(token_stack, 0, scratch_allocator)
-					tm[cur_event.thread_id] = token_stack
+					tm[jp.cur_event.thread_id] = token_stack
 					ts = token_stack
 				}
 
-				queue.push_back(ts, cur_event)
+				queue.push_back(ts, jp.cur_event)
 			case .End:
-				if tm, ok1 := &bande_p_to_t[cur_event.process_id]; ok1 {
-					if ts, ok2 := tm[cur_event.thread_id]; ok2 {
+				if tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]; ok1 {
+					if ts, ok2 := tm[jp.cur_event.thread_id]; ok2 {
 						if queue.len(ts^) > 0 {
 							ev := queue.pop_back(ts)
 
 							new_event := Event{
 								name = ev.name,
 								type = .Complete,
-								duration = cur_event.timestamp - ev.timestamp,
+								duration = jp.cur_event.timestamp - ev.timestamp,
 								timestamp = ev.timestamp,
 								thread_id = ev.thread_id,
 								process_id = ev.process_id,
@@ -414,12 +407,56 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 				}
 			}
 
-			cur_event = Event{}
-			cur_event_id = -1
-			seen_dur = false
-			current_parent = IdPair{}
+			jp.cur_event = Event{}
+			jp.cur_event_id = -1
+			jp.seen_dur = false
+			jp.current_parent = IdPair{}
 			continue
 		}
+	}
+	return
+}
+
+load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
+	set_next_chunk(p, start, chunk)
+	hot_loop: for {
+		event, state := get_next_event(p)
+
+		#partial switch state {
+		case .PartialRead:
+			p.offset = p.pos
+			get_chunk(u32(p.pos), CHUNK_SIZE)
+			return
+		case .Finished:
+			finish_loading()
+			return
+		}
+	}
+}
+
+is_json := false
+@export
+load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
+	context = wasmContext
+	defer free_all(context.temp_allocator)
+
+	if first_chunk {
+		magic := (^u64)(raw_data(chunk))^
+
+		is_json = magic != 0x0BADF00D
+		if is_json {
+			jp = init_json_parser(total_size)
+		} else {
+			bp = init_parser(total_size)
+		}
+
+		first_chunk = false
+	}
+
+	if is_json {
+		load_json_chunk(&jp, start, total_size, chunk)
+	} else {
+		load_binary_chunk(&bp, start, total_size, chunk)
 	}
 
 	return

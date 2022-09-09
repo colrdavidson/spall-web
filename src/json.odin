@@ -29,21 +29,29 @@ Token :: struct {
 	id: int,
 }
 
-Parser :: struct {
-	pos: u32,
-	offset: u32,
-
-	parent_stack: queue.Queue(Token),
-	data: []u8,
-	full_chunk: []u8,
-	chunk_start: u32,
-	total_size: u32,
-	tok_count: int,
-
-	intern: strings.Intern,
+IdPair :: struct {
+	key: string,
+	id: int,
 }
 
-init_token :: proc(p: ^Parser, type: TokenType, start, end: i64) -> Token {
+JSONParser :: struct {
+	p: Parser,
+
+	parent_stack: queue.Queue(Token),
+	tok_count: int,
+
+	// Event parsing state
+	events_id: int,
+	cur_event_id: int,
+	obj_map: map[string]string,
+	cur_event: Event,
+	seen_dur: bool,
+	current_parent: IdPair,
+}
+
+fields := []string{ "dur", "name", "pid", "tid", "ts", "ph" }
+
+init_token :: proc(p: ^JSONParser, type: TokenType, start, end: i64) -> Token {
 	tok := Token{}
 	tok.type = type
 	tok.start = start
@@ -54,10 +62,7 @@ init_token :: proc(p: ^Parser, type: TokenType, start, end: i64) -> Token {
 	return tok
 }
 
-real_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos }
-chunk_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos - p.offset }
-
-pop_wrap :: #force_inline proc(p: ^Parser, loc := #caller_location) -> Token {
+pop_wrap :: #force_inline proc(p: ^JSONParser, loc := #caller_location) -> Token {
 	tok := queue.pop_back(&p.parent_stack)
 /*
 	fmt.printf("Popped: %#v || %s ----------\n", tok, loc)
@@ -67,7 +72,7 @@ pop_wrap :: #force_inline proc(p: ^Parser, loc := #caller_location) -> Token {
 	return tok
 }
 
-push_wrap :: #force_inline proc(p: ^Parser, tok: Token, loc := #caller_location) {
+push_wrap :: #force_inline proc(p: ^JSONParser, tok: Token, loc := #caller_location) {
 	queue.push_back(&p.parent_stack, tok)
 
 /*
@@ -77,7 +82,14 @@ push_wrap :: #force_inline proc(p: ^Parser, tok: Token, loc := #caller_location)
 */
 }
 
-parse_primitive :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
+get_token_str :: proc(p: ^JSONParser, tok: Token) -> string {
+	str := string(p.p.full_chunk[u32(tok.start)-p.p.chunk_start:u32(tok.end)-p.p.chunk_start])
+	return str
+}
+
+parse_primitive :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
+	p := &jp.p
+
 	start := real_pos(p)
 
 	found := false
@@ -110,7 +122,7 @@ parse_primitive :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		return
 	}
 
-	token = init_token(p, .Primitive, i64(start), i64(real_pos(p)))
+	token = init_token(jp, .Primitive, i64(start), i64(real_pos(p)))
 	p.pos -= 1
 
 	state = .TokenDone
@@ -118,7 +130,9 @@ parse_primitive :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 }
 
 
-parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
+parse_string :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
+	p := &jp.p
+
 	start := real_pos(p)
 	p.pos += 1
 
@@ -126,7 +140,7 @@ parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		ch := p.data[chunk_pos(p)]
 
 		if ch == '\"' {
-			token = init_token(p, .String, i64(start + 1), i64(real_pos(p)))
+			token = init_token(jp, .String, i64(start + 1), i64(real_pos(p)))
 			state = .TokenDone
 			return
 		}
@@ -141,24 +155,28 @@ parse_string :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 	return
 }
 
-
-init_parser :: proc(total_size: u32) -> Parser {
-	p := Parser{}
-	p.pos    = 0
-	p.offset = 0
-	p.total_size = total_size
+init_json_parser :: proc(total_size: u32) -> JSONParser {
+	p := JSONParser{}
+	p.p = init_parser(total_size)
 	queue.init(&p.parent_stack)
-	strings.intern_init(&p.intern)
+
+	p.obj_map = make(map[string]string, 0, scratch_allocator)
+	for field in fields {
+		p.obj_map[field] = field
+	}
+
+	p.cur_event = Event{}
+	p.events_id    = -1
+	p.cur_event_id = -1
+	p.seen_dur = false
+	p.current_parent = IdPair{}
 
 	return p
 }
 
-set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
-	p.chunk_start = start
-	p.full_chunk = chunk
-}
+get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
+	p := &jp.p
 
-get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
 
@@ -169,8 +187,8 @@ get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		case '{': fallthrough
 		case '[':
 			type := (ch == '{') ? TokenType.Object : TokenType.Array
-			token = init_token(p, type, i64(real_pos(p)), -1)
-			push_wrap(p, token)
+			token = init_token(jp, type, i64(real_pos(p)), -1)
+			push_wrap(jp, token)
 
 			p.pos += 1
 			state = .ScopeEntered
@@ -179,14 +197,14 @@ get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		case ']':
 			type := (ch == '}') ? TokenType.Object : TokenType.Array
 
-			depth := queue.len(p.parent_stack)
+			depth := queue.len(jp.parent_stack)
 			if depth == 0 {
 				fmt.printf("Expected first {{, got %c\n", ch)
 				return
 			}
 
 			loop: for {
-				token = pop_wrap(p)
+				token = pop_wrap(jp)
 				if token.start != -1 && token.end == -1 {
 					if token.type != type {
 						fmt.printf("Got an unexpected scope close? Got %s, expected %s\n", token.type, type)
@@ -199,7 +217,7 @@ get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 					return
 				}
 
-				depth = queue.len(p.parent_stack)
+				depth = queue.len(jp.parent_stack)
 				if depth == 0 {
 					fmt.printf("unable to find closing %c\n", type)
 					return
@@ -215,25 +233,25 @@ get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		case ' ':
 		case ':':
 		case ',':
-			depth := queue.len(p.parent_stack)
+			depth := queue.len(jp.parent_stack)
 			if depth == 0 {
 				fmt.printf("Expected first {{, got %c\n", ch)
 				return
 			}
-			parent := queue.peek_back(&p.parent_stack)
+			parent := queue.peek_back(&jp.parent_stack)
 
 			if parent.type != .Array && parent.type != .Object {
-				pop_wrap(p)
+				pop_wrap(jp)
 			}
 		case '\"':
-			token, state = parse_string(p)
+			token, state = parse_string(jp)
 			if state != .TokenDone {
 				return
 			}
 
-			parent := queue.peek_back(&p.parent_stack)
+			parent := queue.peek_back(&jp.parent_stack)
 			if parent.type == .Object {
-				push_wrap(p, token)
+				push_wrap(jp, token)
 			}
 
 			p.pos += 1
@@ -244,7 +262,7 @@ get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		case 't': fallthrough
 		case 'f': fallthrough
 		case 'n':
-			token, state = parse_primitive(p)
+			token, state = parse_primitive(jp)
 			if state != .TokenDone {
 				return
 			}
@@ -258,7 +276,7 @@ get_next_token :: proc(p: ^Parser) -> (token: Token, state: JSONState) {
 		}
 	}
 
-	depth := queue.len(p.parent_stack)
+	depth := queue.len(jp.parent_stack)
 	if depth != 0 {
 		if p.pos != p.total_size {
 			state = .PartialRead

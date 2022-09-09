@@ -69,8 +69,6 @@ is_hovering   := false
 
 hash := 0
 
-p: Parser
-
 first_frame := true
 loading_config := true
 finished_loading := false
