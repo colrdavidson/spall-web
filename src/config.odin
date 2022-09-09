@@ -160,7 +160,6 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 
 first_chunk: bool
 init_loading_state :: proc(size: u32) {
-	loading_config = true
 
 	free_all(scratch_allocator)
 	free_all(context.allocator)
@@ -252,6 +251,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			bp = init_parser(total_size)
 		}
 
+		loading_config = true
 		first_chunk = false
 	}
 

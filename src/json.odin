@@ -292,7 +292,7 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 // this is gross + brittle. I'm sorry. I need a better way to do JSON streaming
 load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 	p := &jp.p
-	set_next_chunk(&jp.p, start, chunk)
+	set_next_chunk(p, start, chunk)
 	hot_loop: for {
 		tok, state := get_next_token(jp)
 
