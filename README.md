@@ -35,10 +35,12 @@ They look like this:
 
 `tid` - thread id, u32
 `pid` - process id, u32
+
 All tids and pids must be between 0 and u32_MAX, as whole values
 
 `ts`  - timestamp, a double, in microseconds
 `dur` - timestamp, a double, in microseconds
+
 (A timestamp of 1 starts at 1 μs)
 
 ## Event Types
@@ -119,3 +121,4 @@ ex:
 	{"cat":"function", "ph": "E", "pid": 0, "tid": 0, "ts": 3}
 ]
 ```
+Complete events can be unsorted
