@@ -21,30 +21,42 @@ They look like this:
 (spall doesn't care about trailing commas and close brackets are not required, to ease file creation / event streaming)
 
 ### Field Types
-All tids and pids must be between 0 and u32_MAX, as integer values
-Timestamps and durations are doubles, in microseconds. A timestamp of 1, starts at 1 μs
 
-The "ph" field contains the event type
+`cat` - Category of event. Currently unused
+
+`name` - the name of the event, a string
+
+`ph` - The type of event
 |    Type    | Symbol  |
 |------------|----------|
 |    Begin   |   "B"   |
 |    End     |   "E"   |
 | Complete   |   "X"   |
 
+`tid` - thread id, u32
+`pid` - process id, u32
+All tids and pids must be between 0 and u32_MAX, as whole values
+
+`ts`  - timestamp, a double, in microseconds
+`dur` - timestamp, a double, in microseconds
+(A timestamp of 1 starts at 1 μs)
+
+## Event Types
+
 Spall currently supports only Begin, End, and Complete events
 
-### Complete event
+### Complete
 ```
 {"cat":"function", "name":"foo", "ph": "X", "pid": 0, "tid": 0, "ts": 0, "dur": 1},
 ```
 Complete events require a duration field, because they track a function's start/end all in one
 
-### Begin event
+### Begin
 ```
 {"cat":"function", "name":"myfunction", "ph": "B", "pid": 0, "tid": 0, "ts": 0},
 ```
 
-### End Event
+### End
 ```
 {"cat":"function", "ph": "E", "pid": 0, "tid": 0, "ts": 0},
 ```
