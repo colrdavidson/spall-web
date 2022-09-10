@@ -37,6 +37,7 @@ print('Compiling...')
 subprocess.run([
     odin,
     'build', 'src',
+    '-collection:formats=formats',
     '-target:js_wasm32',
     f"-out:{wasm_out}",
     *build_str,

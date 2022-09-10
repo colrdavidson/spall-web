@@ -5,29 +5,7 @@ import "core:os"
 import "core:encoding/json"
 import "core:strconv"
 import "core:strings"
-
-BinEventType :: enum u8 {
-	Begin,
-	End,
-}
-BinHeader :: struct #packed {
-	magic:          u64,
-	version:        u64,
-	timestamp_unit: f64,
-}
-BeginEvent :: struct #packed {
-	type:     BinEventType,
-	pid:      u32,
-	tid:      u32,
-	time:     f64,
-	name_len: u8,
-}
-EndEvent :: struct #packed {
-	type: BinEventType,
-	pid:  u32,
-	tid:  u32,
-	time: f64,
-}
+import "formats:spall"
 
 Trace :: struct {
 	otherData: map[string]any,
@@ -63,36 +41,48 @@ main :: proc() {
 
 	buf: [dynamic]u8
 
-	header := BinHeader{magic = 0x0BADF00D, version = 0, timestamp_unit = 1}
-	header_bytes := transmute([size_of(BinHeader)]u8)header
+	header := spall.Header{magic = spall.MAGIC, version = 0, timestamp_unit = 1}
+	header_bytes := transmute([size_of(spall.Header)]u8)header
 	append(&buf, ..header_bytes[:])
 
+	/*
+		{"cat":"function", "name":"main", "ph": "X", "pid": 0, "tid": 0, "ts": 0, "dur": 1},
+		{"cat":"function", "name":"myfunction", "ph": "B", "pid": 0, "tid": 0, "ts": 0},
+		{"cat":"function", "ph": "E", "pid": 0, "tid": 0, "ts": 0}
+	*/
+
 	for event in trace.traceEvents {
-		name_len := min(len(event.name), 255)
-		name     := event.name[:name_len]
+		switch event.ph {
+		case "X", "B": // Complete or Begin Event
+			name_len := min(len(event.name), 255)
+			name     := event.name[:name_len]
 
-		begin := BeginEvent {
-		 	type = .Begin,
-		 	pid  = event.pid,
-		 	tid  = event.tid,
-		 	time = event.ts,
-		 	name_len = u8(name_len),
-	 	}
-		begin_bytes := transmute([size_of(BeginEvent)]u8)begin
-		append(&buf, ..begin_bytes[:])
-		append(&buf, name)
+			begin := spall.Begin_Event {
+			 	type = .Begin,
+			 	pid  = event.pid,
+			 	tid  = event.tid,
+			 	time = event.ts,
+			 	name_len = u8(name_len),
+		 	}
 
-		end := EndEvent {
-		 	type = .End,
-		 	pid  = event.pid,
-		 	tid  = event.tid,
-		 	time = event.ts + event.dur,
-	 	}
-		end_bytes := transmute([size_of(EndEvent)]u8)end
-		append(&buf, ..end_bytes[:])
+			begin_bytes := transmute([size_of(spall.Begin_Event)]u8)begin
+			append(&buf, ..begin_bytes[:])
+			append(&buf, name)
+		}
+
+		switch event.ph {
+		case "X", "E": // Complete or End Event
+			end := spall.End_Event {
+			 	type = .End,
+			 	pid  = event.pid,
+			 	tid  = event.tid,
+			 	time = event.ts + event.dur,
+		 	}
+			end_bytes := transmute([size_of(spall.End_Event)]u8)end
+			append(&buf, ..end_bytes[:])
+		}
 	}
-
-	out_file, _ := strings.replace(os.args[1], ".json", ".flint", 1)
+	out_file := fmt.tprintf("%v.spall", os.args[1])
 
 	if os.write_entire_file(out_file, buf[:]) {
 		fmt.printf("Done, wrote %v events to %v (%v bytes)\n", len(trace.traceEvents), out_file, len(buf))
