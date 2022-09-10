@@ -1,6 +1,121 @@
 // SPDX-FileCopyrightText: © 2022 Phillip Trudeau-Tavara <pmttavara@protonmail.com>
 // SPDX-License-Identifier: 0BSD
 
+
+/* TODO
+
+Core API:
+
+  - Completely contextless; you pass in params to begin()/end(), get a packed begin/end struct
+      - Simple, handmade, user has full control and full responsibility
+
+Optional Helper APIs:
+
+  - Buffered-writing API
+      - Caller allocates and stores a buffer for multiple events
+      - begin()/end() writes chunks to the buffer
+      - Function invokes a callback when the buffer is full and needs flushing
+          - Can a callback be avoided? The function indicates when the buffer must be flushed?
+
+  - Compression API: would require a mutexed lockable context (yuck...)
+      - Either using a ZIP library, a name cache + TIDPID cache, or both (but ZIP is likely more than enough!!!)
+      - begin()/end() writes compressed chunks to a caller-determined destination
+          - The destination can be the buffered-writing API or a custom user destination
+      - Ultimately need to take a lock with some granularity... can that be the caller's responsibility?
+
+  - fopen()/fwrite() API: requires a context (no mutex needed, since fwrite() takes a lock)
+      - begin()/end() writes chunks to a FILE*
+          - before writing them to disk, the chunks can optionally be sent through the compression API
+              - is this opt-in or opt-out?
+          - the write to disk can optionally use the buffered writing API
+
+
+Example Threaded Implementation:
+    enum { RING_BUFFER_SIZE = 65536 };
+    struct Event {
+        double when;
+        const char *name;
+    };
+    struct RegisteredThread {
+        uint32_t pid;
+        uint32_t tid;
+        _Atomic uint64_t read_head;
+        _Atomic uint64_t write_head;
+#ifdef DYNAMIC_STRINGS
+        void *allocator_userdata;
+#endif
+        Event events[RING_BUFFER_SIZE];
+    };
+    struct ProfileContext {
+        cnd_t recording;
+        bool never_drop_events;
+        Mutex mutex; {
+            RegisteredThread *registered_threads;
+            SpallContext ctx;
+        }
+    };
+
+    ProfileContext profile_init(, bool start_recording) {
+        
+    }
+
+    void output_profile(ProfileContext *profile) {
+        mutex_lock(&profile->mutex); {
+            for (auto &thread : registered_threads) {
+                if (thread.read_head <= thread.write_head - (RING_BUFFER_SIZE - 1)) {
+                    printf(!"Ring tear. Increase the ring buffer size! :(");
+                    SpallTraceBeginTidPid(&profile->ctx, "Ring tear. Increase the ring buffer size! :(", event.when, thread.tid, thread.pid);
+                    thread.read_head = 0xffffffffffffffffull;
+                    continue; // TODO: depth recovery
+                }
+                while (thread.read_head < thread.write_head) {
+                    Event event = thread.events[thread.read_head & (RING_BUFFER_SIZE - 1)];
+                    if (!event.is_end) {
+                        SpallTraceBeginTidPid(&profile->ctx, event.name, event.when, thread.tid, thread.pid);
+                    } else {
+                        SpallTraceEndTidPid(&profile->ctx, event.when, thread.tid, thread.pid);
+                    }
+                    ++thread.read_head; // atomic
+                }
+            }
+        }
+        mutex_unlock(&profile->mutex);
+        SpallFlush();
+    }
+
+    int output_thread(void *userdata) {
+        ProfileContext *profile = (ProfileContext *)userdata;
+        while (true) {
+            cond_wait(profile->recording);
+            output_profile();
+            Sleep(1);
+        }
+    }
+
+    EventID trace_begin(ProfileContext *profile, RegisteredThread *thread, const char *name) {
+#ifdef DYNAMIC_STRINGS
+        SPALL_FREE(thread->events[thread->write_head & (RING_BUFFER_SIZE - 1)].name, thread->allocator_userdata);
+        name = SPALL_STRDUP(name, thread->allocator_userdata);
+#endif
+        thread->events[thread->write_head & (RING_BUFFER_SIZE - 1)] = { false, thread->thread_depth++, name, __rdtsc() };
+        ++thread->write_head; // atomic
+    }
+    void trace_end(ProfileContext *profile, RegisteredThread *thread, EventID id) {
+        thread->events[thread->write_head & (RING_BUFFER_SIZE - 1)] = { true, id, thread->events[thread->write_head & (RING_BUFFER_SIZE - 1)].name, __rdtsc() };
+        ++thread->write_head; // atomic
+    }
+
+    RegisteredThread *thread_init(ProfileContext *profile, u32 pid, u32 tid, u8 ring_buffer_size_power) {
+        
+    }
+    void thread_quit(RegisteredThread *) {
+        
+    }
+*/
+
+
+
+
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,7 +127,7 @@
 #pragma pack(push, 1)
 typedef struct FlintHeader {
     uint64_t magic_header; // = 0x0BADF00D
-    uint64_t version; // = 0 to start
+    uint64_t version; // = 0
     double timestamp_unit;
     uint8_t name_cache_power; // must be between 0 and 16 inclusive, defaults to 10
 } FlintHeader;
@@ -74,11 +189,40 @@ typedef struct FlintContext {
     FlintCacheEntry *cache;
 } FlintContext;
 
-inline bool FlintFlush(FlintContext *ctx) {
-    if (!ctx) return false;
-    if (!ctx->file) return false;
-    if (fflush(ctx->file)) return false;
+typedef struct FlintWriteBuffer {
+    const uint32_t length;
+    uint32_t head;
+    void *data;
+} FlintWriteBuffer;
+inline bool Flint__BufferFlush(FlintWriteBuffer *wb, FILE *f) {
+    if (!wb->head) return true;
+    if (fwrite(wb->data, wb->head, 1, f) != 1) return false;
+    wb->head = 0;
     return true;
+}
+inline bool Flint__BufferWrite(FlintWriteBuffer *wb, FILE *f, void *p, size_t n) {
+    assert(wb->head <= wb->length);
+    if (wb->head + n > wb->length && !Flint__BufferFlush(wb, f)) return false;
+    if (n > wb->length) return fwrite(p, n, 1, f);
+    memcpy((char *)wb->data + wb->head, p, n);
+    wb->head += n;
+    return true;
+}
+
+char FlintSingleThreadedWriteBuffer_Data[1 << 16];
+static FlintWriteBuffer FlintSingleThreadedWriteBuffer = {1 << 16, 0, FlintSingleThreadedWriteBuffer_Data};
+
+inline bool FlintFlush(FlintContext *ctx, FlintWriteBuffer *wb) {
+    bool result = true;
+    FlintWriteBuffer wb_ = {0}; if (!wb) wb = &wb_;
+    if (ctx && ctx->file) {
+        if (!Flint__BufferFlush(wb, ctx->file)) result = false;
+        if (!fflush(ctx->file)) result = false;
+    } else {
+        wb->head = 0;
+        result &= !ctx; // not a failure if there is no context
+    }
+    return result;
 }
 
 inline void FlintQuit(FlintContext *ctx) {
@@ -212,7 +356,8 @@ static bool use_cache = false; // @Hack
 int begin_payload_length = 0;
 
 // Caller has to take a lock around this function!
-inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
+inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
+    FlintWriteBuffer wb_ = {0}; if (!wb) wb = &wb_;
     if (!ctx) return false;
     if (!name) return false;
     if (!ctx->file) return false;
@@ -246,7 +391,7 @@ inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char 
                 ev.type = FlintType_BeginCacheHit;
                 ev.when.floating = when;
                 ev.name_slot = slot;
-                if (fwrite(&ev, sizeof(ev), 1, ctx->file) != 1) return false;
+                if (!Flint__BufferWrite(wb, ctx->file, &ev, sizeof(ev))) return false;
                 begin_payload_length += sizeof(ev);
             } else {
                 // Write new literal
@@ -257,7 +402,7 @@ inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char 
                 ev.event.when.floating = when;
                 ev.event.name.length = (uint8_t)name_len;
                 memcpy(ev.event.name.bytes, name, name_len);
-                if (fwrite(&ev, sizeof(FlintBeginEvent) + name_len - 1, 1, ctx->file) != 1) return false;
+                if (!Flint__BufferWrite(wb, ctx->file, &ev, sizeof(FlintBeginEvent) + name_len - 1)) return false;
                 begin_payload_length += sizeof(FlintBeginEvent) + name_len - 1;
 
                 // Overwrite hash entry if longer
@@ -274,27 +419,28 @@ inline bool FlintTraceBeginLenTidPid(FlintContext *ctx, double when, const char 
             ev.event.when.floating = when;
             ev.event.name.length = (uint8_t)name_len;
             memcpy(ev.event.name.bytes, name, name_len);
-            if (fwrite(&ev, sizeof(FlintBeginEvent) + name_len - 1, 1, ctx->file) != 1) return false;
+            if (!Flint__BufferWrite(wb, ctx->file, &ev, sizeof(FlintBeginEvent) + name_len - 1)) return false;
             begin_payload_length += sizeof(FlintBeginEvent) + name_len - 1;
         }
 
     }
     return true;
 }
-inline bool FlintTraceBeginTidPid(FlintContext *ctx, double when, const char *name, uint32_t tid, uint32_t pid) {
+inline bool FlintTraceBeginTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, uint32_t tid, uint32_t pid) {
     unsigned long name_len;
     if (!name) return false;
     name_len = strlen(name);
     if (!name_len) return false;
-    return FlintTraceBeginLenTidPid(ctx, when, name, (signed long)name_len, tid, pid);
+    return FlintTraceBeginLenTidPid(ctx, wb, when, name, (signed long)name_len, tid, pid);
 }
-inline bool FlintTraceBeginLenTid(FlintContext *ctx, double when, const char *name, signed long name_len, uint32_t tid) { return FlintTraceBeginLenTidPid(ctx, when, name, name_len, tid, 0); }
-inline bool FlintTraceBeginLen   (FlintContext *ctx, double when, const char *name, signed long name_len)               { return FlintTraceBeginLenTidPid(ctx, when, name, name_len,   0, 0); }
-inline bool FlintTraceBeginTid   (FlintContext *ctx, double when, const char *name, uint32_t tid)                       { return FlintTraceBeginTidPid   (ctx, when, name,           tid, 0); }
-inline bool FlintTraceBegin      (FlintContext *ctx, double when, const char *name)                                     { return FlintTraceBeginTidPid   (ctx, when, name,             0, 0); }
+inline bool FlintTraceBeginLenTid(FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid) { return FlintTraceBeginLenTidPid(ctx, wb, when, name, name_len, tid, 0); }
+inline bool FlintTraceBeginLen   (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len)               { return FlintTraceBeginLenTidPid(ctx, wb, when, name, name_len,   0, 0); }
+inline bool FlintTraceBeginTid   (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, uint32_t tid)                       { return FlintTraceBeginTidPid   (ctx, wb, when, name,           tid, 0); }
+inline bool FlintTraceBegin      (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name)                                     { return FlintTraceBeginTidPid   (ctx, wb, when, name,             0, 0); }
 
-inline bool FlintTraceEndTidPid(FlintContext *ctx, double when, uint32_t tid, uint32_t pid) {
+inline bool FlintTraceEndTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, uint32_t tid, uint32_t pid) {
     FlintEndEvent ev;
+    FlintWriteBuffer wb_ = {0}; if (!wb) wb = &wb_;
     if (!ctx) return false;
     if (!ctx->file) return false;
     if (!ctx->cache) return false;
@@ -313,12 +459,12 @@ inline bool FlintTraceEndTidPid(FlintContext *ctx, double when, uint32_t tid, ui
                     ev.when.floating * ctx->timestamp_unit)
             <= 0) return false;
     } else {
-        if (fwrite(&ev, sizeof(ev), 1, ctx->file) != 1) return false;
+        if (!Flint__BufferWrite(wb, ctx->file, &ev, sizeof(ev))) return false;
     }
     return true;
 }
-inline bool FlintTraceEndTid(FlintContext *ctx, double when, uint32_t tid) { return FlintTraceEndTidPid(ctx, when, tid, 0); }
-inline bool FlintTraceEnd   (FlintContext *ctx, double when)               { return FlintTraceEndTidPid(ctx, when,   0, 0); }
+inline bool FlintTraceEndTid(FlintContext *ctx, FlintWriteBuffer *wb, double when, uint32_t tid) { return FlintTraceEndTidPid(ctx, wb, when, tid, 0); }
+inline bool FlintTraceEnd   (FlintContext *ctx, FlintWriteBuffer *wb, double when)               { return FlintTraceEndTidPid(ctx, wb, when,   0, 0); }
 
 /*
 Zero-Clause BSD (0BSD)
