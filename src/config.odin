@@ -75,11 +75,11 @@ event_buildsort_proc :: proc(a, b: Event) -> bool {
 	}
 	return a.timestamp < b.timestamp
 }
-event_rendersort_proc :: proc(a, b: Event) -> bool {
-	if a.depth == b.depth {
-		return a.timestamp < b.timestamp
-	}
+event_rendersort_step1_proc :: proc(a, b: Event) -> bool {
 	return a.depth < b.depth
+}
+event_rendersort_step2_proc :: proc(a, b: Event) -> bool {
+	return a.timestamp < b.timestamp
 }
 
 process_events :: proc(processes: ^[dynamic]Process) -> u16 {
@@ -137,7 +137,7 @@ process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 				tm.max_depth = max(tm.max_depth, event.depth)
 			}
 			total_max_depth = max(total_max_depth, tm.max_depth)
-			slice.sort_by(tm.events[:], event_rendersort_proc)
+			slice.sort_by(tm.events[:], event_rendersort_step1_proc)
 
 			i := 0
 			ev_start := 0
@@ -155,6 +155,10 @@ process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 
 			if len(tm.events) > 0 {
 				append(&tm.depths, tm.events[ev_start:i+1])
+			}
+
+			for depth_arr in tm.depths {
+				slice.sort_by(depth_arr, event_rendersort_step2_proc)
 			}
 		}
 	}
