@@ -105,15 +105,49 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		
 		p.pos += u32(event_sz)
 		return ev, .EventRead
+	case .Complete:
+		event_sz := u32(size_of(spall.Complete_Event))
+		if real_pos(p) + event_sz > p.total_size {
+			return TempEvent{}, .Finished
+		}
+		if int(chunk_pos(p) + event_sz) > len(p.data) {
+			return TempEvent{}, .PartialRead
+		}
+		event := (^spall.Complete_Event)(raw_data(p.data[chunk_pos(p):]))^
 
-	case .Custom_Data: fallthrough; // @Todo
-	case .Completion: fallthrough; // @Todo
-	case .Instant: fallthrough; // @Todo
+		if (real_pos(p) + event_sz + u32(event.name_len)) > p.total_size {
+			return TempEvent{}, .Finished
+		}
+		if int(chunk_pos(p) + event_sz + u32(event.name_len)) > len(p.data) {
+			return TempEvent{}, .PartialRead
+		}
+
+		name := string(p.data[chunk_pos(p)+event_sz:chunk_pos(p)+event_sz+u32(event.name_len)])
+		str, err := strings.intern_get(&p.intern, name)
+		if err != nil {
+			trap()
+		}
+
+		ev := TempEvent{
+			type = .Complete,
+			timestamp = event.time,
+			duration = event.duration,
+			thread_id = event.tid,
+			process_id = event.pid,
+			name = str,
+		}
+
+		p.pos += u32(event_sz) + u32(event.name_len)
+		return ev, .EventRead
+
+	case .Custom_Data:         fallthrough; // @Todo
+	case .Instant:             fallthrough; // @Todo
 	case .Overwrite_Timestamp: fallthrough; // @Todo
-	case .Update_Checksum: fallthrough; // @Todo
+	case .Update_Checksum:     fallthrough; // @Todo
 
 	case .Invalid: fallthrough;
 	case:
+		fmt.printf("Unknown/invalid chunk (%v)\n", type)
 		trap() // @Todo: Handle invalid chunks
 	}
 
@@ -136,6 +170,16 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 		}
 
 		#partial switch event.type {
+		case .Complete:
+			new_event := Event{
+				type = .Complete,
+				name = event.name,
+				duration = (event.duration) * stamp_scale,
+				timestamp = (event.timestamp) * stamp_scale,
+			}
+
+			event_count += 1
+			push_event(&processes, event.process_id, event.thread_id, new_event)
 		case .Begin:
 			tm, ok1 := &bande_p_to_t[event.process_id]
 			if !ok1 {
