@@ -191,9 +191,9 @@ main :: proc() {
 
 random_seed: u64
 
-get_current_window :: proc(cam: Camera, display_width: f64) -> (i64, i64) {
-	display_range_start := i64(to_world_x(cam, 0))
-	display_range_end   := i64(math.ceil(to_world_x(cam, display_width)))
+get_current_window :: proc(cam: Camera, display_width: f64) -> (f64, f64) {
+	display_range_start := to_world_x(cam, 0)
+	display_range_end   := to_world_x(cam, display_width)
 	return display_range_start, display_range_end
 }
 
@@ -342,16 +342,13 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
 	cam.current_scale = min(max(cam.current_scale, _pow(0.1, 12)), MAX_SCALE)
 
-	start_time, end_time := get_current_window(cam, display_width)
+	last_start_time, last_end_time := get_current_window(cam, display_width)
 
 	max_height := get_max_y_pan(processes[:], rect_height)
 	max_y_pan := max(+20 * em + max_height - graph_rect.size.y, 0)
 	min_y_pan := min(-20 * em, max_y_pan)
 	max_x_pan := max(+20 * em, 0)
 	min_x_pan := min(-20 * em + display_width + -(total_max_time - total_min_time) * cam.target_scale, max_x_pan)
-
-	//draw_line(Vec2{start_x + max_x_pan, 0}, Vec2{start_x + max_x_pan, display_height}, 2, Vec3{0,255,0})
-	//draw_line(Vec2{start_x + min_x_pan, 0}, Vec2{start_x + min_x_pan, display_height}, 2, Vec3{255,0,0})
 
 	// compute pan, scale + scroll
 	pan_delta := Vec2{}
@@ -416,6 +413,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 
+	start_time, end_time := get_current_window(cam, display_width)
 
 	// Draw time subdivision lines
 	mus_range := f64(end_time - start_time)
@@ -482,64 +480,80 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			row_text := fmt.tprintf("TID: %d", tm.thread_id)
 			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
 
-			for ev, e_idx in tm.events {
-				x := ev.timestamp - total_min_time
-				y := rect_height * f64(ev.depth - 1)
-			  	w := ev.duration * cam.current_scale
+			cur_y += h2_size
+			cur_depth_off := 0
+			for depth_arr, d_idx in tm.depths {
+				y := rect_height * f64(d_idx - 1)
 				h := rect_height
 
-				if w < 0.1 {
-					continue
+				start_idx := find_idx(depth_arr[:], start_time)
+				end_idx := find_idx(depth_arr[:], end_time)
+				if start_idx == -1 {
+					start_idx = 0
+				}
+				if end_idx == -1 {
+					end_idx = len(depth_arr) - 1
 				}
 
-				r := Rect{Vec2{x, y}, Vec2{w, h}}
+				scan_arr := depth_arr[start_idx:end_idx+1]
+				for ev, de_id in scan_arr {
+					x := ev.timestamp - total_min_time
+					w := ev.duration * cam.current_scale
 
-				r_x := (r.pos.x * cam.current_scale) + cam.pan.x + disp_rect.pos.x
-				r_y := r.pos.y + cur_y
-				dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
-
-				if !rect_in_rect(dr, disp_rect) {
-					continue
-				}
-
-				rect_color := color_choices[ev.depth - 1]
-				if int(selected_event.pid) == p_idx &&
-				   int(selected_event.tid) == t_idx &&
-				   int(selected_event.eid) == e_idx {
-					rect_color.x += 30
-					rect_color.y += 30
-					rect_color.z += 30
-				}
-
-				draw_rect(dr, rect_color)
-
-				if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
-					set_cursor("pointer")
-					if clicked {
-						selected_event = {i64(p_idx), i64(t_idx), i64(e_idx)}
-						clicked_on_rect = true
-					}
-				}
-
-				underhang := start_x - dr.pos.x
-				disp_w := min(dr.size.x - underhang, dr.size.x)
-
-				text_pad := (em / 2)
-				text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
-				max_chars := max(0, min(len(ev.name), text_width))
-				name_str := ev.name[:max_chars]
-
-				if len(name_str) > 4 || max_chars == len(ev.name) {
-					if max_chars != len(ev.name) {
-						name_str = fmt.tprintf("%s…", ev.name[:max_chars-1])
+					if w < 0.1 {
+						continue
 					}
 
+					r := Rect{Vec2{x, y}, Vec2{w, h}}
+					r_x := (r.pos.x * cam.current_scale) + cam.pan.x + disp_rect.pos.x
+					r_y := r.pos.y + cur_y
+					dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
 
-					str_width := measure_text(name_str, p_font_size, monospace_font)
-					str_x := max(dr.pos.x, start_x) + text_pad
+					if !rect_in_rect(dr, disp_rect) {
+						continue
+					}
 
-					draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
+					e_idx := cur_depth_off + start_idx + de_id
+					rect_color := color_choices[d_idx]
+					if int(selected_event.pid) == p_idx &&
+					   int(selected_event.tid) == t_idx &&
+					   int(selected_event.eid) == e_idx {
+						rect_color.x += 30
+						rect_color.y += 30
+						rect_color.z += 30
+					}
+
+					draw_rect(dr, rect_color)
+
+					if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
+						set_cursor("pointer")
+						if clicked {
+							selected_event = {i64(p_idx), i64(t_idx), i64(e_idx)}
+							clicked_on_rect = true
+						}
+					}
+
+					underhang := start_x - dr.pos.x
+					disp_w := min(dr.size.x - underhang, dr.size.x)
+
+					text_pad := (em / 2)
+					text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
+					max_chars := max(0, min(len(ev.name), text_width))
+					name_str := ev.name[:max_chars]
+
+					if len(name_str) > 4 || max_chars == len(ev.name) {
+						if max_chars != len(ev.name) {
+							name_str = fmt.tprintf("%s…", ev.name[:max_chars-1])
+						}
+
+
+						str_width := measure_text(name_str, p_font_size, monospace_font)
+						str_x := max(dr.pos.x, start_x) + text_pad
+
+						draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
+					}
 				}
+				cur_depth_off += len(depth_arr)
 			}
 			cur_y += thread_advance
 		}
