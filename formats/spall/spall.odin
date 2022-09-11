@@ -6,11 +6,16 @@ Header :: struct #packed {
 	magic:          u64,
 	version:        u64,
 	timestamp_unit: f64,
+	must_be_0:      u64,
 }
 
 Event_Type :: enum u8 {
+	Invalid,
+	Completion,
 	Begin,
 	End,
+	Instant,
+	StreamOver
 }
 
 Begin_Event :: struct #packed {
