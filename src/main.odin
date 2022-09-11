@@ -333,14 +333,16 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	old_scale := cam.target_scale
 
-	MAX_SCALE :: 100000
+	max_scale := 10000.0
+	min_scale := 0.5 * display_width / (total_max_time - total_min_time)
 	/* if pt_in_rect(mouse_pos, disp_rect) */ {
 		cam.target_scale *= _pow(1.0025, -scroll_val_y)
+		cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
 	}
 	scroll_val_y = 0
 
 	cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
-	cam.current_scale = min(max(cam.current_scale, _pow(0.1, 12)), MAX_SCALE)
+	cam.current_scale = min(max(cam.current_scale, min_scale), max_scale)
 
 	last_start_time, last_end_time := get_current_window(cam, display_width)
 
@@ -427,8 +429,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	} else if rem < 0.6 {
 		division -= (division / 2)
 	}
-
-	division = max(1, division)
 
 	display_range_start := -cam.pan.x / cam.current_scale
 	display_range_end := (display_width - cam.pan.x) / cam.current_scale
@@ -585,7 +585,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			cur_time := tick_time / ONE_MILLI
 			time_str = fmt.tprintf("%.3f ms", cur_time)
 		} else {
-			time_str = fmt.tprintf("%.0f μs", tick_time)
+			time_str = fmt.tprintf("%.2f μs", tick_time)
 		}
 
 		text_width := measure_text(time_str, p_font_size, default_font)
