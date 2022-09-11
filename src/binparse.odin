@@ -22,7 +22,6 @@ Parser :: struct {
 	total_size: u32,
 
 	intern: strings.Intern,
-	cur_event: Event,
 }
 
 real_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos }
@@ -33,13 +32,12 @@ init_parser :: proc(size: u32) -> Parser {
 	p.pos    = 0
 	p.offset = 0
 	p.total_size = size
-	p.cur_event = Event{}
 	strings.intern_init(&p.intern)
 
 	return p
 }
 
-get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
+get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
 
@@ -47,10 +45,10 @@ get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
 
 	header_sz := u32(size_of(u64))
 	if real_pos(p) + header_sz > p.total_size {
-		return Event{}, .Finished
+		return TempEvent{}, .Finished
 	}
 	if int(chunk_pos(p) + header_sz) > len(p.data) {
-		return Event{}, .PartialRead
+		return TempEvent{}, .PartialRead
 	}
 
 	type := (^spall.Event_Type)(raw_data(p.data[chunk_pos(p):]))^
@@ -58,18 +56,18 @@ get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
 	case .Begin:
 		event_sz := u32(size_of(spall.Begin_Event))
 		if real_pos(p) + event_sz > p.total_size {
-			return Event{}, .Finished
+			return TempEvent{}, .Finished
 		}
 		if int(chunk_pos(p) + event_sz) > len(p.data) {
-			return Event{}, .PartialRead
+			return TempEvent{}, .PartialRead
 		}
 		event := (^spall.Begin_Event)(raw_data(p.data[chunk_pos(p):]))^
 
 		if (real_pos(p) + event_sz + u32(event.name_len)) > p.total_size {
-			return Event{}, .Finished
+			return TempEvent{}, .Finished
 		}
 		if int(chunk_pos(p) + event_sz + u32(event.name_len)) > len(p.data) {
-			return Event{}, .PartialRead
+			return TempEvent{}, .PartialRead
 		}
 
 		name := string(p.data[chunk_pos(p)+event_sz:chunk_pos(p)+event_sz+u32(event.name_len)])
@@ -78,7 +76,7 @@ get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
 			trap()
 		}
 
-		ev := Event{
+		ev := TempEvent{
 			type = .Begin,
 			timestamp = event.time,
 			thread_id = event.tid,
@@ -91,14 +89,14 @@ get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
 	case .End:
 		event_sz := u32(size_of(spall.End_Event))
 		if real_pos(p) + event_sz > p.total_size {
-			return Event{}, .Finished
+			return TempEvent{}, .Finished
 		}
 		if int(chunk_pos(p) + event_sz) > len(p.data) {
-			return Event{}, .PartialRead
+			return TempEvent{}, .PartialRead
 		}
 		event := (^spall.End_Event)(raw_data(p.data[chunk_pos(p):]))^
 
-		ev := Event{
+		ev := TempEvent{
 			type = .End,
 			timestamp = event.time,
 			thread_id = event.tid,
@@ -117,7 +115,7 @@ get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
 		trap() // @Todo: Handle invalid chunks
 	}
 
-	return Event{}, .PartialRead
+	return TempEvent{}, .PartialRead
 }
 
 load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
@@ -145,7 +143,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 
 			ts, ok2 := tm[event.thread_id]
 			if !ok2 {
-				event_stack := new(queue.Queue(Event), scratch_allocator)
+				event_stack := new(queue.Queue(TempEvent), scratch_allocator)
 				queue.init(event_stack, 0, scratch_allocator)
 				tm[event.thread_id] = event_stack
 				ts = event_stack
@@ -159,16 +157,14 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 						ev := queue.pop_back(ts)
 
 						new_event := Event{
-							name = ev.name,
 							type = .Complete,
+							name = ev.name,
 							duration = (event.timestamp - ev.timestamp) * stamp_scale,
 							timestamp = (ev.timestamp) * stamp_scale,
-							thread_id = ev.thread_id,
-							process_id = ev.process_id,
 						}
 
 						event_count += 1
-						push_event(&processes, new_event)
+						push_event(&processes, event.process_id, event.thread_id, new_event)
 					}
 				}
 			}

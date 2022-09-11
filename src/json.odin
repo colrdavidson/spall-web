@@ -43,6 +43,7 @@ JSONParser :: struct {
 
 	// Event parsing state
 	events_id: int,
+	cur_event: TempEvent,
 	cur_event_id: int,
 	obj_map: map[string]string,
 	seen_dur: bool,
@@ -167,6 +168,7 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 
 	jp.events_id    = -1
 	jp.cur_event_id = -1
+	jp.cur_event = TempEvent{}
 	jp.seen_dur = false
 	jp.current_parent = IdPair{}
 
@@ -364,35 +366,35 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 					return
 				}
 
-				p.cur_event.name = str
+				jp.cur_event.name = str
 			}
 
 			switch key {
 			case "ph":
 				if value == "X" {
-					p.cur_event.type = .Complete
+					jp.cur_event.type = .Complete
 				} else if value == "B" {
-					p.cur_event.type = .Begin
+					jp.cur_event.type = .Begin
 				} else if value == "E" {
-					p.cur_event.type = .End
+					jp.cur_event.type = .End
 				}
 			case "dur": 
 				dur, ok := strconv.parse_f64(value)
 				if !ok { continue }
-				p.cur_event.duration = dur
+				jp.cur_event.duration = dur
 				jp.seen_dur = true
 			case "ts": 
 				ts, ok := strconv.parse_f64(value)
 				if !ok { continue }
-				p.cur_event.timestamp = ts
+				jp.cur_event.timestamp = ts
 			case "tid": 
 				tid, ok := strconv.parse_u64(value)
 				if !ok { continue }
-				p.cur_event.thread_id = u32(tid)
+				jp.cur_event.thread_id = u32(tid)
 			case "pid": 
 				pid, ok := strconv.parse_u64(value)
 				if !ok { continue }
-				p.cur_event.process_id = u32(pid)
+				jp.cur_event.process_id = u32(pid)
 			}
 
 			continue
@@ -400,51 +402,56 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 
 		// got the whole event
 		if state == .ScopeExited && tok.id == jp.cur_event_id {
-			switch p.cur_event.type {
+			switch jp.cur_event.type {
 			case .Complete:
 				if jp.seen_dur {
 					event_count += 1
-					push_event(&processes, p.cur_event)
+
+					new_event := Event{
+						type = .Complete,
+						name = jp.cur_event.name,
+						duration = jp.cur_event.duration,
+						timestamp = jp.cur_event.timestamp,
+					}
+					push_event(&processes, jp.cur_event.process_id, jp.cur_event.thread_id, new_event)
 				}
 			case .Begin:
-				tm, ok1 := &bande_p_to_t[p.cur_event.process_id]
+				tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]
 				if !ok1 {
-					bande_p_to_t[p.cur_event.process_id] = make(ThreadMap, 0, scratch_allocator)
-					tm = &bande_p_to_t[p.cur_event.process_id]
+					bande_p_to_t[jp.cur_event.process_id] = make(ThreadMap, 0, scratch_allocator)
+					tm = &bande_p_to_t[jp.cur_event.process_id]
 				}
 
-				ts, ok2 := tm[p.cur_event.thread_id]
+				ts, ok2 := tm[jp.cur_event.thread_id]
 				if !ok2 {
-					token_stack := new(queue.Queue(Event), scratch_allocator)
+					token_stack := new(queue.Queue(TempEvent), scratch_allocator)
 					queue.init(token_stack, 0, scratch_allocator)
-					tm[p.cur_event.thread_id] = token_stack
+					tm[jp.cur_event.thread_id] = token_stack
 					ts = token_stack
 				}
 
-				queue.push_back(ts, p.cur_event)
+				queue.push_back(ts, jp.cur_event)
 			case .End:
-				if tm, ok1 := &bande_p_to_t[p.cur_event.process_id]; ok1 {
-					if ts, ok2 := tm[p.cur_event.thread_id]; ok2 {
+				if tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]; ok1 {
+					if ts, ok2 := tm[jp.cur_event.thread_id]; ok2 {
 						if queue.len(ts^) > 0 {
 							ev := queue.pop_back(ts)
 
 							new_event := Event{
-								name = ev.name,
 								type = .Complete,
-								duration = p.cur_event.timestamp - ev.timestamp,
+								name = ev.name,
+								duration = jp.cur_event.timestamp - ev.timestamp,
 								timestamp = ev.timestamp,
-								thread_id = ev.thread_id,
-								process_id = ev.process_id,
 							}
 
 							event_count += 1
-							push_event(&processes, new_event)
+							push_event(&processes, ev.process_id, ev.thread_id, new_event)
 						}
 					}
 				}
 			}
 
-			p.cur_event = Event{}
+			jp.cur_event = TempEvent{}
 			jp.cur_event_id = -1
 			jp.seen_dur = false
 			jp.current_parent = IdPair{}
