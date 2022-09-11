@@ -14,7 +14,7 @@ RELEASE = len(sys.argv) > 1 and sys.argv[1] == 'release'
 EXTRARELEASE = len(sys.argv) > 1 and sys.argv[1] == 'extrarelease'
 
 odin = 'odin'
-program_name = 'foobar'
+program_name = 'spall'
 
 [os.remove(f) for f in glob.iglob('build/dist/*', recursive=True)]
 for ext in ['*.o', '*.wasm', '*.wat']:
@@ -26,7 +26,7 @@ build_str = []
 if RELEASE:
     build_str = ['-o:speed']
 elif EXTRARELEASE:
-    build_str = ['-debug', '-o:speed']
+    build_str = ['-o:speed']
 else:
     build_str = ['-debug']
 
