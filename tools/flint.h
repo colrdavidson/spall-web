@@ -135,12 +135,16 @@ typedef struct FlintString {
 } FlintString;
 
 typedef enum FlintEventType {
-    FlintType_Begin,
-    FlintType_End,
+    FlintEventType_Invalid    = 0,
+    FlintEventType_Completion = 1,
+    FlintEventType_Begin      = 2,
+    FlintEventType_End        = 3,
+    FlintEventType_Instant    = 4,
+    FlintEventType_StreamOver = 5
 } FlintEventType;
 
 typedef struct FlintBeginEvent {
-    uint8_t type; // = FlintType_Begin
+    uint8_t type; // = FlintEventType_Begin
     uint32_t pid;
     uint32_t tid;
     double when;
@@ -148,7 +152,7 @@ typedef struct FlintBeginEvent {
 } FlintBeginEvent;
 
 typedef struct FlintEndEvent {
-    uint8_t type; // = FlintType_End
+    uint8_t type; // = FlintEventType_End
     uint32_t pid;
     uint32_t tid;
     double when;
@@ -310,7 +314,7 @@ bool FlintTraceBeginLenTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double wh
     // if (ctx->times_are_u64) return false;
     if (name_len <= 0) return false;
     if (name_len > 255) name_len = 255; // will be interpreted as truncated in the app (?)
-    ev.event.type = FlintType_Begin;
+    ev.event.type = FlintEventType_Begin;
     ev.event.pid = pid;
     ev.event.tid = tid;
     ev.event.when = when;
@@ -349,7 +353,7 @@ bool FlintTraceEndTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, u
     if (feof(ctx->file)) return false;
     if (ferror(ctx->file)) return false;
     // if (ctx->times_are_u64) return false;
-    ev.type = FlintType_End;
+    ev.type = FlintEventType_End;
     ev.pid = pid;
     ev.tid = tid;
     ev.when = when;
