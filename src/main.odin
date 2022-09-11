@@ -496,12 +496,53 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				}
 
 				scan_arr := depth_arr[start_idx:end_idx+1]
+				chunker_x := (scan_arr[0].timestamp - total_min_time) * cam.current_scale
+				chunker_w := 0.0
+
+
+				flush_chunker :: proc(chunker_w : ^f64, chunker_x, cur_y, y, h : f64, disp_rect : Rect, d_idx : int) {
+					r := Rect{Vec2{chunker_x, y}, Vec2{chunker_w^, h}}
+					r_x := chunker_x + cam.pan.x + disp_rect.pos.x
+					r_y := r.pos.y + cur_y
+					dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
+					rect_color := color_choices[d_idx]
+					//rect_color *= 0.9
+					draw_rect(dr, rect_color)
+
+					chunker_w^ = 0
+				}
+
 				for ev, de_id in scan_arr {
 					x := ev.timestamp - total_min_time
 					w := ev.duration * cam.current_scale
 
-					if w < 0.1 {
-						continue
+					xm := x * cam.current_scale
+					MIN_WIDTH :: 2.0
+					if w < MIN_WIDTH {
+						if de_id - 1 >= 0 {
+							ev_left := scan_arr[de_id - 1]
+							xl := (ev_left.timestamp - total_min_time) * cam.current_scale
+							wl := ev_left.duration * cam.current_scale
+							if xl + max(wl, MIN_WIDTH) >= xm {
+								chunker_w = max(xm + MIN_WIDTH - chunker_x, chunker_w)
+								continue
+							}
+						}
+						w = MIN_WIDTH
+					}
+
+					if chunker_w > 0 {
+						flush_chunker(&chunker_w, chunker_x, cur_y, y, h, disp_rect, d_idx)
+					}
+
+					chunker_x = x * cam.current_scale
+					if de_id + 1 < len(scan_arr) {
+						ev_right := scan_arr[de_id + 1]
+						xr := (ev_right.timestamp - total_min_time) * cam.current_scale
+						if xm + max(w, MIN_WIDTH) >= xr {
+							chunker_w = max(xr - chunker_x, w, chunker_w)
+							continue
+						}
 					}
 
 					r := Rect{Vec2{x, y}, Vec2{w, h}}
@@ -553,6 +594,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 						draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 					}
 				}
+				flush_chunker(&chunker_w, chunker_x, cur_y, y, h, disp_rect, d_idx)
 				cur_depth_off += len(depth_arr)
 			}
 			cur_y += thread_advance
