@@ -141,7 +141,7 @@ typedef struct FlintHeader {
     uint64_t magic_header; // = 0x0BADF00D
     uint64_t version; // = 0
     double timestamp_unit;
-    uint8_t reserved;
+    uint64_t must_be_0;
 } FlintHeader;
 
 typedef struct FlintString {
@@ -149,14 +149,14 @@ typedef struct FlintString {
     char bytes[1];
 } FlintString;
 
-typedef enum FlintEventType {
+enum {
     FlintEventType_Invalid    = 0,
     FlintEventType_Completion = 1,
     FlintEventType_Begin      = 2,
     FlintEventType_End        = 3,
     FlintEventType_Instant    = 4,
     FlintEventType_StreamOver = 5
-} FlintEventType;
+};
 
 typedef struct FlintBeginEvent {
     uint8_t type; // = FlintEventType_Begin
@@ -306,6 +306,7 @@ static FlintContext Flint__Init(const char *filename, double timestamp_unit, boo
         header.magic_header = 0x0BADF00D;
         header.version = 0;
         header.timestamp_unit = timestamp_unit;
+        header.must_be_0 = 0;
         if (fwrite(&header, sizeof(header), 1, ctx.file) != 1) {
             FlintQuit(&ctx);
             return ctx;

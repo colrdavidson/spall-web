@@ -36,7 +36,7 @@ BinHeader :: struct #packed {
 	magic: u64,
 	version: u64,
 	timestamp_unit: f64,
-	name_cache_power: u8, // must be between 0 and 16 inclusive
+	must_be_0: u64
 }
 BeginEvent :: struct #packed {
 	type: BinEventType,

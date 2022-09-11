@@ -7,13 +7,18 @@ import "core:strconv"
 import "core:strings"
 
 BinEventType :: enum u8 {
-	Begin,
-	End,
+	Invalid    = 0,
+	Completion = 1,
+	Begin      = 2,
+	End        = 3,
+	Instant    = 4,
+	StreamOver = 5
 }
 BinHeader :: struct #packed {
 	magic:          u64,
 	version:        u64,
 	timestamp_unit: f64,
+	must_be_0:      u64
 }
 BeginEvent :: struct #packed {
 	type:     BinEventType,
@@ -30,6 +35,7 @@ EndEvent :: struct #packed {
 }
 
 Trace :: struct {
+	displayTimeUnit: string,
 	otherData: map[string]any,
 	traceEvents: []struct{
 		cat:  string,
@@ -63,7 +69,10 @@ main :: proc() {
 
 	buf: [dynamic]u8
 
-	header := BinHeader{magic = 0x0BADF00D, version = 0, timestamp_unit = 1}
+	timestamp_unit := 1.0
+	if trace.displayTimeUnit == "ns" { timestamp_unit = 1000 }
+
+	header := BinHeader{magic = 0x0BADF00D, version = 0, timestamp_unit = timestamp_unit, must_be_0 = 0}
 	header_bytes := transmute([size_of(BinHeader)]u8)header
 	append(&buf, ..header_bytes[:])
 
@@ -71,25 +80,29 @@ main :: proc() {
 		name_len := min(len(event.name), 255)
 		name     := event.name[:name_len]
 
-		begin := BeginEvent {
-		 	type = .Begin,
-		 	pid  = event.pid,
-		 	tid  = event.tid,
-		 	time = event.ts,
-		 	name_len = u8(name_len),
-	 	}
-		begin_bytes := transmute([size_of(BeginEvent)]u8)begin
-		append(&buf, ..begin_bytes[:])
-		append(&buf, name)
+		if (event.ph == "B") {
+			begin := BeginEvent {
+				type = .Begin,
+				pid  = event.pid,
+				tid  = event.tid,
+				time = event.ts,
+				name_len = u8(name_len),
+ 			}
+			begin_bytes := transmute([size_of(BeginEvent)]u8)begin
+			append(&buf, ..begin_bytes[:])
+			append(&buf, name)
+		}
 
-		end := EndEvent {
-		 	type = .End,
-		 	pid  = event.pid,
-		 	tid  = event.tid,
-		 	time = event.ts + event.dur,
-	 	}
-		end_bytes := transmute([size_of(EndEvent)]u8)end
-		append(&buf, ..end_bytes[:])
+		if (event.ph == "E") {
+			end := EndEvent {
+				type = .End,
+				pid  = event.pid,
+				tid  = event.tid,
+				time = event.ts,
+			}
+			end_bytes := transmute([size_of(EndEvent)]u8)end
+			append(&buf, ..end_bytes[:])
+		}
 	}
 
 	out_file, _ := strings.replace(os.args[1], ".json", ".flint", 1)
