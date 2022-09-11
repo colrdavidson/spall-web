@@ -27,32 +27,32 @@ stop_bench :: proc(name: string) {
 	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f64(mem_range) / 1024 / 1024)
 }
 
-push_event :: proc(processes: ^[dynamic]Process, event: Event) {
-	p_idx, ok1 := process_map[event.process_id]
+push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32, event: Event) {
+	p_idx, ok1 := process_map[process_id]
 	if !ok1 {
 		append(processes, Process{
 			min_time = 0x7fefffffffffffff, 
-			process_id = event.process_id,
+			process_id = process_id,
 			threads = make([dynamic]Thread),
 			thread_map = make(map[u32]int, 0, scratch_allocator),
 		})
 		p_idx = len(processes) - 1
-		process_map[event.process_id] = p_idx
+		process_map[process_id] = p_idx
 	}
 
-	t_idx, ok2 := processes[p_idx].thread_map[event.thread_id]
+	t_idx, ok2 := processes[p_idx].thread_map[thread_id]
 	if !ok2 {
 		threads := &processes[p_idx].threads
 
 		append(threads, Thread{ 
 			min_time = 0x7fefffffffffffff, 
-			thread_id = event.thread_id,
+			thread_id = thread_id,
 			events = make([dynamic]Event),
 			depths = make([dynamic][]Event),
 		})
 
 		t_idx = len(threads) - 1
-		processes[p_idx].thread_map[event.thread_id] = t_idx
+		processes[p_idx].thread_map[thread_id] = t_idx
 	}
 
 	p := &processes[p_idx]
@@ -192,7 +192,7 @@ find_idx :: proc(events: []Event, val: f64) -> int {
 }
 
 
-ThreadMap :: distinct map[u32]^queue.Queue(Event)
+ThreadMap :: distinct map[u32]^queue.Queue(TempEvent)
 bande_p_to_t: map[u32]ThreadMap
 jp: JSONParser
 bp: Parser
@@ -253,12 +253,10 @@ finish_loading :: proc (p: ^Parser) {
 					type = .Complete,
 					duration = total_max_time - (ev.timestamp * stamp_scale),
 					timestamp = (ev.timestamp) * stamp_scale,
-					thread_id = ev.thread_id,
-					process_id = ev.process_id,
 				}
 
 				event_count += 1
-				push_event(&processes, new_event)
+				push_event(&processes, ev.process_id, ev.thread_id, new_event)
 			}
 
 		}

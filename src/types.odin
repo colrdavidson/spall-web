@@ -29,13 +29,20 @@ EventType :: enum u8 {
 	End
 }
 
-Event :: struct {
-	name: string,
+TempEvent :: struct {
 	type: EventType,
+	name: string,
 	duration: f64,
 	timestamp: f64,
 	thread_id: u32,
 	process_id: u32,
+}
+
+Event :: struct {
+	type: EventType,
+	name: string,
+	duration: f64,
+	timestamp: f64,
 	depth: u16,
 }
 
