@@ -10,12 +10,16 @@ Header :: struct #packed {
 }
 
 Event_Type :: enum u8 {
-	Invalid,
-	Completion,
-	Begin,
-	End,
-	Instant,
-	StreamOver
+	Invalid             = 0,
+	Custom_Data         = 1, // Basic readers can skip this.
+
+	Completion          = 2,
+	Begin               = 3,
+	End                 = 4,
+	Instant             = 5,
+
+	Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
+	Update_Checksum     = 7, // Verify rolling checksum. Basic readers/writers can ignore/omit this.
 }
 
 Begin_Event :: struct #packed {

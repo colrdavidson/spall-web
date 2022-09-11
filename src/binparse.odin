@@ -106,9 +106,11 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		p.pos += u32(event_sz)
 		return ev, .EventRead
 
+	case .Custom_Data: fallthrough; // @Todo
 	case .Completion: fallthrough; // @Todo
 	case .Instant: fallthrough; // @Todo
-	case .StreamOver: fallthrough; // @Todo
+	case .Overwrite_Timestamp: fallthrough; // @Todo
+	case .Update_Checksum: fallthrough; // @Todo
 
 	case .Invalid: fallthrough;
 	case:

@@ -150,12 +150,16 @@ typedef struct FlintString {
 } FlintString;
 
 enum {
-    FlintEventType_Invalid    = 0,
-    FlintEventType_Completion = 1,
-    FlintEventType_Begin      = 2,
-    FlintEventType_End        = 3,
-    FlintEventType_Instant    = 4,
-    FlintEventType_StreamOver = 5
+    FlintEventType_Invalid             = 0,
+    FlintEventType_Custom_Data         = 1, // Basic readers can skip this.
+
+    FlintEventType_Completion          = 2,
+    FlintEventType_Begin               = 3,
+    FlintEventType_End                 = 4,
+    FlintEventType_Instant             = 5,
+
+    FlintEventType_Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
+    FlintEventType_Update_Checksum     = 7, // Verify rolling checksum. Basic readers/writers can ignore/omit this.
 };
 
 typedef struct FlintBeginEvent {
