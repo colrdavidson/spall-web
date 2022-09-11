@@ -8,6 +8,7 @@ import "core:strings"
 import "formats:spall"
 
 Trace :: struct {
+	displayTimeUnit: string,
 	otherData: map[string]any,
 	traceEvents: []struct{
 		cat:  string,
@@ -41,7 +42,10 @@ main :: proc() {
 
 	buf: [dynamic]u8
 
-	header := spall.Header{magic = spall.MAGIC, version = 0, timestamp_unit = 1}
+	timestamp_unit := 1.0
+	if trace.displayTimeUnit == "ns" { timestamp_unit = 1000 }
+
+	header := spall.Header{magic = spall.MAGIC, version = 0, timestamp_unit = timestamp_unit, must_be_0 = 0}
 	header_bytes := transmute([size_of(spall.Header)]u8)header
 	append(&buf, ..header_bytes[:])
 

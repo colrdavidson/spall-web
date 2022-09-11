@@ -107,8 +107,14 @@ get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
 		
 		p.pos += u32(event_sz)
 		return ev, .EventRead
+
+	case .Completion: fallthrough; // @Todo
+	case .Instant: fallthrough; // @Todo
+	case .StreamOver: fallthrough; // @Todo
+
+	case .Invalid: fallthrough;
 	case:
-		trap()
+		trap() // @Todo: Handle invalid chunks
 	}
 
 	return Event{}, .PartialRead

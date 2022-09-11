@@ -68,8 +68,12 @@ End events automatically close the most recent begin event with the same pid and
 ## Spall Traces
 ```Odin
 BinEventType :: enum u8 {
-	Begin = 0,
-	End   = 1,
+	Invalid    = 0,
+	Completion = 1,
+	Begin      = 2,
+	End        = 3,
+	Instant    = 4,
+	StreamOver = 5,
 }
 
 BinHeader :: struct #packed {
