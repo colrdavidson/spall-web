@@ -47,6 +47,7 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 			min_time = 0x7fefffffffffffff, 
 			thread_id = event.thread_id,
 			events = make([dynamic]Event),
+			depths = make([dynamic][]Event),
 		})
 
 		t_idx = len(threads) - 1
@@ -67,12 +68,19 @@ push_event :: proc(processes: ^[dynamic]Process, event: Event) {
 
 pid_sort_proc :: proc(a, b: Process) -> bool { return a.min_time < b.min_time }
 tid_sort_proc :: proc(a, b: Thread) -> bool  { return a.min_time < b.min_time }
-event_sort_proc :: proc(a, b: Event) -> bool {
+event_buildsort_proc :: proc(a, b: Event) -> bool {
 	if a.timestamp == b.timestamp {
 		return a.duration > b.duration
 	}
 	return a.timestamp < b.timestamp
 }
+event_rendersort_proc :: proc(a, b: Event) -> bool {
+	if a.depth == b.depth {
+		return a.timestamp < b.timestamp
+	}
+	return a.depth < b.depth
+}
+
 process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 	total_max_depth : u16 = 0
 
@@ -85,7 +93,7 @@ process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 
 		// generate depth mapping
 		for tm in &process.threads {
-			slice.sort_by(tm.events[:], event_sort_proc)
+			slice.sort_by(tm.events[:], event_buildsort_proc)
 
 			queue.clear(&ev_stack)		
 			for event, e_idx in &tm.events {
@@ -128,12 +136,56 @@ process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 				tm.max_depth = max(tm.max_depth, event.depth)
 			}
 			total_max_depth = max(total_max_depth, tm.max_depth)
+			slice.sort_by(tm.events[:], event_rendersort_proc)
+
+			i := 0
+			ev_start := 0
+			cur_depth : u16 = 0
+			for ; i < len(tm.events) - 1; i += 1 {
+				ev := tm.events[i]
+				next_ev := tm.events[i+1]
+
+				if ev.depth != next_ev.depth {
+					append(&tm.depths, tm.events[ev_start:i+1])
+					ev_start = i + 1
+					cur_depth = next_ev.depth
+				}
+			}
+
+			if len(tm.events) > 0 {
+				append(&tm.depths, tm.events[ev_start:i+1])
+			}
 		}
 	}
 
 	slice.sort_by(processes[:], pid_sort_proc)
 	return total_max_depth
 }
+
+find_idx :: proc(events: []Event, val: f64) -> int {
+	low := 0
+	max := len(events)
+	high := max - 1
+
+	for low < high {
+		mid := (low + high) / 2
+
+		ev := events[mid]
+		ev_start := ev.timestamp - total_min_time
+		ev_end := ev_start + ev.duration
+
+		if (val >= ev_start && val <= ev_end) {
+			return mid
+		} else if ev_start < val && ev_end < val { 
+			low = mid + 1
+		} else { 
+			high = mid - 1
+		}
+	}
+
+	return low
+}
+
 
 ThreadMap :: distinct map[u32]^queue.Queue(Event)
 bande_p_to_t: map[u32]ThreadMap
@@ -276,6 +328,16 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 	return
 }
+
+/*
+default_config := `[
+	{"cat":"function", "name":"0", "ph":"X", "pid":0, "tid": 0, "ts": 0, "dur": 1},
+	{"cat":"function", "name":"1", "ph":"X", "pid":0, "tid": 0, "ts": 1, "dur": 1},
+	{"cat":"function", "name":"2", "ph":"X", "pid":0, "tid": 0, "ts": 3, "dur": 1},
+	{"cat":"function", "name":"3", "ph":"X", "pid":0, "tid": 0, "ts": 4, "dur": 1},
+	{"cat":"function", "name":"4", "ph":"X", "pid":0, "tid": 1, "ts": 1, "dur": 1},
+]`
+*/
 
 // default config courtesy of NeGate
 default_config := `

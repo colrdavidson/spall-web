@@ -45,6 +45,7 @@ Thread :: struct {
 
 	thread_id: u32,
 	events: [dynamic]Event,
+	depths: [dynamic][]Event,
 }
 
 Process :: struct {
