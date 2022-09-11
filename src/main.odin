@@ -299,7 +299,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	if finished_loading {
 		cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
-		selected_event := EventID{-1, -1, -1}
 
 		if event_count == 0 { total_min_time = 0; total_max_time = 1000 }
 		fmt.printf("min %f μs, max %f μs, range %f μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
