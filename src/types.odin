@@ -38,7 +38,7 @@ TempEvent :: struct {
 	process_id: u32,
 }
 
-Event :: struct {
+Event :: struct #packed {
 	type: EventType,
 	name: string,
 	duration: f64,
