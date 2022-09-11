@@ -277,7 +277,7 @@ static bool Flint__BufferFlush(FlintWriteBuffer *wb, FlintContext *ctx) {
     double time_end   = (FLINT_BUFFER_PROFILING_GET_TIME());
     char name[255];
     snprintf(name, sizeof(name), "Buffer Flush 0x%p", wb->data);
-    if (!FlintTraceCompleteTid(ctx, NULL, time_begin, time_end - time_begin, name, (uint32_t)(uintptr_t)wb->data)) return false;
+    if (!FlintTraceCompleteTid(ctx, NULL, time_begin, time_end - time_begin, name, (uintptr_t)wb->data % 1000000 + 4000000000)) return false;
 #endif
     wb->head = 0;
     return true;

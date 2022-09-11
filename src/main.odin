@@ -497,10 +497,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				}
 
 				name_color_idx :: proc(name: string) -> u32 {
-					ptr: rawptr = raw_data(name)
-					backing := transmute([size_of(rawptr)]byte)ptr
-					slice := backing[:]
-					return hash.fnv32a(slice) % u32(len(color_choices))
+					return u32(uintptr(raw_data(name))) % u32(len(color_choices))
 				}
 
 				scan_arr := depth_arr[start_idx:end_idx+1]
@@ -526,7 +523,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					x := ev.timestamp - total_min_time
 					w := ev.duration * cam.current_scale
 
-					xm := x * cam.current_scale
+					xm := x * cam.target_scale
 
 					idx := name_color_idx(ev.name)
 					color_weights[idx] += max(ev.duration, MIN_WIDTH / cam.current_scale)
@@ -535,10 +532,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					if w < MIN_WIDTH {
 						if de_id - 1 >= 0 {
 							ev_left := scan_arr[de_id - 1]
-							xl := (ev_left.timestamp - total_min_time) * cam.current_scale
-							wl := ev_left.duration * cam.current_scale
-							if xl + max(wl, MIN_WIDTH) >= xm {
-								chunker_w = max(xm + MIN_WIDTH - chunker_x, chunker_w)
+							xl := (ev_left.timestamp - total_min_time) * cam.target_scale
+							wl := ev_left.duration * cam.target_scale
+							if xl + max(wl, MIN_WIDTH) > xm {
+								chunker_w = max(x * cam.current_scale + MIN_WIDTH - chunker_x, chunker_w)
 								continue
 							}
 						}
@@ -563,14 +560,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					}
 
 					chunker_x = x * cam.current_scale
-					if de_id + 1 < len(scan_arr) {
-						ev_right := scan_arr[de_id + 1]
-						xr := (ev_right.timestamp - total_min_time) * cam.current_scale
-						if xm + max(w, MIN_WIDTH) >= xr {
-							chunker_w = max(xr - chunker_x, w, chunker_w)
-							continue
-						}
-					}
 
 					r := Rect{Vec2{x, y}, Vec2{w, h}}
 					r_x := (r.pos.x * cam.current_scale) + cam.pan.x + disp_rect.pos.x
