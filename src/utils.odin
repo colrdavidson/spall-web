@@ -3,6 +3,7 @@ package main
 import "core:intrinsics"
 import "core:math/rand"
 import "core:math"
+import "core:math/linalg/glsl"
 
 trap :: proc() {
 	intrinsics.trap()
@@ -67,4 +68,12 @@ rect_in_rect :: proc(a, b: Rect) -> bool {
 	b_bottom := b.pos.y + b.size.y
 
 	return !(b_left > a_right || a_left > b_right || a_top > b_bottom || b_top > a_bottom)
+}
+
+hsv2rgb :: proc(c: Vec3) -> Vec3 {
+	K := glsl.vec3{1.0, 2.0 / 3.0, 1.0 / 3.0}
+	sum := glsl.vec3{f32(c.x), f32(c.x), f32(c.x)} + K.xyz
+	p := glsl.abs_vec3(glsl.fract(sum) * 6.0 - glsl.vec3{3,3,3})
+	result := glsl.vec3{f32(c.z), f32(c.z), f32(c.z)} * glsl.mix(K.xxx, glsl.clamp(p - K.xxx, 0.0, 1.0), glsl.vec3{f32(c.y), f32(c.y), f32(c.y)})
+	return Vec3{f64(result.x), f64(result.y), f64(result.z)}
 }

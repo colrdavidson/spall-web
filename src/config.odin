@@ -5,6 +5,7 @@ import "core:strings"
 import "core:slice"
 import "core:container/queue"
 import "core:mem"
+import "core:math/rand"
 import "core:strconv"
 import "formats:spall"
 
@@ -61,7 +62,7 @@ push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32, eve
 	t := &p.threads[t_idx]
 	t.min_time = min(t.min_time, event.timestamp)
 
-	total_max_time = max(total_max_time, event.timestamp + event.duration)
+	total_max_time = max(total_max_time, event.timestamp, event.timestamp + event.duration)
 	total_min_time = min(total_min_time, event.timestamp)
 
 	append(&t.events, event)
@@ -271,12 +272,15 @@ finish_loading :: proc (p: ^Parser) {
 
 	// reset render state
 	color_choices = make([dynamic]Vec3)
-	for i : u16 = 0; i < total_max_depth; i += 1 {
-		r := f64(205 + rand_int(0, 50))
-		g := f64(0 + rand_int(0, 230))
-		b := f64(0 + rand_int(0, 55))
+	for i := 0; i < 32; i += 1 {
+		h := rand.float64() * 0.5 + 0.5
+		h *= h
+		h *= h
+		h *= h
+		s := 0.5 + rand.float64() * 0.1
+		v := 0.85
 
-		append(&color_choices, Vec3{r, g, b})
+		append(&color_choices, hsv2rgb(Vec3{h, s, v}) * 255)
 	}
 
 	t = 0

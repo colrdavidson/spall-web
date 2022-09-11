@@ -91,7 +91,7 @@ loaded_session_result :: proc "contextless" (key, val: string) {
 
 @export
 load_build_hash :: proc "contextless" (_hash: int) {
-	hash = _hash
+	build_hash = _hash
 }
 
 foreign import "js"
