@@ -139,11 +139,15 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 
 		p.pos += u32(event_sz) + u32(event.name_len)
 		return ev, .EventRead
-	case .Instant: fallthrough; // @Todo
-	case .StreamOver: fallthrough; // @Todo
+
+	case .Custom_Data:         fallthrough; // @Todo
+	case .Instant:             fallthrough; // @Todo
+	case .Overwrite_Timestamp: fallthrough; // @Todo
+	case .Update_Checksum:     fallthrough; // @Todo
 
 	case .Invalid: fallthrough;
 	case:
+		fmt.printf("Unknown/invalid chunk (%v)\n", type)
 		trap() // @Todo: Handle invalid chunks
 	}
 

@@ -6,6 +6,7 @@ import "core:math/rand"
 import "core:runtime"
 import "core:strings"
 import "core:mem"
+import "core:hash"
 import "vendor:wasm/js"
 
 global_arena := Arena{}
@@ -67,7 +68,7 @@ is_mouse_down := false
 clicked       := false
 is_hovering   := false
 
-hash := 0
+build_hash := 0
 
 first_frame := true
 loading_config := true
@@ -333,14 +334,16 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	old_scale := cam.target_scale
 
-	MAX_SCALE :: 100000
+	max_scale := 10000.0
+	min_scale := 0.5 * display_width / (total_max_time - total_min_time)
 	/* if pt_in_rect(mouse_pos, disp_rect) */ {
 		cam.target_scale *= _pow(1.0025, -scroll_val_y)
+		cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
 	}
 	scroll_val_y = 0
 
 	cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
-	cam.current_scale = min(max(cam.current_scale, _pow(0.1, 12)), MAX_SCALE)
+	cam.current_scale = min(max(cam.current_scale, min_scale), max_scale)
 
 	last_start_time, last_end_time := get_current_window(cam, display_width)
 
@@ -428,8 +431,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		division -= (division / 2)
 	}
 
-	division = max(1, division)
-
 	display_range_start := -cam.pan.x / cam.current_scale
 	display_range_end := (display_width - cam.pan.x) / cam.current_scale
 
@@ -495,13 +496,80 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					end_idx = len(depth_arr) - 1
 				}
 
+				name_color_idx :: proc(name: string) -> u32 {
+					ptr: rawptr = raw_data(name)
+					backing := transmute([size_of(rawptr)]byte)ptr
+					slice := backing[:]
+					return hash.fnv32a(slice) % u32(len(color_choices))
+				}
+
 				scan_arr := depth_arr[start_idx:end_idx+1]
+				chunker_x := (scan_arr[0].timestamp - total_min_time) * cam.current_scale
+				chunker_w := 0.0
+				color_weights := make([]f64, len(color_choices), context.temp_allocator)
+				{
+					idx := name_color_idx(scan_arr[0].name)
+					color_weights[idx] += scan_arr[0].duration
+				}
+
+				flush_chunker :: proc(chunker_w : ^f64, chunker_color : Vec3, chunker_x, cur_y, y, h : f64, disp_rect : Rect, d_idx : int) {
+					r := Rect{Vec2{chunker_x, y}, Vec2{chunker_w^, h}}
+					r_x := chunker_x + cam.pan.x + disp_rect.pos.x
+					r_y := r.pos.y + cur_y
+					dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
+					draw_rect(dr, chunker_color)
+
+					chunker_w^ = 0
+				}
+
 				for ev, de_id in scan_arr {
 					x := ev.timestamp - total_min_time
 					w := ev.duration * cam.current_scale
 
-					if w < 0.1 {
-						continue
+					xm := x * cam.current_scale
+
+					idx := name_color_idx(ev.name)
+					color_weights[idx] += max(ev.duration, MIN_WIDTH / cam.current_scale)
+
+					MIN_WIDTH :: 2.0
+					if w < MIN_WIDTH {
+						if de_id - 1 >= 0 {
+							ev_left := scan_arr[de_id - 1]
+							xl := (ev_left.timestamp - total_min_time) * cam.current_scale
+							wl := ev_left.duration * cam.current_scale
+							if xl + max(wl, MIN_WIDTH) >= xm {
+								chunker_w = max(xm + MIN_WIDTH - chunker_x, chunker_w)
+								continue
+							}
+						}
+						w = MIN_WIDTH
+					}
+
+					if chunker_w > 0 {
+						chunker_color := Vec3{}
+						weights_sum := 0.0
+						for weight, idx in &color_weights {
+							chunker_color += color_choices[idx] * weight
+							weights_sum += weight
+							weight = 0
+						}
+						if weights_sum <= 0 {
+							fmt.printf("weights sum was <= 0\n")
+							trap()
+						}
+						chunker_color /= weights_sum
+						weights_sum = 0
+						flush_chunker(&chunker_w, chunker_color, chunker_x, cur_y, y, h, disp_rect, d_idx)
+					}
+
+					chunker_x = x * cam.current_scale
+					if de_id + 1 < len(scan_arr) {
+						ev_right := scan_arr[de_id + 1]
+						xr := (ev_right.timestamp - total_min_time) * cam.current_scale
+						if xm + max(w, MIN_WIDTH) >= xr {
+							chunker_w = max(xr - chunker_x, w, chunker_w)
+							continue
+						}
 					}
 
 					r := Rect{Vec2{x, y}, Vec2{w, h}}
@@ -514,7 +582,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					}
 
 					e_idx := cur_depth_off + start_idx + de_id
-					rect_color := color_choices[d_idx]
+					rect_color := color_choices[name_color_idx(ev.name)]
 					if int(selected_event.pid) == p_idx &&
 					   int(selected_event.tid) == t_idx &&
 					   int(selected_event.eid) == e_idx {
@@ -553,6 +621,22 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 						draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 					}
 				}
+				if chunker_w > 0 {
+					chunker_color := Vec3{}
+					weights_sum := 0.0
+					for weight, idx in &color_weights {
+						chunker_color += color_choices[idx] * weight
+						weights_sum += weight
+						weight = 0
+					}
+					if weights_sum <= 0 {
+						fmt.printf("weights sum was <= 0\n")
+						trap()
+					}
+					chunker_color /= weights_sum
+					weights_sum = 0
+					flush_chunker(&chunker_w, chunker_color, chunker_x, cur_y, y, h, disp_rect, d_idx)
+				}
 				cur_depth_off += len(depth_arr)
 			}
 			cur_y += thread_advance
@@ -585,7 +669,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			cur_time := tick_time / ONE_MILLI
 			time_str = fmt.tprintf("%.3f ms", cur_time)
 		} else {
-			time_str = fmt.tprintf("%.0f μs", tick_time)
+			time_str = fmt.tprintf("%.2f μs", tick_time)
 		}
 
 		text_width := measure_text(time_str, p_font_size, default_font)
@@ -693,7 +777,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	fps_width := measure_text(fps_str, p_font_size, monospace_font)
 	draw_text(fps_str, Vec2{width - fps_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
-	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
+	hash_str := fmt.tprintf("Build: 0x%X", abs(build_hash))
 	hash_width := measure_text(hash_str, p_font_size, monospace_font)
 	draw_text(hash_str, Vec2{width - hash_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
