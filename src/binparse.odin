@@ -3,6 +3,7 @@ package main
 import "core:fmt"
 import "core:strings"
 import "core:container/queue"
+import "formats:spall"
 
 BinaryState :: enum {
 	PartialRead,
@@ -22,34 +23,6 @@ Parser :: struct {
 
 	intern: strings.Intern,
 	cur_event: Event,
-}
-
-BinEventType :: enum u8 {
-	Invalid,
-	Completion,
-	Begin,
-	End,
-	Instant,
-	StreamOver
-}
-BinHeader :: struct #packed {
-	magic: u64,
-	version: u64,
-	timestamp_unit: f64,
-	must_be_0: u64
-}
-BeginEvent :: struct #packed {
-	type: BinEventType,
-	pid: u32,
-	tid: u32,
-	time: f64,
-	name_len: u8,
-}
-EndEvent :: struct #packed {
-	type: BinEventType,
-	pid: u32,
-	tid: u32,
-	time: f64,
 }
 
 real_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos }
@@ -80,17 +53,17 @@ get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
 		return Event{}, .PartialRead
 	}
 
-	type := (^BinEventType)(raw_data(p.data[chunk_pos(p):]))^
+	type := (^spall.Event_Type)(raw_data(p.data[chunk_pos(p):]))^
 	switch type {
 	case .Begin:
-		event_sz := u32(size_of(BeginEvent))
+		event_sz := u32(size_of(spall.Begin_Event))
 		if real_pos(p) + event_sz > p.total_size {
 			return Event{}, .Finished
 		}
 		if int(chunk_pos(p) + event_sz) > len(p.data) {
 			return Event{}, .PartialRead
 		}
-		event := (^BeginEvent)(raw_data(p.data[chunk_pos(p):]))^
+		event := (^spall.Begin_Event)(raw_data(p.data[chunk_pos(p):]))^
 
 		if (real_pos(p) + event_sz + u32(event.name_len)) > p.total_size {
 			return Event{}, .Finished
@@ -116,14 +89,14 @@ get_next_event :: proc(p: ^Parser) -> (Event, BinaryState) {
 		p.pos += u32(event_sz) + u32(event.name_len)
 		return ev, .EventRead
 	case .End:
-		event_sz := u32(size_of(EndEvent))
+		event_sz := u32(size_of(spall.End_Event))
 		if real_pos(p) + event_sz > p.total_size {
 			return Event{}, .Finished
 		}
 		if int(chunk_pos(p) + event_sz) > len(p.data) {
 			return Event{}, .PartialRead
 		}
-		event := (^EndEvent)(raw_data(p.data[chunk_pos(p):]))^
+		event := (^spall.End_Event)(raw_data(p.data[chunk_pos(p):]))^
 
 		ev := Event{
 			type = .End,
