@@ -142,7 +142,7 @@ vh_grow :: proc(v: ^ValHash) {
 vh_reinsert :: proc(v: ^ValHash, entry: PTEntry, v_idx: int) {
 	hv := vh_hash(entry.key) & u32(len(v.hashes) - 1)
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := hv + i & u32(len(v.hashes) - 1)
+		idx := (hv + i) & u32(len(v.hashes) - 1)
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
@@ -159,7 +159,7 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 
 	hv := vh_hash(key) & u32(len(v.hashes) - 1)
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := hv + i & u32(len(v.hashes) - 1)
+		idx := (hv + i) & u32(len(v.hashes) - 1)
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
