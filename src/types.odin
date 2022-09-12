@@ -110,10 +110,10 @@ vh_hash :: proc(key: u32) -> u32 {
 }
 
 vh_find :: proc(v: ^ValHash, key: u32, loc := #caller_location) -> (int, bool) {
-	hv := int(vh_hash(key) & u32(len(v.hashes) - 1))
+	hv := vh_hash(key) & u32(len(v.hashes) - 1)
 
-	for i := 0; i < len(v.hashes); i += 1 {
-		idx := (hv + i) & (len(v.hashes) - 1)
+	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
+		idx := (hv + i) & u32(len(v.hashes) - 1)
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
@@ -140,9 +140,9 @@ vh_grow :: proc(v: ^ValHash) {
 }
 
 vh_reinsert :: proc(v: ^ValHash, entry: PTEntry, v_idx: int) {
-	hv := int(vh_hash(entry.key) & u32(len(v.hashes) - 1))
-	for i := 0; i < len(v.hashes); i += 1 {
-		idx := u32(hv + i) & u32(len(v.hashes) - 1)
+	hv := vh_hash(entry.key) & u32(len(v.hashes) - 1)
+	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
+		idx := hv + i & u32(len(v.hashes) - 1)
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
@@ -157,9 +157,9 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 		vh_grow(v)
 	}
 
-	hv := int(vh_hash(key) & u32(len(v.hashes) - 1))
-	for i := 0; i < len(v.hashes); i += 1 {
-		idx := u32(hv + i) & u32(len(v.hashes) - 1)
+	hv := vh_hash(key) & u32(len(v.hashes) - 1)
+	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
+		idx := hv + i & u32(len(v.hashes) - 1)
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
