@@ -2,6 +2,9 @@ package main
 
 import "core:container/queue"
 import "core:fmt"
+import "core:hash"
+import "core:mem"
+import "core:runtime"
 
 Vec2 :: [2]f64
 Vec3 :: [3]f64
@@ -41,8 +44,8 @@ TempEvent :: struct {
 Event :: struct #packed {
 	type: EventType,
 	name: string,
-	duration: f64,
 	timestamp: f64,
+	duration: f64,
 	depth: u16,
 }
 
@@ -60,7 +63,7 @@ Process :: struct {
 
 	process_id: u32,
 	threads: [dynamic]Thread,
-	thread_map: map[u32]int,
+	thread_map: ValHash,
 }
 
 print_queue :: proc(q: ^$Q/queue.Queue($T)) {
@@ -79,4 +82,96 @@ print_queue :: proc(q: ^$Q/queue.Queue($T)) {
 		fmt.printf("\n")
 	}
 	fmt.printf("}}\n")
+}
+
+PTEntry :: struct {
+	key: u32,
+	val: int,
+}
+ValHash :: struct {
+	entries: [dynamic]PTEntry,
+	hashes:  [dynamic]int,
+}
+
+vh_init :: proc(allocator := context.allocator) -> ValHash {
+	v := ValHash{}
+	v.entries = make([dynamic]PTEntry, 0, allocator)
+	v.hashes = make([dynamic]int, 16, allocator) // must be a power of two
+	for i in 0..<len(v.hashes) {
+		v.hashes[i] = -1
+	}
+	return v
+}
+
+vh_hash :: proc(key: u32) -> u32 {
+	k := key
+	v := mem.byte_slice(&k, size_of(key))
+	return u32(hash.fnv32a(v))
+}
+
+vh_find :: proc(v: ^ValHash, key: u32, loc := #caller_location) -> (int, bool) {
+	hv := int(vh_hash(key) & u32(len(v.hashes) - 1))
+
+	for i := 0; i < len(v.hashes); i += 1 {
+		idx := (hv + i) & (len(v.hashes) - 1)
+
+		e_idx := v.hashes[idx]
+		if e_idx == -1 {
+			continue
+		}
+
+		if v.entries[e_idx].key == key {
+			return v.entries[e_idx].val, true
+		}
+	}
+
+	return -1, false
+}
+
+vh_grow :: proc(v: ^ValHash) {
+	resize(&v.hashes, len(v.hashes) * 2)
+	for i in 0..<len(v.hashes) {
+		v.hashes[i] = -1
+	}
+
+	for entry, idx in v.entries {
+		vh_reinsert(v, entry, idx)
+	}
+}
+
+vh_reinsert :: proc(v: ^ValHash, entry: PTEntry, v_idx: int) {
+	hv := int(vh_hash(entry.key) & u32(len(v.hashes) - 1))
+	for i := 0; i < len(v.hashes); i += 1 {
+		idx := u32(hv + i) & u32(len(v.hashes) - 1)
+
+		e_idx := v.hashes[idx]
+		if e_idx == -1 {
+			v.hashes[idx] = v_idx
+			return
+		}
+	}
+}
+
+vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
+	if len(v.entries) >= int(f64(len(v.hashes)) * 0.75) {
+		vh_grow(v)
+	}
+
+	hv := int(vh_hash(key) & u32(len(v.hashes) - 1))
+	for i := 0; i < len(v.hashes); i += 1 {
+		idx := u32(hv + i) & u32(len(v.hashes) - 1)
+
+		e_idx := v.hashes[idx]
+		if e_idx == -1 {
+			v.hashes[idx] = len(v.entries)
+			append(&v.entries, PTEntry{key, val})
+			return
+		} else if v.entries[e_idx].key == key {
+			v.entries[e_idx] = PTEntry{key, val}
+			return
+		}
+	}
+
+	fmt.printf("No more potatoes!\n")
+	trap()
 }

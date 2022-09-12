@@ -74,6 +74,7 @@ first_frame := true
 loading_config := true
 finished_loading := false
 update_fonts := true
+start_profiling := false
 colormode := ColorMode.Dark
 
 ColorMode :: enum {
@@ -91,7 +92,6 @@ thread_gap     : f64 = 8
 trace_config : string
 
 processes: [dynamic]Process
-process_map: map[u32]int
 color_choices: [dynamic]Vec3
 event_count: i64
 total_max_time: f64
@@ -164,7 +164,7 @@ main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
 	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 15)
-	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 10)
+	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 20)
 
 	arena_init(&temp_arena, temp_data)
 	arena_init(&scratch_arena, scratch_data)

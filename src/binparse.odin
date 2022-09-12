@@ -187,18 +187,18 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 				tm = &bande_p_to_t[event.process_id]
 			}
 
-			ts, ok2 := tm[event.thread_id]
+			ts, ok2 := &tm[event.thread_id]
 			if !ok2 {
-				event_stack := new(queue.Queue(TempEvent), scratch_allocator)
-				queue.init(event_stack, 0, scratch_allocator)
+				event_stack: queue.Queue(TempEvent)
+				queue.init(&event_stack, 0, scratch_allocator)
 				tm[event.thread_id] = event_stack
-				ts = event_stack
+				ts = &tm[event.thread_id]
 			}
 
 			queue.push_back(ts, event)
 		case .End:
 			if tm, ok1 := &bande_p_to_t[event.process_id]; ok1 {
-				if ts, ok2 := tm[event.thread_id]; ok2 {
+				if ts, ok2 := &tm[event.thread_id]; ok2 {
 					if queue.len(ts^) > 0 {
 						ev := queue.pop_back(ts)
 

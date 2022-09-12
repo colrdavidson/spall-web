@@ -28,20 +28,22 @@ stop_bench :: proc(name: string) {
 	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f64(mem_range) / 1024 / 1024)
 }
 
+process_map: ValHash
 push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32, event: Event) {
-	p_idx, ok1 := process_map[process_id]
+
+	p_idx, ok1 := vh_find(&process_map, process_id)
 	if !ok1 {
 		append(processes, Process{
 			min_time = 0x7fefffffffffffff, 
 			process_id = process_id,
 			threads = make([dynamic]Thread),
-			thread_map = make(map[u32]int, 0, scratch_allocator),
+			thread_map = vh_init(scratch_allocator),
 		})
 		p_idx = len(processes) - 1
-		process_map[process_id] = p_idx
+		vh_insert(&process_map, process_id, p_idx)
 	}
 
-	t_idx, ok2 := processes[p_idx].thread_map[thread_id]
+	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, thread_id)
 	if !ok2 {
 		threads := &processes[p_idx].threads
 
@@ -53,7 +55,8 @@ push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32, eve
 		})
 
 		t_idx = len(threads) - 1
-		processes[p_idx].thread_map[thread_id] = t_idx
+		thread_map := &processes[p_idx].thread_map
+		vh_insert(thread_map, thread_id, t_idx)
 	}
 
 	p := &processes[p_idx]
@@ -88,7 +91,9 @@ process_events :: proc(processes: ^[dynamic]Process) -> u16 {
 
 	ev_stack: queue.Queue(int)
 	queue.init(&ev_stack, 0, context.temp_allocator)
-	for _, proc_idx in process_map {
+
+	for pe, _ in process_map.entries {
+		proc_idx := pe.val
 		process := &processes[proc_idx]
 
 		slice.sort_by(process.threads[:], tid_sort_proc)
@@ -193,7 +198,7 @@ find_idx :: proc(events: []Event, val: f64) -> int {
 }
 
 
-ThreadMap :: distinct map[u32]^queue.Queue(TempEvent)
+ThreadMap :: distinct map[u32]queue.Queue(TempEvent)
 bande_p_to_t: map[u32]ThreadMap
 jp: JSONParser
 bp: Parser
@@ -224,7 +229,7 @@ init_loading_state :: proc(size: u32) {
 	free_all(context.allocator)
 	free_all(context.temp_allocator)
 	processes = make([dynamic]Process)
-	process_map = make(map[u32]int, 0, scratch_allocator)
+	process_map = vh_init(scratch_allocator)
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
 
@@ -240,9 +245,9 @@ init_loading_state :: proc(size: u32) {
 finish_loading :: proc (p: ^Parser) {
 	for k, v in &bande_p_to_t {
 		for q, v2 in &v {
-			qlen := queue.len(v2^)
+			qlen := queue.len(v2)
 			for i := 0; i < qlen; i += 1 {
-				ev := queue.pop_back(v2)
+				ev := queue.pop_back(&v2)
 
 				mod_name, err := strings.intern_get(&p.intern, fmt.tprintf("%s (Did Not Finish)", ev.name))
 				if err != nil {
