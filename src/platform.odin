@@ -48,6 +48,7 @@ mouse_up :: proc "contextless" (x, y: f64) {
 	context = wasmContext
 
 	is_mouse_down = false
+	was_mouse_down = true
 
 	if frame_count != last_frame_count {
 		last_mouse_pos = mouse_pos
@@ -66,11 +67,22 @@ zoom :: proc "contextless" (x, y: f64) {
 	scroll_val_y += y
 }
 
+shift_down := false
 @export
-key_down :: proc "contextless" (key: int) { }
+key_down :: proc "contextless" (key: int) { 
+	switch key {
+	case 1: // left-shift
+		shift_down = true
+	}
+}
 
 @export
-key_up :: proc "contextless" (key: int) { }
+key_up :: proc "contextless" (key: int) { 
+	switch key {
+	case 1: // left-shift
+		shift_down = false
+	}
+}
 
 @export
 text_input :: proc "contextless" (key, code: string) { }

@@ -4,6 +4,7 @@ import "core:intrinsics"
 import "core:math/rand"
 import "core:math"
 import "core:math/linalg/glsl"
+import "core:fmt"
 
 trap :: proc() {
 	intrinsics.trap()
@@ -76,4 +77,18 @@ hsv2rgb :: proc(c: Vec3) -> Vec3 {
 	p := glsl.abs_vec3(glsl.fract(sum) * 6.0 - glsl.vec3{3,3,3})
 	result := glsl.vec3{f32(c.z), f32(c.z), f32(c.z)} * glsl.mix(K.xxx, glsl.clamp(p - K.xxx, 0.0, 1.0), glsl.vec3{f32(c.y), f32(c.y), f32(c.y)})
 	return Vec3{f64(result.x), f64(result.y), f64(result.z)}
+}
+
+ONE_SECOND :: 1000 * 1000
+ONE_MILLI :: 1000
+time_fmt :: proc(time: f64) -> string {
+	if time > ONE_SECOND {
+		cur_time := time / ONE_SECOND
+		return fmt.tprintf("%.3f s", cur_time)
+	} else if time > ONE_MILLI {
+		cur_time := time / ONE_MILLI
+		return fmt.tprintf("%.3f ms", cur_time)
+	} else {
+		return fmt.tprintf("%f μs", time)
+	}
 }
