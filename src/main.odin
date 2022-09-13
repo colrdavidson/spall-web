@@ -358,10 +358,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	min_x_pan := min(-20 * em + display_width + -(total_max_time - total_min_time) * cam.target_scale, max_x_pan)
 
 	// compute pan, scale + scroll
-	pan_delta := Vec2{}
+	pan_delta := mouse_pos - last_mouse_pos
 	if is_mouse_down && !shift_down {
 		if pt_in_rect(clicked_pos, disp_rect) {
-			pan_delta = mouse_pos - last_mouse_pos
 
 			if cam.target_pan_x < min_x_pan {
 				pan_delta.x *= _pow(2, (cam.target_pan_x - min_x_pan) / 32)
@@ -650,9 +649,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	if is_mouse_down && shift_down {
-		dx := mouse_pos.x - clicked_pos.x
-		dy := mouse_pos.y - clicked_pos.y
-		selected_rect = rect(clicked_pos.x, clicked_pos.y, dx, dy)
+		// try to fake a reduced frame of latency by extrapolating the position by the delta
+		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
+		delta := mouse_pos_extrapolated - clicked_pos
+		selected_rect = rect(clicked_pos.x, clicked_pos.y, delta.x, delta.y)
 		draw_rect_outline(selected_rect, 1, Vec3{0, 0, 255})
 		draw_rect(selected_rect, Vec3{0, 0, 255}, 100)
 		did_select = true
