@@ -81,14 +81,18 @@ hsv2rgb :: proc(c: Vec3) -> Vec3 {
 
 ONE_SECOND :: 1000 * 1000
 ONE_MILLI :: 1000
-time_fmt :: proc(time: f64) -> string {
+ONE_NANO :: 0.001
+time_fmt :: proc(time: f64, aligned := false) -> string {
 	if time > ONE_SECOND {
 		cur_time := time / ONE_SECOND
-		return fmt.tprintf("%.3f s", cur_time)
+		return fmt.tprintf("%.3f s%s", cur_time, aligned ? " " : "")
 	} else if time > ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.3f ms", cur_time)
+	} else if time >= ONE_NANO {
+		return fmt.tprintf("%.3f us", time) // μs
 	} else {
-		return fmt.tprintf("%f μs", time)
+		cur_time := time / ONE_NANO
+		return fmt.tprintf("%.3f ns", cur_time)
 	}
 }

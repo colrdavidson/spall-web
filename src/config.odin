@@ -68,7 +68,9 @@ push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32, eve
 	total_max_time = max(total_max_time, event.timestamp, event.timestamp + event.duration)
 	total_min_time = min(total_min_time, event.timestamp)
 
-	append(&t.events, event)
+	event_to_push := event
+	if event_to_push.duration < 0 { event_to_push.duration = 0 }
+	append(&t.events, event_to_push)
 }
 
 pid_sort_proc :: proc(a, b: Process) -> bool { return a.min_time < b.min_time }
