@@ -422,18 +422,18 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 					tm = &bande_p_to_t[jp.cur_event.process_id]
 				}
 
-				ts, ok2 := tm[jp.cur_event.thread_id]
+				ts, ok2 := &tm[jp.cur_event.thread_id]
 				if !ok2 {
-					token_stack := new(queue.Queue(TempEvent), scratch_allocator)
-					queue.init(token_stack, 0, scratch_allocator)
-					tm[jp.cur_event.thread_id] = token_stack
-					ts = token_stack
+					event_stack: queue.Queue(TempEvent)
+					queue.init(&event_stack, 0, scratch_allocator)
+					tm[jp.cur_event.thread_id] = event_stack
+					ts = &tm[jp.cur_event.thread_id]
 				}
 
 				queue.push_back(ts, jp.cur_event)
 			case .End:
 				if tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]; ok1 {
-					if ts, ok2 := tm[jp.cur_event.thread_id]; ok2 {
+					if ts, ok2 := &tm[jp.cur_event.thread_id]; ok2 {
 						if queue.len(ts^) > 0 {
 							ev := queue.pop_back(ts)
 
