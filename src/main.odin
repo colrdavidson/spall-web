@@ -564,10 +564,20 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 					chunker_x = x * cam.current_scale
 
-					r := Rect{Vec2{x, y}, Vec2{w, h}}
-					r_x := (r.pos.x * cam.current_scale) + cam.pan.x + disp_rect.pos.x
-					r_y := r.pos.y + cur_y
-					dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
+					// Carefully extract the [start, end] interval of the rect so that we can clip the left
+					// side to 0 before sending it to draw_rect, so we can prevent f32 (f64?) precision
+					// problems drawing a rectangle which starts at a massively huge negative number on
+					// the left.
+					r_x   := x * cam.current_scale
+					end_x := r_x + w
+
+					r_x   += cam.pan.x + disp_rect.pos.x
+					end_x += cam.pan.x + disp_rect.pos.x
+
+					r_x    = max(r_x, 0)
+
+					r_y := y + cur_y
+					dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
 
 					if !rect_in_rect(dr, disp_rect) {
 						continue
