@@ -279,7 +279,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	toolbar_height := 4 * em
 
 	pane_y : f64 = 0
-	next_line := proc(y: ^f64, h: f64) -> f64 {
+	next_line :: proc(y: ^f64, h: f64) -> f64 {
 		res := y^
 		y^ += h + (h / 1.5)
 		return res
@@ -294,6 +294,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	info_pane_height := pane_y + top_line_gap
 	info_pane_y := height - info_pane_height
+	
+	if abs(mouse_pos.y - info_pane_y) <= 5.0 {
+		// set_cursor("ns-resize")
+	}
 
 	start_x := x_pad_size
 	end_x := width - x_pad_size
@@ -453,6 +457,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, color)
 	}
 
+	name_color_idx :: proc(name: string) -> u32 {
+		return u32(uintptr(raw_data(name))) % u32(len(color_choices))
+	}
+
 	// Render flamegraphs
 	clicked_on_rect := false
 	cur_y := graph_rect.pos.y - cam.pan.y
@@ -496,10 +504,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				}
 				if end_idx == -1 {
 					end_idx = len(depth_arr) - 1
-				}
-
-				name_color_idx :: proc(name: string) -> u32 {
-					return u32(uintptr(raw_data(name))) % u32(len(color_choices))
 				}
 
 				scan_arr := depth_arr[start_idx:end_idx+1]
@@ -715,7 +719,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 		Stats :: struct {
 			total_time: f64,
-			count: int,
+			count: u32,
+			min_time: f32,
+			max_time: f32,
+			histogram: [22]u32,
 		}
 
 		stats := make(map[string]Stats, 0, context.temp_allocator)
@@ -773,11 +780,13 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 						s, ok := &stats[ev.name]
 						if !ok {
-							stats[ev.name] = Stats{}
+							stats[ev.name] = Stats{min_time = 1e308}
 							s = &stats[ev.name]
 						}
 						s.count += 1
 						s.total_time += ev.duration
+						s.min_time = min(s.min_time, f32(ev.duration))
+						s.max_time = max(s.max_time, f32(ev.duration))
 						total_tracked_time += ev.duration
 					}
 				}
@@ -798,7 +807,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			map_sort :: proc(a: Entry, b: Entry) -> bool {
 				return a.value.total_time > b.value.total_time
 			}
-			
+
 			header := runtime.__get_map_header(m)
 			entries := (^[dynamic]Entry)(&header.m.entries)
 			slice.sort_by(entries[:], map_sort)
@@ -808,22 +817,44 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		sort_map_entries_by_time(&stats)
 
 		column_gap := 1.5 * em
+	
+		total_header_text    := fmt.tprintf("%-17s", "      total")
+		min_header_text      := fmt.tprintf("%-10s", "   min.")
+		avg_header_text      := fmt.tprintf("%-10s", "   avg.")
+		_99p_header_text     := fmt.tprintf("%-10s", "   99p.")
+		max_header_text      := fmt.tprintf("%-10s", "   max.")
+		name_header_text     := fmt.tprintf("%-10s", "   name")
 
-		total_header_text := fmt.tprintf("%-16s", "total")
-		total_header_width := measure_text(total_header_text, p_font_size, monospace_font)
+		cursor := x_subpad
 
-		avg_header_text := fmt.tprintf("%-10s", "avg.")
-		avg_header_width := measure_text(avg_header_text, p_font_size, monospace_font)
+		text_outf :: proc(cursor: ^f64, y: f64, str: string, color := text_color) {
+			width := measure_text(str, p_font_size, monospace_font)
+			draw_text(str, Vec2{cursor^, y}, p_font_size, monospace_font, color)
+			cursor^ += width
+		}
+		vs_outf :: proc(cursor: ^f64, column_gap, info_pane_y, info_pane_height: f64) {
+			cursor^ += column_gap / 2
+			draw_line(Vec2{cursor^, info_pane_y}, Vec2{cursor^, info_pane_y + info_pane_height}, 0.5, text_color2)
+			cursor^ += column_gap / 2
+		}
 
-		name_header_text := fmt.tprintf("%-10s", "name")
-		name_header_width := measure_text(name_header_text, p_font_size, monospace_font)
+		text_outf(&cursor, y, total_header_text)
+		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
 
-		draw_text(total_header_text, Vec2{x_subpad, y}, p_font_size, monospace_font, text_color)
-		draw_text(avg_header_text, Vec2{x_subpad + total_header_width + column_gap, y}, p_font_size, monospace_font, text_color)
-		draw_text(name_header_text, Vec2{x_subpad + total_header_width + avg_header_width + (column_gap * 2), y}, p_font_size, monospace_font, text_color)
+		text_outf(&cursor, y, min_header_text)
+		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+		text_outf(&cursor, y, avg_header_text)
+		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+		text_outf(&cursor, y, _99p_header_text)
+		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+		text_outf(&cursor, y, max_header_text)
+		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+		text_outf(&cursor, y, name_header_text)
 		next_line(&y, em)
-
-		selected_total_time := selected_end_time - selected_start_time
 
 		i := 0
 		for name, stat in stats {
@@ -831,18 +862,43 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				break
 			}
 
-			perc := (stat.total_time / selected_total_time) * 100
+			cursor = x_subpad
 
-			total_text := fmt.tprintf("%10s %.1f%%", time_fmt(stat.total_time), perc)
-			total_width := measure_text(total_text, p_font_size, monospace_font)
+			perc := (stat.total_time / total_tracked_time) * 100
+
+			total_text := fmt.tprintf("%10s %5.1f%%", time_fmt(stat.total_time, true), perc)
+
+			min := stat.min_time
+			min_text := fmt.tprintf("%10s", time_fmt(f64(min), true))
 
 			avg := stat.total_time / f64(stat.count)
-			avg_text := fmt.tprintf("%10s", time_fmt(avg))
-			avg_width := measure_text(avg_text, p_font_size, monospace_font)
+			avg_text := fmt.tprintf("%10s", time_fmt(avg, true))
 
-			draw_text(total_text, Vec2{x_subpad, y}, p_font_size, monospace_font, text_color2)
-			draw_text(avg_text,   Vec2{x_subpad + total_width + column_gap, y}, p_font_size, monospace_font, text_color2)
-			draw_text(name,       Vec2{x_subpad + total_width + avg_width + (column_gap * 2), y}, p_font_size, monospace_font, text_color2)
+			num_standard_deviations := 2.326348 // ninety-ninth percentile is 2.326348 standard deviations greater than the mean
+			_99p := math.lerp(stat.min_time, stat.max_time, f32((2 + num_standard_deviations) / 4))
+			_99p_text := fmt.tprintf("%10s", time_fmt(f64(_99p), true))
+
+			max := stat.max_time
+			max_text := fmt.tprintf("%10s", time_fmt(f64(max), true))
+
+			text_outf(&cursor, y, total_text, text_color2); cursor += column_gap
+			text_outf(&cursor, y, min_text, text_color2);   cursor += column_gap
+			text_outf(&cursor, y, avg_text, text_color2);   cursor += column_gap
+			text_outf(&cursor, y, _99p_text, text_color2);  cursor += column_gap
+			text_outf(&cursor, y, max_text, text_color2);   cursor += column_gap
+
+			y_before   := y - em / 4
+			y_after    := y_before
+			next_line(&y_after, em) // @Speed
+			name_width := measure_text(name, p_font_size, monospace_font)
+
+			dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
+
+			cursor += column_gap / 2
+
+			draw_rect(dr,         color_choices[name_color_idx(name)])
+
+			draw_text(name,       Vec2{cursor, y}, p_font_size, monospace_font, text_color);
 
 			next_line(&y, em)
 			i += 1
