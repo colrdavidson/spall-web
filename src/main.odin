@@ -338,7 +338,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	old_scale := cam.target_scale
 
-	max_scale := 10000.0
+	max_scale := 10000000.0
 	min_scale := 0.5 * display_width / (total_max_time - total_min_time)
 	/* if pt_in_rect(mouse_pos, disp_rect) */ {
 		cam.target_scale *= _pow(1.0025, -scroll_val_y)
