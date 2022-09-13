@@ -649,9 +649,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	// Chop sides of screen
-	draw_rect(rect(0, disp_rect.pos.y, width, graph_header_text_height), bg_color2) // top
-	draw_rect(rect(0, disp_rect.pos.y, graph_rect.pos.x, height), bg_color2) // left
-	draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y, width, height), bg_color2) // right
+	draw_rect(rect(0, disp_rect.pos.y, width, graph_header_text_height), bg_color) // top
+	draw_rect(rect(0, disp_rect.pos.y + graph_header_text_height, graph_rect.pos.x, height), bg_color2) // left
+	draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y + graph_header_text_height, width, height), bg_color2) // right
+	draw_line(Vec2{0, disp_rect.pos.y + graph_header_text_height}, Vec2{width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
 
 
 	// Draw timestamps on subdivision lines
