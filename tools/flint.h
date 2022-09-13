@@ -127,6 +127,10 @@ Example Threaded Implementation:
     }
 */
 
+#if defined(FLINT_BUFFER_PROFILING) && !defined(FLINT_BUFFER_PROFILING_GET_TIME)
+#error "You must #define FLINT_BUFFER_PROFILING_GET_TIME() to profile buffer flushes."
+#endif
+
 #ifndef FLINT_H
 #define FLINT_H
 
@@ -198,53 +202,71 @@ typedef struct FlintBeginEventMax {
 
 #pragma pack(pop)
 
-typedef struct FlintContext {
+typedef struct FlintProfile {
     FILE *file;
     double timestamp_unit;
     uint64_t is_json;
-} FlintContext;
+} FlintProfile;
+
+typedef struct FlintRecentString {
+    char *pointer;
+    uint8_t length;
+} FlintRecentString;
 
 // Important!: If you are writing Begin/End events, then do NOT write
 //             events for the same PID + TID pair on different buffers!!!
-typedef struct FlintWriteBuffer {
+typedef struct FlintBuffer {
     void *data;
-    const uint32_t length;
-    uint32_t head;
-} FlintWriteBuffer;
+    size_t length;
+
+    // Internal data - don't assign this
+    size_t head;
+    FlintProfile *ctx;
+    uint8_t recent_string_index;
+    FlintRecentString recent_strings[256]; // ring buffer
+    // TODO: uint32_t last_tid;
+    // TODO: uint32_t last_pid;
+} FlintBuffer;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-FlintContext FlintInit    (const char *filename, double timestamp_unit);
-FlintContext FlintInitJson(const char *filename, double timestamp_unit);
+// Profile context
+FlintProfile FlintInit    (const char *filename, double timestamp_unit);
+FlintProfile FlintInitJson(const char *filename, double timestamp_unit);
+void         FlintQuit    (FlintProfile *ctx);
 
-bool FlintBufferInit(FlintWriteBuffer *wb);
-bool FlintBufferQuit(FlintContext *ctx, FlintWriteBuffer *wb);
+bool FlintFlush(FlintProfile *ctx);
 
-extern FlintWriteBuffer FlintSingleThreadedWriteBuffer;
+// Buffer API
+extern FlintBuffer FlintSingleThreadedBuffer;
 
-bool FlintFlush(FlintContext *ctx, FlintWriteBuffer *wb);
+bool FlintBufferInit (FlintProfile *ctx, FlintBuffer *wb);
+bool FlintBufferQuit (FlintProfile *ctx, FlintBuffer *wb);
 
-void FlintQuit(FlintContext *ctx);
+bool FlintBufferFlush(FlintProfile *ctx, FlintBuffer *wb);
 
-bool FlintTraceBegin         (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name);
-bool FlintTraceBeginTid      (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, uint32_t tid);
-bool FlintTraceBeginLen      (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len);
-bool FlintTraceBeginLenTid   (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid);
-bool FlintTraceBeginTidPid   (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name,                       uint32_t tid, uint32_t pid);
-bool FlintTraceBeginLenTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid);
+// Begin events
+bool FlintTraceBegin         (FlintProfile *ctx, FlintBuffer *wb, double when, const char *name);
+bool FlintTraceBeginTid      (FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, uint32_t tid);
+bool FlintTraceBeginLen      (FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, signed long name_len);
+bool FlintTraceBeginLenTid   (FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid);
+bool FlintTraceBeginTidPid   (FlintProfile *ctx, FlintBuffer *wb, double when, const char *name,                       uint32_t tid, uint32_t pid);
+bool FlintTraceBeginLenTidPid(FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid);
 
-bool FlintTraceComplete         (FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name);
-bool FlintTraceCompleteTid      (FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, uint32_t tid);
-bool FlintTraceCompleteLen      (FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, signed long name_len);
-bool FlintTraceCompleteLenTid   (FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, signed long name_len, uint32_t tid);
-bool FlintTraceCompleteTidPid   (FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name,                       uint32_t tid, uint32_t pid);
-bool FlintTraceCompleteLenTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, signed long name_len, uint32_t tid, uint32_t pid);
+// End events
+bool FlintTraceEnd      (FlintProfile *ctx, FlintBuffer *wb, double when);
+bool FlintTraceEndTid   (FlintProfile *ctx, FlintBuffer *wb, double when, uint32_t tid);
+bool FlintTraceEndTidPid(FlintProfile *ctx, FlintBuffer *wb, double when, uint32_t tid, uint32_t pid);
 
-bool FlintTraceEnd      (FlintContext *ctx, FlintWriteBuffer *wb, double when);
-bool FlintTraceEndTid   (FlintContext *ctx, FlintWriteBuffer *wb, double when, uint32_t tid);
-bool FlintTraceEndTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, uint32_t tid, uint32_t pid);
+// Complete events
+bool FlintTraceComplete         (FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name);
+bool FlintTraceCompleteTid      (FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, uint32_t tid);
+bool FlintTraceCompleteLen      (FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, signed long name_len);
+bool FlintTraceCompleteLenTid   (FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, signed long name_len, uint32_t tid);
+bool FlintTraceCompleteTidPid   (FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name,                       uint32_t tid, uint32_t pid);
+bool FlintTraceCompleteLenTidPid(FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, signed long name_len, uint32_t tid, uint32_t pid);
 
 #ifdef __cplusplus
 }
@@ -260,56 +282,146 @@ bool FlintTraceEndTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, u
 extern "C" {
 #endif
 
-extern char FlintSingleThreadedWriteBuffer_Data[];
-char FlintSingleThreadedWriteBuffer_Data[1 << 16];
-FlintWriteBuffer FlintSingleThreadedWriteBuffer = {FlintSingleThreadedWriteBuffer_Data, 1 << 16};
+#ifdef FLINT_BUFFER_PROFILING
+#define FLINT_BUFFER_PROFILE_BEGIN() double time_begin = (FLINT_BUFFER_PROFILING_GET_TIME());
+#define FLINT_BUFFER_PROFILE_END(...) \
+    do { \
+        double time_end = (FLINT_BUFFER_PROFILING_GET_TIME()); \
+        char name[255]; snprintf(name, sizeof(name), "" __VA_ARGS__); \
+        if (!FlintTraceCompleteTid(ctx, NULL, time_begin, time_end - time_begin, name, (uintptr_t)wb->data % 1000000 + 4000000000)) return false; \
+    } while (0)
+#else
+#define FLINT_BUFFER_PROFILE_BEGIN() do {} while (0)
+#define FLINT_BUFFER_PROFILE_END(...) do { (void)("" __VA_ARGS__); } while (0)
+#endif
 
-static bool Flint__BufferFlush(FlintWriteBuffer *wb, FlintContext *ctx) {
-    if (!wb->head) return true;
-#ifdef FLINT_BUFFER_PROFILING
-#ifndef FLINT_BUFFER_PROFILING_GET_TIME
-#error "You must #define FLINT_BUFFER_PROFILING_GET_TIME() to profile buffer flushes."
-#endif
-    double time_begin = (FLINT_BUFFER_PROFILING_GET_TIME());
-#endif
-    if (fwrite(wb->data, wb->head, 1, ctx->file) != 1) return false;
-#ifdef FLINT_BUFFER_PROFILING
-    double time_end   = (FLINT_BUFFER_PROFILING_GET_TIME());
-    char name[255];
-    snprintf(name, sizeof(name), "Buffer Flush 0x%p", wb->data);
-    if (!FlintTraceCompleteTid(ctx, NULL, time_begin, time_end - time_begin, name, (uintptr_t)wb->data % 1000000 + 4000000000)) return false;
-#endif
-    wb->head = 0;
+extern char FlintSingleThreadedBufferData[];
+char FlintSingleThreadedBufferData[1 << 16];
+FlintBuffer FlintSingleThreadedBuffer = {FlintSingleThreadedBufferData, sizeof(FlintSingleThreadedBufferData)};
+
+static bool Flint__FileWrite(FILE *f, void *p, size_t n) {
+    // if (feof(f)) return false;
+    if (ferror(f)) return false;
+    if (fwrite(p, n, 1, f) != 1) return false;
     return true;
 }
 
-static bool Flint__BufferWrite(FlintWriteBuffer *wb, FlintContext *ctx, void *p, size_t n) {
-    // precon: wb->head < wb->length
+static void Flint__BufferPushString(FlintBuffer *wb, size_t n, signed long name_len) {
+    FlintRecentString recent_string = {0};
+    // precon: wb
+    // precon: n > 0
+    // precon: name_len > 0
+    // precon: name_len < n
+    // precon: name_len <= 255
+    if (wb->head + n > wb->length) return; // will (try to) flush or do an unbuffered write, so don't push a string
+    recent_string.pointer = (char *)wb->data + wb->head + n - name_len;
+    recent_string.length = (uint8_t)name_len;
+    wb->recent_strings[wb->recent_string_index++] = recent_string;
+}
+
+// returns -1 or a backreference number in [0, 255] -- telling you how many "strings ago" the string can be found (0 is the most recent string)
+static int Flint__BufferFindString(FlintBuffer *wb, char *name, signed long name_len) {
+    // precon: wb
+    // precon: wb->data
+    // precon: name
+    // precon: name_len > 0
+    // precon: name_len <= 255
+    for (int i = 0; i < 256; i++) {
+        unsigned int index = ((wb->recent_string_index - 1) - i + 256) % 256;
+        FlintRecentString recent_string = wb->recent_strings[index];
+        if (!recent_string.pointer) return -1; // early-out: NULLs mean the ring buffer isn't even full yet
+        if (recent_string.length == name_len && memcmp(name, recent_string.pointer, recent_string.length) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static bool Flint__BufferFlush(FlintProfile *ctx, FlintBuffer *wb) {
+    // precon: wb
+    // precon: wb->data
+    // precon: wb->head <= wb->length
+    if (wb->ctx != ctx) return false; // Buffer must be bound to this context (or to NULL)
+    if (wb->head && ctx) {
+        if (!ctx->file) return false;
+        FLINT_BUFFER_PROFILE_BEGIN();
+        if (!Flint__FileWrite(ctx->file, wb->data, wb->head)) return false;
+        FLINT_BUFFER_PROFILE_END("Buffer 0x%p: Flush (%llx bytes)", wb->data, (unsigned long long)wb->head);
+    }
+    wb->head = 0;
+    wb->recent_string_index = 0;
+    memset(wb->recent_strings, 0, sizeof(wb->recent_strings));
+    return true;
+}
+
+static bool Flint__BufferWrite(FlintProfile *ctx, FlintBuffer *wb, void *p, size_t n) {
+    // precon: !wb || wb->head < wb->length
     // precon: ctx->file
-    if (wb->head + n > wb->length && !Flint__BufferFlush(wb, ctx)) return false;
-    if (n > wb->length) return fwrite(p, n, 1, ctx->file);
+    if (!wb) return Flint__FileWrite(ctx->file, p, n);
+    if (wb->head + n > wb->length && !Flint__BufferFlush(ctx, wb)) return false;
+    if (n > wb->length) {
+        FLINT_BUFFER_PROFILE_BEGIN();
+        if (!Flint__FileWrite(ctx->file, p, n)) return false;
+        if (!FlintFlush(ctx)) return false;
+        FLINT_BUFFER_PROFILE_END("Buffer 0x%p: Unbuffered Write (%llx bytes)", wb->data, (unsigned long long)n);
+        return true;
+    }
     memcpy((char *)wb->data + wb->head, p, n);
     wb->head += n;
     return true;
 }
 
-bool FlintFlush(FlintContext *ctx, FlintWriteBuffer *wb) {
-    bool result = true;
-    FlintWriteBuffer wb_ = {0}; if (!wb) wb = &wb_;
-    if (ctx && ctx->file) {
-        if (!Flint__BufferFlush(wb, ctx)) result = false;
-        if (!fflush(ctx->file)) result = false;
-    } else {
-        wb->head = 0;
-        result &= !ctx; // not a failure if there is no context
-    }
-    return result;
+bool FlintBufferFlush(FlintProfile *ctx, FlintBuffer *wb) {
+    if (!wb) return false;
+    if (!wb->data) return false;
+    if (!Flint__BufferFlush(ctx, wb)) return false;
+    return true;
 }
 
-bool FlintBufferInit(FlintWriteBuffer *wb)                    { return FlintFlush(NULL, wb); }
-bool FlintBufferQuit(FlintContext *ctx, FlintWriteBuffer *wb) { return FlintFlush(ctx,  wb); }
+bool FlintBufferInit(FlintProfile *ctx, FlintBuffer *wb) {
+    if (!FlintBufferFlush(NULL, wb)) return false;
+    wb->ctx = ctx;
+    return true;
+}
+bool FlintBufferQuit(FlintProfile *ctx, FlintBuffer *wb) {
+    if (!FlintBufferFlush(ctx, wb)) return false;
+    wb->ctx = NULL;
+    return true;
+}
 
-void FlintQuit(FlintContext *ctx) {
+bool FlintBufferAbort(FlintBuffer *wb) {
+    if (!wb) return false;
+    wb->ctx = NULL;
+    if (!Flint__BufferFlush(NULL, wb)) return false;
+    return true;
+}
+
+static FlintProfile Flint__Init(const char *filename, double timestamp_unit, bool is_json) {
+    FlintProfile ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    if (timestamp_unit < 0) return ctx;
+    if (!filename) return ctx;
+    ctx.file = fopen(filename, "wb"); // TODO: handle utf8 and long paths on windows
+    if (!ctx.file) { FlintQuit(&ctx); return ctx; }
+    ctx.timestamp_unit = timestamp_unit;
+    ctx.is_json = is_json;
+    if (ctx.is_json) {
+        if (fprintf(ctx.file, "{\"traceEvents\":[\n") <= 0) { FlintQuit(&ctx); return ctx; }
+    } else {
+        FlintHeader header;
+        header.magic_header = 0x0BADF00D;
+        header.version = 0;
+        header.timestamp_unit = timestamp_unit;
+        header.must_be_0 = 0;
+        if (!Flint__FileWrite(ctx.file, &header, sizeof(header))) { FlintQuit(&ctx); return ctx; }
+    }
+    return ctx;
+}
+
+FlintProfile FlintInit    (const char *filename, double timestamp_unit) { return Flint__Init(filename, timestamp_unit, false); }
+FlintProfile FlintInitJson(const char *filename, double timestamp_unit) { return Flint__Init(filename, timestamp_unit,  true); }
+
+void FlintQuit(FlintProfile *ctx) {
     if (!ctx) return;
     if (ctx->file) {
         if (ctx->is_json) {
@@ -322,51 +434,18 @@ void FlintQuit(FlintContext *ctx) {
     memset(ctx, 0, sizeof(*ctx));
 }
 
-static FlintContext Flint__Init(const char *filename, double timestamp_unit, bool is_json) {
-    FlintContext ctx;
-    memset(&ctx, 0, sizeof(ctx));
-    if (!filename) return ctx;
-    ctx.file = fopen(filename, "wb"); // TODO: handle utf8 on windows
-    ctx.timestamp_unit = timestamp_unit;
-    ctx.is_json = is_json;
-    if (!ctx.file) {
-        FlintQuit(&ctx);
-        return ctx;
-    }
-    if (ctx.is_json) {
-        if (fprintf(ctx.file, "{\"traceEvents\":[\n") <= 0) {
-            FlintQuit(&ctx);
-            return ctx;
-        }
-        if (fflush(ctx.file)) {
-            FlintQuit(&ctx);
-            return ctx;
-        }
-    } else {
-        FlintHeader header;
-        header.magic_header = 0x0BADF00D;
-        header.version = 0;
-        header.timestamp_unit = timestamp_unit;
-        header.must_be_0 = 0;
-        if (fwrite(&header, sizeof(header), 1, ctx.file) != 1) {
-            FlintQuit(&ctx);
-            return ctx;
-        }
-    }
-    return ctx;
+bool FlintFlush(FlintProfile *ctx) {
+    if (!ctx) return false;
+    if (!ctx->file) return false;
+    if (fflush(ctx->file)) return false;
+    return true;
 }
 
-FlintContext FlintInitJson(const char *filename, double timestamp_unit) { return Flint__Init(filename, timestamp_unit,  true); }
-FlintContext FlintInit    (const char *filename, double timestamp_unit) { return Flint__Init(filename, timestamp_unit, false); }
-
-bool FlintTraceBeginLenTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
+bool FlintTraceBeginLenTidPid(FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
     FlintBeginEventMax ev;
-    FlintWriteBuffer wb_ = {0}; if (!wb) wb = &wb_;
     if (!ctx) return false;
     if (!name) return false;
     if (!ctx->file) return false;
-    if (feof(ctx->file)) return false;
-    if (ferror(ctx->file)) return false;
     // if (ctx->times_are_u64) return false;
     if (name_len <= 0) return false;
     if (name_len > 255) name_len = 255; // will be interpreted as truncated in the app (?)
@@ -385,30 +464,27 @@ bool FlintTraceBeginLenTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double wh
                     ev.event.when * ctx->timestamp_unit)
             <= 0) return false;
     } else {
-        if (!Flint__BufferWrite(wb, ctx, &ev, sizeof(FlintBeginEvent) + (uint8_t)name_len - 1)) return false;
+        if (!Flint__BufferWrite(ctx, wb, &ev, sizeof(FlintBeginEvent) + (uint8_t)name_len - 1)) return false;
     }
     return true;
 }
-bool FlintTraceBeginTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, uint32_t tid, uint32_t pid) {
+bool FlintTraceBeginTidPid(FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, uint32_t tid, uint32_t pid) {
     unsigned long name_len;
     if (!name) return false;
     name_len = strlen(name);
     if (!name_len) return false;
     return FlintTraceBeginLenTidPid(ctx, wb, when, name, (signed long)name_len, tid, pid);
 }
-bool FlintTraceBeginLenTid(FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid) { return FlintTraceBeginLenTidPid(ctx, wb, when, name, name_len, tid, 0); }
-bool FlintTraceBeginLen   (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, signed long name_len)               { return FlintTraceBeginLenTidPid(ctx, wb, when, name, name_len,   0, 0); }
-bool FlintTraceBeginTid   (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name, uint32_t tid)                       { return FlintTraceBeginTidPid   (ctx, wb, when, name,           tid, 0); }
-bool FlintTraceBegin      (FlintContext *ctx, FlintWriteBuffer *wb, double when, const char *name)                                     { return FlintTraceBeginTidPid   (ctx, wb, when, name,             0, 0); }
+bool FlintTraceBeginLenTid(FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid) { return FlintTraceBeginLenTidPid(ctx, wb, when, name, name_len, tid, 0); }
+bool FlintTraceBeginLen   (FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, signed long name_len)               { return FlintTraceBeginLenTidPid(ctx, wb, when, name, name_len,   0, 0); }
+bool FlintTraceBeginTid   (FlintProfile *ctx, FlintBuffer *wb, double when, const char *name, uint32_t tid)                       { return FlintTraceBeginTidPid   (ctx, wb, when, name,           tid, 0); }
+bool FlintTraceBegin      (FlintProfile *ctx, FlintBuffer *wb, double when, const char *name)                                     { return FlintTraceBeginTidPid   (ctx, wb, when, name,             0, 0); }
 
-bool FlintTraceCompleteLenTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
+bool FlintTraceCompleteLenTidPid(FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
     FlintCompleteEventMax ev;
-    FlintWriteBuffer wb_ = {0}; if (!wb) wb = &wb_;
     if (!ctx) return false;
     if (!name) return false;
     if (!ctx->file) return false;
-    if (feof(ctx->file)) return false;
-    if (ferror(ctx->file)) return false;
     // if (ctx->times_are_u64) return false;
     if (name_len <= 0) return false;
     if (name_len > 255) name_len = 255; // will be interpreted as truncated in the app (?)
@@ -429,29 +505,26 @@ bool FlintTraceCompleteLenTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double
                     ev.event.duration * ctx->timestamp_unit)
             <= 0) return false;
     } else {
-        if (!Flint__BufferWrite(wb, ctx, &ev, sizeof(FlintCompleteEvent) + (uint8_t)name_len - 1)) return false;
+        if (!Flint__BufferWrite(ctx, wb, &ev, sizeof(FlintCompleteEvent) + (uint8_t)name_len - 1)) return false;
     }
     return true;
 }
-bool FlintTraceCompleteTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, uint32_t tid, uint32_t pid) {
+bool FlintTraceCompleteTidPid(FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, uint32_t tid, uint32_t pid) {
     unsigned long name_len;
     if (!name) return false;
     name_len = strlen(name);
     if (!name_len) return false;
     return FlintTraceCompleteLenTidPid(ctx, wb, when, duration, name, (signed long)name_len, tid, pid);
 }
-bool FlintTraceCompleteLenTid(FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, signed long name_len, uint32_t tid) { return FlintTraceCompleteLenTidPid(ctx, wb, when, duration, name, name_len, tid, 0); }
-bool FlintTraceCompleteLen   (FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, signed long name_len)               { return FlintTraceCompleteLenTidPid(ctx, wb, when, duration, name, name_len,   0, 0); }
-bool FlintTraceCompleteTid   (FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name, uint32_t tid)                       { return FlintTraceCompleteTidPid   (ctx, wb, when, duration, name,           tid, 0); }
-bool FlintTraceComplete      (FlintContext *ctx, FlintWriteBuffer *wb, double when, double duration, const char *name)                                     { return FlintTraceCompleteTidPid   (ctx, wb, when, duration, name,             0, 0); }
+bool FlintTraceCompleteLenTid(FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, signed long name_len, uint32_t tid) { return FlintTraceCompleteLenTidPid(ctx, wb, when, duration, name, name_len, tid, 0); }
+bool FlintTraceCompleteLen   (FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, signed long name_len)               { return FlintTraceCompleteLenTidPid(ctx, wb, when, duration, name, name_len,   0, 0); }
+bool FlintTraceCompleteTid   (FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name, uint32_t tid)                       { return FlintTraceCompleteTidPid   (ctx, wb, when, duration, name,           tid, 0); }
+bool FlintTraceComplete      (FlintProfile *ctx, FlintBuffer *wb, double when, double duration, const char *name)                                     { return FlintTraceCompleteTidPid   (ctx, wb, when, duration, name,             0, 0); }
 
-bool FlintTraceEndTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, uint32_t tid, uint32_t pid) {
+bool FlintTraceEndTidPid(FlintProfile *ctx, FlintBuffer *wb, double when, uint32_t tid, uint32_t pid) {
     FlintEndEvent ev;
-    FlintWriteBuffer wb_ = {0}; if (!wb) wb = &wb_;
     if (!ctx) return false;
     if (!ctx->file) return false;
-    if (feof(ctx->file)) return false;
-    if (ferror(ctx->file)) return false;
     // if (ctx->times_are_u64) return false;
     ev.type = FlintEventType_End;
     ev.pid = pid;
@@ -465,13 +538,13 @@ bool FlintTraceEndTidPid(FlintContext *ctx, FlintWriteBuffer *wb, double when, u
                     ev.when * ctx->timestamp_unit)
             <= 0) return false;
     } else {
-        if (!Flint__BufferWrite(wb, ctx, &ev, sizeof(ev))) return false;
+        if (!Flint__BufferWrite(ctx, wb, &ev, sizeof(ev))) return false;
     }
     return true;
 }
 
-bool FlintTraceEndTid(FlintContext *ctx, FlintWriteBuffer *wb, double when, uint32_t tid) { return FlintTraceEndTidPid(ctx, wb, when, tid, 0); }
-bool FlintTraceEnd   (FlintContext *ctx, FlintWriteBuffer *wb, double when)               { return FlintTraceEndTidPid(ctx, wb, when,   0, 0); }
+bool FlintTraceEndTid(FlintProfile *ctx, FlintBuffer *wb, double when, uint32_t tid) { return FlintTraceEndTidPid(ctx, wb, when, tid, 0); }
+bool FlintTraceEnd   (FlintProfile *ctx, FlintBuffer *wb, double when)               { return FlintTraceEndTidPid(ctx, wb, when,   0, 0); }
 
 #ifdef __cplusplus
 }
