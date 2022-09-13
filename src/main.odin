@@ -442,9 +442,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	draw_tick_end := f_round_down(display_range_end, division)
 	tick_range := draw_tick_end - draw_tick_start
 
-	ticks := int(tick_range / division) + 1
+	ticks := int(tick_range / division) + 3
 
-	for i := 0; i < (ticks * 2); i += 1 {
+	for i := -4; i < (ticks * 2); i += 1 {
 		tick_time := draw_tick_start + (f64(i) * (division / 2))
 		x_off := (tick_time * cam.current_scale) + cam.pan.x
 
