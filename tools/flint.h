@@ -284,15 +284,14 @@ extern "C" {
 
 #ifdef FLINT_BUFFER_PROFILING
 #define FLINT_BUFFER_PROFILE_BEGIN() double time_begin = (FLINT_BUFFER_PROFILING_GET_TIME());
-#define FLINT_BUFFER_PROFILE_END(...) \
+#define FLINT_BUFFER_PROFILE_END(name) \
     do { \
         double time_end = (FLINT_BUFFER_PROFILING_GET_TIME()); \
-        char name[255]; snprintf(name, sizeof(name), "" __VA_ARGS__); \
-        if (!FlintTraceCompleteTid(ctx, NULL, time_begin, time_end - time_begin, name, (uintptr_t)wb->data % 1000000 + 4000000000)) return false; \
+        if (!FlintTraceCompleteTid(ctx, NULL, time_begin, time_end - time_begin, "" name "", (uintptr_t)wb->data % 1000000 + 4000000000)) return false; \
     } while (0)
 #else
 #define FLINT_BUFFER_PROFILE_BEGIN() do {} while (0)
-#define FLINT_BUFFER_PROFILE_END(...) do { (void)("" __VA_ARGS__); } while (0)
+#define FLINT_BUFFER_PROFILE_END(name) do { (void)("" name ""); } while (0)
 #endif
 
 extern char FlintSingleThreadedBufferData[];
@@ -346,7 +345,7 @@ static bool Flint__BufferFlush(FlintProfile *ctx, FlintBuffer *wb) {
         if (!ctx->file) return false;
         FLINT_BUFFER_PROFILE_BEGIN();
         if (!Flint__FileWrite(ctx->file, wb->data, wb->head)) return false;
-        FLINT_BUFFER_PROFILE_END("Buffer 0x%p: Flush (%llx bytes)", wb->data, (unsigned long long)wb->head);
+        FLINT_BUFFER_PROFILE_END("Buffer Flush");
     }
     wb->head = 0;
     wb->recent_string_index = 0;
@@ -362,8 +361,7 @@ static bool Flint__BufferWrite(FlintProfile *ctx, FlintBuffer *wb, void *p, size
     if (n > wb->length) {
         FLINT_BUFFER_PROFILE_BEGIN();
         if (!Flint__FileWrite(ctx->file, p, n)) return false;
-        if (!FlintFlush(ctx)) return false;
-        FLINT_BUFFER_PROFILE_END("Buffer 0x%p: Unbuffered Write (%llx bytes)", wb->data, (unsigned long long)n);
+        FLINT_BUFFER_PROFILE_END("Unbuffered Write");
         return true;
     }
     memcpy((char *)wb->data + wb->head, p, n);
