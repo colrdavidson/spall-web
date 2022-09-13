@@ -906,11 +906,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		colormode = new_colormode
 	}
 
-	if is_mouse_down {
-		set_cursor("none")
-	}
-
-	if !is_hovering && !is_mouse_down {
+	if !is_hovering {
 		reset_cursor()
 	}
 
