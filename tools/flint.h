@@ -127,10 +127,6 @@ Example Threaded Implementation:
     }
 */
 
-#if defined(FLINT_BUFFER_PROFILING) && !defined(FLINT_BUFFER_PROFILING_GET_TIME)
-#error "You must #define FLINT_BUFFER_PROFILING_GET_TIME() to profile buffer flushes."
-#endif
-
 #ifndef FLINT_H
 #define FLINT_H
 
@@ -224,8 +220,6 @@ typedef struct FlintBuffer {
     FlintProfile *ctx;
     uint8_t recent_string_index;
     FlintRecentString recent_strings[256]; // ring buffer
-    // TODO: uint32_t last_tid;
-    // TODO: uint32_t last_pid;
 } FlintBuffer;
 
 #ifdef __cplusplus
@@ -282,16 +276,18 @@ bool FlintTraceCompleteLenTidPid(FlintProfile *ctx, FlintBuffer *wb, double when
 extern "C" {
 #endif
 
+#if defined(FLINT_BUFFER_PROFILING) && !defined(FLINT_BUFFER_PROFILING_GET_TIME)
+#error "You must #define FLINT_BUFFER_PROFILING_GET_TIME() to profile buffer flushes."
+#endif
+
 #ifdef FLINT_BUFFER_PROFILING
-#define FLINT_BUFFER_PROFILE_BEGIN() double time_begin = (FLINT_BUFFER_PROFILING_GET_TIME());
+#define FLINT_BUFFER_PROFILE_BEGIN() double flint_time_begin = (FLINT_BUFFER_PROFILING_GET_TIME())
 #define FLINT_BUFFER_PROFILE_END(name) \
-    do { \
-        double time_end = (FLINT_BUFFER_PROFILING_GET_TIME()); \
-        if (!FlintTraceCompleteTid(ctx, NULL, time_begin, time_end - time_begin, "" name "", (uintptr_t)wb->data % 1000000 + 4000000000)) return false; \
-    } while (0)
+    double flint_time_end = (FLINT_BUFFER_PROFILING_GET_TIME()); \
+    if (!FlintTraceCompleteTidPid(ctx, NULL, flint_time_begin, flint_time_end - flint_time_begin, "" name "", (uint32_t)(uintptr_t)wb->data, 0xffffff00)) return false;
 #else
-#define FLINT_BUFFER_PROFILE_BEGIN() do {} while (0)
-#define FLINT_BUFFER_PROFILE_END(name) do { (void)("" name ""); } while (0)
+#define FLINT_BUFFER_PROFILE_BEGIN()
+#define FLINT_BUFFER_PROFILE_END(name)
 #endif
 
 extern char FlintSingleThreadedBufferData[];
