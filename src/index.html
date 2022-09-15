@@ -14,6 +14,8 @@
 			body {
 				font-family: -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol;
 				touch-action: none;
+				margin: 0;
+				padding: 0;
 			}
 
 			.canvas-container {
@@ -31,11 +33,62 @@
 				width: 100%;
 				height: 100%;
 			}
+
+			.error-box {
+				display: flex;
+				flex-direction: column;
+				height: 100vh;
+
+				font-family: monospace;
+				margin-top: auto;
+				margin-bottom: auto;
+
+				z-index: 1;
+			}
+			.error-box.hide {
+				display: none;
+			}
+
+			.sub-box {
+				display: flex;
+				margin-top: auto;
+				margin-bottom: auto;
+
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+			}
+
+			.more-centery {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				background-color: #FF0033;
+				padding: 2em;
+
+				border-radius: 10px;
+				border: black 2px solid;
+			}
+
+			.more-centery > p {
+				color: white;
+				margin-top: 0;
+				margin-bottom: 0;
+				font-size: 22px;
+			}
 		</style>
 	</head>
 	<body>
 		<div class="canvas-container">
 			<canvas></canvas>
+		</div>
+		<div id="error" class="error-box hide">
+			<div class="sub-box">
+				<div class="more-centery">
+					<p>🤣 Lol, we're dead. 🤣</p>
+					<p id="error-field">Error Code: 0xNOPE</p>
+				</div>
+			</div>
 		</div>
 		<script>
 			function str(s) {
@@ -67,6 +120,7 @@
 
 			let loading_file = null;
 			let loading_reader = null;
+			let everythings_dead = false;
 
 			function updateFont(size, font, forced = false) {
 				let font_str = `${14 * dpr * size}px ${font}`;
@@ -478,7 +532,16 @@
 				function doFrame() {
 					try {
 						const currentTime = new Date().getTime() / 1000;
-						const animating = window.wasm.frame(canvas.width / dpr, canvas.height / dpr, currentTime - lastTime);
+
+						try {
+							const animating = window.wasm.frame(canvas.width / dpr, canvas.height / dpr, currentTime - lastTime);
+						} catch (e) {
+							console.error(e);
+							let elem = document.getElementById("error");
+							elem.classList.remove("hide");
+							return;
+						}
+
 						lastTime = currentTime;
 
 						if (animating) {
