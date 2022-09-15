@@ -26,6 +26,10 @@
 				height: 100%;
 			}
 
+			.canvas-container.hide {
+				display: none;
+			}
+
 			canvas, .error-output {
 				position: absolute;
 				top: 0;
@@ -42,8 +46,6 @@
 				font-family: monospace;
 				margin-top: auto;
 				margin-bottom: auto;
-
-				z-index: 1;
 			}
 			.error-box.hide {
 				display: none;
@@ -79,7 +81,7 @@
 		</style>
 	</head>
 	<body>
-		<div class="canvas-container">
+		<div id="display" class="canvas-container">
 			<canvas></canvas>
 		</div>
 		<div id="error" class="error-box hide">
@@ -121,6 +123,11 @@
 			let loading_file = null;
 			let loading_reader = null;
 			let everythings_dead = false;
+
+			function implode() {
+				document.getElementById("error").classList.remove("hide");
+				document.getElementById("display").classList.add("hide");
+			}
 
 			function updateFont(size, font, forced = false) {
 				let font_str = `${14 * dpr * size}px ${font}`;
@@ -271,7 +278,13 @@
 									return;
 								}
 
-								window.wasm.load_config_chunk(offset, loading_file.size, ...bytes(e.target.result));
+								try {
+									window.wasm.load_config_chunk(offset, loading_file.size, ...bytes(e.target.result));
+								} catch (e) {
+									console.error(e);
+									implode();
+									return;
+								}
 							};
 							loading_reader.readAsArrayBuffer(blob);
 						}
@@ -480,7 +493,13 @@
 
 								loading_file = file;
 								loading_reader = new FileReader();
-								window.wasm.start_loading_file(loading_file.size);
+								try {
+									window.wasm.start_loading_file(loading_file.size);
+								} catch (e) {
+									console.error(e);
+									implode();
+									return;
+								}
 							}
 						});
 					}
@@ -538,8 +557,7 @@
 							animating = window.wasm.frame(canvas.width / dpr, canvas.height / dpr, currentTime - lastTime);
 						} catch (e) {
 							console.error(e);
-							let elem = document.getElementById("error");
-							elem.classList.remove("hide");
+							implode();
 							return;
 						}
 

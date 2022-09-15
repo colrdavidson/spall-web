@@ -272,7 +272,7 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 			return
 		case:
 
-			fmt.printf("Oops, I did a bad? '%c':%d %s\n", ch, chunk_pos(p), p.data)
+			fmt.printf("Oops, I did a bad? '%c':%d\n", ch, chunk_pos(p))
 			return
 		}
 	}
