@@ -533,8 +533,9 @@
 					try {
 						const currentTime = new Date().getTime() / 1000;
 
+						let animating;
 						try {
-							const animating = window.wasm.frame(canvas.width / dpr, canvas.height / dpr, currentTime - lastTime);
+							animating = window.wasm.frame(canvas.width / dpr, canvas.height / dpr, currentTime - lastTime);
 						} catch (e) {
 							console.error(e);
 							let elem = document.getElementById("error");
