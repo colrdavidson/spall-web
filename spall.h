@@ -102,9 +102,14 @@ typedef struct SpallBeginEventMax {
 #pragma pack(pop)
 
 typedef struct SpallProfile {
-    FILE *file;
     double timestamp_unit;
     uint64_t is_json;
+    bool (*write)(struct SpallProfile *self, void *data, size_t length);
+    bool (*flush)(struct SpallProfile *self);
+    union {
+        FILE *file;
+        void *userdata;
+    };
 } SpallProfile;
 
 typedef struct SpallRecentString {
@@ -187,7 +192,7 @@ extern "C" {
 #define SPALL_BUFFER_PROFILE_BEGIN() double spall_time_begin = (SPALL_BUFFER_PROFILING_GET_TIME())
 #define SPALL_BUFFER_PROFILE_END(name) \
     double spall_time_end = (SPALL_BUFFER_PROFILING_GET_TIME()); \
-    if (!SpallTraceCompleteTidPid(ctx, NULL, spall_time_begin, spall_time_end - spall_time_begin, "" name "", (uint32_t)(uintptr_t)wb->data, 0xffffff00)) return false;
+    if (!SpallTraceCompleteTidPid(ctx, NULL, spall_time_begin, spall_time_end - spall_time_begin, "" name "", (uint32_t)(uintptr_t)wb->data, 4222222222)) return false;
 #else
 #define SPALL_BUFFER_PROFILE_BEGIN()
 #define SPALL_BUFFER_PROFILE_END(name)
@@ -197,12 +202,20 @@ extern char SpallSingleThreadedBufferData[];
 char SpallSingleThreadedBufferData[1 << 16];
 SpallBuffer SpallSingleThreadedBuffer = {SpallSingleThreadedBufferData, sizeof(SpallSingleThreadedBufferData)};
 
-static bool Spall__FileWrite(FILE *f, void *p, size_t n) {
-    // if (feof(f)) return false;
-    if (ferror(f)) return false;
-    if (fwrite(p, n, 1, f) != 1) return false;
+static bool Spall__FileWrite(SpallProfile *ctx, void *p, size_t n) {
+    if (!ctx->file) return false;
+    // if (feof(ctx->file)) return false;
+    if (ferror(ctx->file)) return false;
+    if (fwrite(p, n, 1, ctx->file) != 1) return false;
     return true;
 }
+static bool Spall__FileFlush(SpallProfile *ctx) {
+    if (!ctx->file) return false;
+    if (fflush(ctx->file)) return false;
+    return true;
+}
+// TODO: Spall__FilePrintf
+// TODO: Spall__FileClose
 
 static void Spall__BufferPushString(SpallBuffer *wb, size_t n, signed long name_len) {
     SpallRecentString recent_string = {0};
@@ -243,7 +256,7 @@ static bool Spall__BufferFlush(SpallProfile *ctx, SpallBuffer *wb) {
     if (wb->head && ctx) {
         if (!ctx->file) return false;
         SPALL_BUFFER_PROFILE_BEGIN();
-        if (!Spall__FileWrite(ctx->file, wb->data, wb->head)) return false;
+        if (!ctx->write(ctx, wb->data, wb->head)) return false;
         SPALL_BUFFER_PROFILE_END("Buffer Flush");
     }
     wb->head = 0;
@@ -255,11 +268,11 @@ static bool Spall__BufferFlush(SpallProfile *ctx, SpallBuffer *wb) {
 static bool Spall__BufferWrite(SpallProfile *ctx, SpallBuffer *wb, void *p, size_t n) {
     // precon: !wb || wb->head < wb->length
     // precon: ctx->file
-    if (!wb) return Spall__FileWrite(ctx->file, p, n);
+    if (!wb) return ctx->write(ctx, p, n);
     if (wb->head + n > wb->length && !Spall__BufferFlush(ctx, wb)) return false;
     if (n > wb->length) {
         SPALL_BUFFER_PROFILE_BEGIN();
-        if (!Spall__FileWrite(ctx->file, p, n)) return false;
+        if (!ctx->write(ctx, p, n)) return false;
         SPALL_BUFFER_PROFILE_END("Unbuffered Write");
         return true;
     }
@@ -299,6 +312,8 @@ static SpallProfile Spall__Init(const char *filename, double timestamp_unit, boo
     if (timestamp_unit < 0) return ctx;
     if (!filename) return ctx;
     ctx.file = fopen(filename, "wb"); // TODO: handle utf8 and long paths on windows
+    ctx.write = Spall__FileWrite;
+    ctx.flush = Spall__FileFlush;
     if (!ctx.file) { SpallQuit(&ctx); return ctx; }
     ctx.timestamp_unit = timestamp_unit;
     ctx.is_json = is_json;
@@ -310,7 +325,7 @@ static SpallProfile Spall__Init(const char *filename, double timestamp_unit, boo
         header.version = 0;
         header.timestamp_unit = timestamp_unit;
         header.must_be_0 = 0;
-        if (!Spall__FileWrite(ctx.file, &header, sizeof(header))) { SpallQuit(&ctx); return ctx; }
+        if (!ctx.write(&ctx, &header, sizeof(header))) { SpallQuit(&ctx); return ctx; }
     }
     return ctx;
 }
@@ -334,7 +349,7 @@ void SpallQuit(SpallProfile *ctx) {
 bool SpallFlush(SpallProfile *ctx) {
     if (!ctx) return false;
     if (!ctx->file) return false;
-    if (fflush(ctx->file)) return false;
+    if (!ctx->flush(ctx)) return false;
     return true;
 }
 
