@@ -12,8 +12,8 @@ Header :: struct #packed {
 Event_Type :: enum u8 {
 	Invalid             = 0,
 	Custom_Data         = 1, // Basic readers can skip this.
+	StreamOver          = 2,
 
-	Complete            = 2,
 	Begin               = 3,
 	End                 = 4,
 	Instant             = 5,
