@@ -9,9 +9,15 @@ import shutil
 import string
 import sys
 import time
+import http.server
 
 RELEASE = len(sys.argv) > 1 and sys.argv[1] == 'release'
 EXTRARELEASE = len(sys.argv) > 1 and sys.argv[1] == 'extrarelease'
+
+RUN_SERVER = False
+for arg in sys.argv:
+    if arg == 'run':
+        RUN_SERVER = True
 
 odin = 'odin'
 program_name = 'spall'
@@ -114,3 +120,21 @@ with open('build/dist/index.html', 'w') as f:
     f.write(rootContents)
 
 print('Done!')
+
+print('\n')
+
+if RUN_SERVER:
+    print('Running server...')
+    print('Connect to http://localhost:8000 in your browser to open the trace viewer.')
+    print('Press Control-C to stop running the server.')
+    print('')
+    os.chdir('./build/dist')
+    try:
+        http.server.ThreadingHTTPServer(('', 8000), http.server.SimpleHTTPRequestHandler).serve_forever()
+    except KeyboardInterrupt:
+        print('')
+else:
+    print('Go to the build/dist folder and run "python -m http.server" to serve the trace viewer.')
+    print('Or, build with "python build.py run" to auto-run a server.')
+    print('Then, connect to http://localhost:8000 in your browser to open the trace viewer.')
+
