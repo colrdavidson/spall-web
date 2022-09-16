@@ -106,41 +106,9 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		
 		p.pos += u32(event_sz)
 		return ev, .EventRead
-	case .Complete:
-		event_sz := u32(size_of(spall.Complete_Event))
-		if real_pos(p) + event_sz > p.total_size {
-			return TempEvent{}, .Finished
-		}
-		if int(chunk_pos(p) + event_sz) > len(p.data) {
-			return TempEvent{}, .PartialRead
-		}
-		event := (^spall.Complete_Event)(raw_data(p.data[chunk_pos(p):]))^
-
-		if (real_pos(p) + event_sz + u32(event.name_len)) > p.total_size {
-			return TempEvent{}, .Finished
-		}
-		if int(chunk_pos(p) + event_sz + u32(event.name_len)) > len(p.data) {
-			return TempEvent{}, .PartialRead
-		}
-
-		name := string(p.data[chunk_pos(p)+event_sz:chunk_pos(p)+event_sz+u32(event.name_len)])
-		str, err := strings.intern_get(&p.intern, name)
-		if err != nil {
-			trap()
-		}
-
-		ev := TempEvent{
-			type = .Complete,
-			timestamp = event.time,
-			duration = event.duration,
-			thread_id = event.tid,
-			process_id = event.pid,
-			name = str,
-		}
-
-		p.pos += u32(event_sz) + u32(event.name_len)
-		return ev, .EventRead
-
+	case .StreamOver:
+		fmt.printf("Got what was formerly a Complete event. Delete the file you tried to load!!!\n@Todo: Remove this message when all the files are deleted, and start utilizing StreamOver.\n", type)
+		trap()
 	case .Custom_Data:         fallthrough; // @Todo
 	case .Instant:             fallthrough; // @Todo
 	case .Overwrite_Timestamp: fallthrough; // @Todo
