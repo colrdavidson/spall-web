@@ -535,6 +535,7 @@
 					if (color_ret === "auto") {
 						let is_dark = event.matches;
 						window.wasm.set_color_mode(true, is_dark);
+						wakeUp();
 					}
 				})
 				if (color_ret === "auto") {
