@@ -98,12 +98,12 @@ thread_gap     : f64 = 8
 
 trace_config : string
 
+process_map: ValHash
 processes: [dynamic]Process
 color_choices: [dynamic]Vec3
 event_count: i64
 total_max_time: f64
 total_min_time: f64
-total_max_depth: u16
 
 @export
 set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
@@ -514,7 +514,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				color_weights := make([]f64, len(color_choices), context.temp_allocator)
 				{
 					idx := name_color_idx(scan_arr[0].name)
-					color_weights[idx] += scan_arr[0].duration
+					color_weights[idx] += bound_duration(scan_arr[0], tm.max_time)
 				}
 
 				flush_chunker :: proc(chunker_w : ^f64, chunker_color : Vec3, chunker_x, cur_y, y, h : f64, disp_rect : Rect, d_idx : int) {
@@ -529,19 +529,21 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 				for ev, de_id in scan_arr {
 					x := ev.timestamp - total_min_time
-					w := ev.duration * cam.current_scale
+
+					duration := bound_duration(ev, tm.max_time)
+					w := duration * cam.current_scale
 
 					xm := x * cam.target_scale
 
 					idx := name_color_idx(ev.name)
-					color_weights[idx] += max(ev.duration, MIN_WIDTH / cam.current_scale)
+					color_weights[idx] += max(duration, MIN_WIDTH / cam.current_scale)
 
 					MIN_WIDTH :: 2.0
 					if w < MIN_WIDTH {
 						if de_id - 1 >= 0 {
 							ev_left := scan_arr[de_id - 1]
 							xl := (ev_left.timestamp - total_min_time) * cam.target_scale
-							wl := ev_left.duration * cam.target_scale
+							wl := bound_duration(ev_left, tm.max_time) * cam.target_scale
 							if xl + max(wl, MIN_WIDTH) > xm {
 								chunker_w = max(x * cam.current_scale + MIN_WIDTH - chunker_x, chunker_w)
 								continue
@@ -611,16 +613,19 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					underhang := start_x - dr.pos.x
 					disp_w := min(dr.size.x - underhang, dr.size.x)
 
+					display_name := ev.name
+					if ev.duration == -1 {
+						display_name = fmt.tprintf("%s (Did Not Finish)", ev.name)
+					}
 					text_pad := (em / 2)
 					text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
-					max_chars := max(0, min(len(ev.name), text_width))
-					name_str := ev.name[:max_chars]
+					max_chars := max(0, min(len(display_name), text_width))
+					name_str := display_name[:max_chars]
 
-					if len(name_str) > 4 || max_chars == len(ev.name) {
-						if max_chars != len(ev.name) {
-							name_str = fmt.tprintf("%s…", ev.name[:max_chars-1])
+					if len(name_str) > 4 || max_chars == len(display_name) {
+						if max_chars != len(display_name) {
+							name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
 						}
-
 
 						str_width := measure_text(name_str, p_font_size, monospace_font)
 						str_x := max(dr.pos.x, start_x) + text_pad
@@ -769,7 +774,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 					scan_loop: for ev in scan_arr {
 						x := ev.timestamp - total_min_time
-						w := ev.duration * cam.current_scale
+
+						duration := bound_duration(ev, tm.max_time)
+						w := duration * cam.current_scale
 
 						r := Rect{Vec2{x, y}, Vec2{w, h}}
 						r_x := (r.pos.x * cam.current_scale) + cam.pan.x + disp_rect.pos.x
@@ -786,10 +793,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 							s = &stats[ev.name]
 						}
 						s.count += 1
-						s.total_time += ev.duration
-						s.min_time = min(s.min_time, f32(ev.duration))
-						s.max_time = max(s.max_time, f32(ev.duration))
-						total_tracked_time += ev.duration
+						s.total_time += duration
+						s.min_time = min(s.min_time, f32(duration))
+						s.max_time = max(s.max_time, f32(duration))
+						total_tracked_time += duration
 					}
 				}
 				cur_y += thread_advance
@@ -913,12 +920,13 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		y := info_pane_y + top_line_gap
 
 
-		event := processes[p_idx].threads[t_idx].events[e_idx]
+		thread := processes[p_idx].threads[t_idx]
+		event := thread.events[e_idx]
 		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start timestamp: %s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 
-		draw_text(fmt.tprintf("duration: %s", time_fmt(event.duration)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("duration: %s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 	}
 
 	// Render toolbar background

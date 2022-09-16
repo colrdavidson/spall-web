@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:strings"
 import "core:container/queue"
 import "core:strconv"
+import "core:slice"
 
 JSONState :: enum {
 	InvalidToken,
@@ -400,6 +401,13 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			continue
 		}
 
+		defer {
+			jp.cur_event = TempEvent{}
+			jp.cur_event_id = -1
+			jp.seen_dur = false
+			jp.current_parent = IdPair{}
+		}
+
 		// got the whole event
 		if state == .ScopeExited && tok.id == jp.cur_event_id {
 			switch jp.cur_event.type {
@@ -413,50 +421,187 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 						duration = jp.cur_event.duration,
 						timestamp = jp.cur_event.timestamp,
 					}
-					push_event(&processes, jp.cur_event.process_id, jp.cur_event.thread_id, new_event)
+					json_push_event(&processes, jp.cur_event.process_id, jp.cur_event.thread_id, new_event)
 				}
 			case .Begin:
-				tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]
-				if !ok1 {
-					bande_p_to_t[jp.cur_event.process_id] = make(ThreadMap, 0, scratch_allocator)
-					tm = &bande_p_to_t[jp.cur_event.process_id]
+				new_event := Event{
+					type = .Complete,
+					name = jp.cur_event.name,
+					duration = -1,
+					timestamp = (jp.cur_event.timestamp) * stamp_scale,
 				}
 
-				ts, ok2 := &tm[jp.cur_event.thread_id]
-				if !ok2 {
-					event_stack: queue.Queue(TempEvent)
-					queue.init(&event_stack, 0, scratch_allocator)
-					tm[jp.cur_event.thread_id] = event_stack
-					ts = &tm[jp.cur_event.thread_id]
-				}
+				event_count += 1
+				p_idx, t_idx, e_idx := json_push_event(&processes, jp.cur_event.process_id, jp.cur_event.thread_id, new_event)
 
-				queue.push_back(ts, jp.cur_event)
+				thread := &processes[p_idx].threads[t_idx]
+				queue.push_back(&thread.bande_q, e_idx)
 			case .End:
-				if tm, ok1 := &bande_p_to_t[jp.cur_event.process_id]; ok1 {
-					if ts, ok2 := &tm[jp.cur_event.thread_id]; ok2 {
-						if queue.len(ts^) > 0 {
-							ev := queue.pop_back(ts)
+				p_idx, ok1 := vh_find(&process_map, jp.cur_event.process_id)
+				if !ok1 {
+					fmt.printf("invalid end?\n")
+					continue
+				}
+				t_idx, ok2 := vh_find(&processes[p_idx].thread_map, jp.cur_event.thread_id)
+				if !ok1 {
+					fmt.printf("invalid end?\n")
+					continue
+				}
 
-							new_event := Event{
-								type = .Complete,
-								name = ev.name,
-								duration = jp.cur_event.timestamp - ev.timestamp,
-								timestamp = ev.timestamp,
+				thread := &processes[p_idx].threads[t_idx]
+				if queue.len(thread.bande_q) > 0 {
+					je_idx := queue.pop_back(&thread.bande_q)
+					jev := &thread.events[je_idx]
+					jev.duration = (jp.cur_event.timestamp - jev.timestamp) * stamp_scale
+					thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
+					total_max_time = max(total_max_time, jev.timestamp + jev.duration)
+				}
+			}
+		}
+	}
+	return
+}
+
+json_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32, event: Event) -> (int, int, int) {
+	p_idx, ok1 := vh_find(&process_map, process_id)
+	if !ok1 {
+		append(processes, Process{
+			min_time = 0x7fefffffffffffff, 
+			process_id = process_id,
+			threads = make([dynamic]Thread),
+			thread_map = vh_init(scratch_allocator),
+		})
+		p_idx = len(processes) - 1
+		vh_insert(&process_map, process_id, p_idx)
+	}
+
+	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, thread_id)
+	if !ok2 {
+		threads := &processes[p_idx].threads
+
+		t := Thread{
+			min_time = 0x7fefffffffffffff, 
+			thread_id = thread_id,
+			events = make([dynamic]Event),
+			depths = make([dynamic][]Event),
+		}
+		queue.init(&t.bande_q, 0, scratch_allocator)
+		append(threads, t)
+
+		t_idx = len(threads) - 1
+		thread_map := &processes[p_idx].thread_map
+		vh_insert(thread_map, thread_id, t_idx)
+	}
+
+	p := &processes[p_idx]
+	p.min_time = min(p.min_time, event.timestamp)
+
+	t := &p.threads[t_idx]
+	t.min_time = min(t.min_time, event.timestamp)
+	t.max_time = max(t.max_time, event.timestamp + event.duration)
+
+	total_min_time = min(total_min_time, event.timestamp)
+	total_max_time = max(total_max_time, event.timestamp + event.duration)
+
+	append(&t.events, event)
+	return p_idx, t_idx, len(t.events)-1
+}
+
+pid_sort_proc :: proc(a, b: Process) -> bool { return a.min_time < b.min_time }
+tid_sort_proc :: proc(a, b: Thread) -> bool  { return a.min_time < b.min_time }
+event_buildsort_proc :: proc(a, b: Event) -> bool {
+	if a.timestamp == b.timestamp {
+		return a.duration > b.duration
+	}
+	return a.timestamp < b.timestamp
+}
+event_rendersort_step1_proc :: proc(a, b: Event) -> bool {
+	return a.depth < b.depth
+}
+event_rendersort_step2_proc :: proc(a, b: Event) -> bool {
+	return a.timestamp < b.timestamp
+}
+
+json_process_events :: proc(processes: ^[dynamic]Process) {
+	ev_stack: queue.Queue(int)
+	queue.init(&ev_stack, 0, context.temp_allocator)
+
+	for pe, _ in process_map.entries {
+		proc_idx := pe.val
+		process := &processes[proc_idx]
+
+		slice.sort_by(process.threads[:], tid_sort_proc)
+
+		// generate depth mapping
+		for tm in &process.threads {
+			slice.sort_by(tm.events[:], event_buildsort_proc)
+
+			queue.clear(&ev_stack)		
+			for event, e_idx in &tm.events {
+				cur_start := event.timestamp
+				cur_end   := event.timestamp + bound_duration(event, tm.max_time)
+				if queue.len(ev_stack) == 0 {
+					queue.push_back(&ev_stack, e_idx)
+				} else {
+					prev_e_idx := queue.peek_back(&ev_stack)^
+					prev_ev := tm.events[prev_e_idx]
+
+					prev_start := prev_ev.timestamp
+					prev_end   := prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
+
+					// if it fits within the parent
+					if cur_start >= prev_start && cur_end <= prev_end {
+						queue.push_back(&ev_stack, e_idx)
+					} else {
+
+						// while it doesn't overlap the parent
+						for queue.len(ev_stack) > 0 {
+							prev_e_idx = queue.peek_back(&ev_stack)^
+							prev_ev = tm.events[prev_e_idx]
+
+							prev_start = prev_ev.timestamp
+							prev_end   = prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
+
+
+							if cur_start >= prev_start && cur_end > prev_end {
+								queue.pop_back(&ev_stack)
+							} else {
+								break;
 							}
-
-							event_count += 1
-							push_event(&processes, ev.process_id, ev.thread_id, new_event)
 						}
+						queue.push_back(&ev_stack, e_idx)
 					}
+				}
+
+				event.depth = u16(queue.len(ev_stack))
+				tm.max_depth = max(tm.max_depth, event.depth)
+			}
+			slice.sort_by(tm.events[:], event_rendersort_step1_proc)
+
+			i := 0
+			ev_start := 0
+			cur_depth : u16 = 0
+			for ; i < len(tm.events) - 1; i += 1 {
+				ev := tm.events[i]
+				next_ev := tm.events[i+1]
+
+				if ev.depth != next_ev.depth {
+					append(&tm.depths, tm.events[ev_start:i+1])
+					ev_start = i + 1
+					cur_depth = next_ev.depth
 				}
 			}
 
-			jp.cur_event = TempEvent{}
-			jp.cur_event_id = -1
-			jp.seen_dur = false
-			jp.current_parent = IdPair{}
-			continue
+			if len(tm.events) > 0 {
+				append(&tm.depths, tm.events[ev_start:i+1])
+			}
+
+			for depth_arr in tm.depths {
+				slice.sort_by(depth_arr, event_rendersort_step2_proc)
+			}
 		}
 	}
+
+	slice.sort_by(processes[:], pid_sort_proc)
 	return
 }

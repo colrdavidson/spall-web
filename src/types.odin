@@ -49,13 +49,17 @@ Event :: struct #packed {
 	depth: u16,
 }
 
+EventQueue :: distinct queue.Queue(int)
 Thread :: struct {
 	min_time: f64,
+	max_time: f64,
 	max_depth: u16,
 
 	thread_id: u32,
 	events: [dynamic]Event,
 	depths: [dynamic][]Event,
+
+	bande_q: EventQueue,
 }
 
 Process :: struct {
