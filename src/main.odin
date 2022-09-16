@@ -1025,7 +1025,7 @@ button :: proc(in_rect: Rect, text: string, font: string) -> bool {
 	draw_rectc(in_rect, 3, button_color)
 	text_width := measure_text(text, p_font_size, font)
 	text_height := get_text_height(p_font_size, font)
-	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, p_font_size, font, text_color3)
+	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, p_font_size, font, text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
 		set_cursor("pointer")
