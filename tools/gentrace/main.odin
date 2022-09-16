@@ -4,7 +4,7 @@ import "core:fmt"
 import "core:os"
 
 main :: proc() {
-	json_fd, err := os.open("test_DUMP", os.O_WRONLY | os.O_CREATE, 0o644)
+	json_fd, err := os.open("test_DUMP.json", os.O_WRONLY | os.O_CREATE, 0o644)
 	if err != 0 {
 		fmt.printf("failed to open file: %s\n", err)
 	}
