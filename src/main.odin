@@ -447,7 +447,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	ticks := int(tick_range / division) + 3
 
-	for i := -4; i < (ticks * 2); i += 1 {
+	line_x_start := -4
+	line_x_end   := ticks * 2
+	for i := line_x_start; i < line_x_end; i += 1 {
 		tick_time := draw_tick_start + (f64(i) * (division / 2))
 		x_off := (tick_time * cam.current_scale) + cam.pan.x
 
@@ -942,6 +944,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	if button(rect(edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
 		// I'm sorry. this is a dumb hack
 		finished_loading = true		
+	}
+	if button(rect(edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
+		open_file_dialog()
 	}
 
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {

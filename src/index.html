@@ -81,6 +81,9 @@
 		</style>
 	</head>
 	<body>
+		<div style="display:none">
+			<input type="file" id="file-dialog" />
+		</div>
 		<div id="display" class="canvas-container">
 			<canvas></canvas>
 		</div>
@@ -287,9 +290,30 @@
 								}
 							};
 							loading_reader.readAsArrayBuffer(blob);
+						},
+
+						open_file_dialog() {
+							document.getElementById('file-dialog').click();
 						}
 					},
 				});
+
+				function load_file(file) {
+					loading_file = file;
+					loading_reader = new FileReader();
+					try {
+						window.wasm.start_loading_file(loading_file.size);
+					} catch (e) {
+						console.error(e);
+						implode();
+						return;
+					}
+				}
+
+				let fd = document.getElementById('file-dialog');
+				fd.addEventListener("change", () => {
+					load_file(fd.files[0]);
+				}, false);
 
 				let awake = false;
 				function wakeUp() {
@@ -491,15 +515,7 @@
 							if (item.kind === "file") {
 								let file = item.getAsFile();
 
-								loading_file = file;
-								loading_reader = new FileReader();
-								try {
-									window.wasm.start_loading_file(loading_file.size);
-								} catch (e) {
-									console.error(e);
-									implode();
-									return;
-								}
+								load_file(file);
 							}
 						});
 					}
