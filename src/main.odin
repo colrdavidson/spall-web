@@ -73,7 +73,7 @@ clicked       := false
 is_hovering   := false
 
 selected_rect := Rect{}
-did_select := false
+did_multiselect := false
 
 build_hash := 0
 
@@ -619,6 +619,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 						if clicked {
 							selected_event = {i64(p_idx), i64(t_idx), i64(e_idx)}
 							clicked_on_rect = true
+							did_multiselect = false
 						}
 					}
 
@@ -667,18 +668,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		}
 	}
 
-	if clicked && !clicked_on_rect {
+	if clicked && !clicked_on_rect && !shift_down {
 		selected_event = {-1, -1, -1}
-	}
-
-	if is_mouse_down && shift_down {
-		// try to fake a reduced frame of latency by extrapolating the position by the delta
-		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
-		delta := mouse_pos_extrapolated - clicked_pos
-		selected_rect = rect(clicked_pos.x, clicked_pos.y, delta.x, delta.y)
-		draw_rect_outline(selected_rect, 1, Vec3{0, 0, 255})
-		draw_rect(selected_rect, Vec3{0, 0, 255}, 100)
-		did_select = true
+		selected_rect = Rect{}
+		did_multiselect = false
 	}
 
 	// Chop sides of screen
@@ -686,7 +679,6 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	draw_rect(rect(0, disp_rect.pos.y + graph_header_text_height, graph_rect.pos.x, height), bg_color2) // left
 	draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y + graph_header_text_height, width, height), bg_color2) // right
 	draw_line(Vec2{0, disp_rect.pos.y + graph_header_text_height}, Vec2{width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
-
 
 	// Draw timestamps on subdivision lines
 	ONE_SECOND :: 1000 * 1000
@@ -714,7 +706,17 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
 	draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
 
-	if did_select {
+	if is_mouse_down && shift_down {
+		// try to fake a reduced frame of latency by extrapolating the position by the delta
+		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
+		delta := mouse_pos_extrapolated - clicked_pos
+		selected_rect = rect(clicked_pos.x, clicked_pos.y, delta.x, delta.y)
+		draw_rect_outline(selected_rect, 1, Vec3{0, 0, 255})
+		draw_rect(selected_rect, Vec3{0, 0, 255}, 100)
+		did_multiselect = true
+	}
+
+	if did_multiselect {
 		flopped_rect := Rect{}
 		flopped_rect.pos.x = min(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
 		x2 := max(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
@@ -727,10 +729,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		selected_start_time := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x)
 		selected_end_time   := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x + flopped_rect.size.x)
 
-		width_text := fmt.tprintf("%s", time_fmt(selected_end_time - selected_start_time))
-		width_text_width := measure_text(width_text, p_font_size, monospace_font)
-		if flopped_rect.size.x > width_text_width {
-			draw_text(width_text, Vec2{flopped_rect.pos.x + (flopped_rect.size.x / 2) - (width_text_width / 2), flopped_rect.pos.y + flopped_rect.size.y - (em * 1.5)}, p_font_size, monospace_font, text_color)
+		if is_mouse_down && shift_down {
+			width_text := fmt.tprintf("%s", time_fmt(selected_end_time - selected_start_time))
+			width_text_width := measure_text(width_text, p_font_size, monospace_font)
+			if flopped_rect.size.x > width_text_width {
+				draw_text(width_text, Vec2{flopped_rect.pos.x + (flopped_rect.size.x / 2) - (width_text_width / 2), flopped_rect.pos.y + flopped_rect.size.y - (em * 1.5)}, p_font_size, monospace_font, text_color)
+			}
 		}
 
 		// push it into screen-space
