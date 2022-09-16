@@ -103,6 +103,9 @@ finish_loading :: proc (p: ^Parser) {
 	stop_bench("parse config")
 	fmt.printf("Got %d events\n", event_count)
 
+	free_all(context.temp_allocator)
+	free_all(scratch_allocator)
+
 	start_bench("process events")
 	if is_json {
 		json_process_events(&processes)

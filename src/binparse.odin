@@ -193,12 +193,14 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 	if !ok2 {
 		threads := &processes[p_idx].threads
 
-		append(threads, Thread{ 
+		t := Thread{
 			min_time = 0x7fefffffffffffff, 
 			thread_id = thread_id,
 			events = make([dynamic]Event),
 			depths = make([dynamic][]Event),
-		})
+		}
+		queue.init(&t.bande_q, 0, scratch_allocator)
+		append(threads, t)
 
 		t_idx = len(threads) - 1
 		thread_map := &processes[p_idx].thread_map
@@ -210,6 +212,7 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 
 	t := &p.threads[t_idx]
 	t.min_time = min(t.min_time, event.timestamp)
+	t.max_time = max(t.max_time, event.timestamp + event.duration)
 
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
@@ -219,7 +222,6 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 }
 
 bin_process_events :: proc(processes: ^[dynamic]Process) {
-
 	ev_stack: queue.Queue(int)
 	queue.init(&ev_stack, 0, context.temp_allocator)
 
@@ -262,7 +264,7 @@ bin_process_events :: proc(processes: ^[dynamic]Process) {
 							if cur_start >= prev_start && cur_end > prev_end {
 								queue.pop_back(&ev_stack)
 							} else {
-								break;
+								break
 							}
 						}
 						queue.push_back(&ev_stack, e_idx)
