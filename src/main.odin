@@ -225,7 +225,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		chunk_size : f64 = 10
 
 		load_box := rect(0, 0, 100, 100)
-		load_box = rect((width / 2) - (load_box.size.x / 2) - pad_size, (height / 2) - (load_box.size.y / 2) - pad_size, load_box.size.x + pad_size, load_box.size.y + pad_size)
+		load_box = rect(
+			(width / 2) - (load_box.size.x / 2) - pad_size, 
+			(height / 2) - (load_box.size.y / 2) - pad_size, 
+			load_box.size.x + pad_size, 
+			load_box.size.y + pad_size
+		)
 
 		draw_rectc(load_box, 3, Vec3{50, 50, 50})
 
@@ -244,7 +249,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		for i := chunk_count; i >= 0; i -= 1 {
 			cur_x := f64(i %% int(chunk_size))
 			cur_y := f64(i /  int(chunk_size))
-			draw_rect(rect(start_x + (cur_x * chunk_size), start_y + (cur_y * chunk_size), chunk_size - pad_size, chunk_size - pad_size), Vec3{0, 255, 0})
+			draw_rect(rect(
+				start_x + (cur_x * chunk_size), 
+				start_y + (cur_y * chunk_size), 
+				chunk_size - pad_size, 
+				chunk_size - pad_size
+			), Vec3{0, 255, 0})
 		}
 
 		return true
@@ -285,7 +295,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		return res
 	}
 
-	for i := 0; i < 10; i += 1 {
+	info_line_count := 8
+	for i := 0; i < info_line_count; i += 1 {
 		next_line(&pane_y, em)
 	}
 
@@ -868,7 +879,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 		i := 0
 		for name, stat in stats {
-			if i > 8 {
+			if i > (info_line_count - 2) {
 				break
 			}
 
@@ -876,7 +887,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 			perc := (stat.total_time / total_tracked_time) * 100
 
-			total_text := fmt.tprintf("%10s %5.1f%%", time_fmt(stat.total_time, true), perc)
+			total_text := fmt.tprintf("%10s", time_fmt(stat.total_time, true))
+			perc_text := fmt.tprintf("%.1f%%", perc)
 
 			min := stat.min_time
 			min_text := fmt.tprintf("%10s", time_fmt(f64(min), true))
@@ -891,7 +903,13 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			max := stat.max_time
 			max_text := fmt.tprintf("%10s", time_fmt(f64(max), true))
 
-			text_outf(&cursor, y, total_text, text_color2); cursor += column_gap
+			full_perc_width := measure_text(perc_text, p_font_size, monospace_font)
+			perc_width := (ch_width * 6) - full_perc_width
+
+			text_outf(&cursor, y, total_text, text_color2); cursor += ch_width
+			cursor += perc_width
+			draw_text(perc_text, Vec2{cursor, y}, p_font_size, monospace_font, text_color2); cursor += column_gap + full_perc_width
+
 			text_outf(&cursor, y, min_text, text_color2);   cursor += column_gap
 			text_outf(&cursor, y, avg_text, text_color2);   cursor += column_gap
 			text_outf(&cursor, y, _99p_text, text_color2);  cursor += column_gap
@@ -902,13 +920,17 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			next_line(&y_after, em) // @Speed
 			name_width := measure_text(name, p_font_size, monospace_font)
 
-			dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
+			dr := rect(
+				cursor, 
+				y_before, 
+				(display_width - cursor - column_gap) * stat.total_time / total_tracked_time, 
+				y_after - y_before
+			)
 
 			cursor += column_gap / 2
 
-			draw_rect(dr,         color_choices[name_color_idx(name)])
-
-			draw_text(name,       Vec2{cursor, y}, p_font_size, monospace_font, text_color);
+			draw_rect(dr, color_choices[name_color_idx(name)])
+			draw_text(name, Vec2{cursor, y}, p_font_size, monospace_font, text_color)
 
 			next_line(&y, em)
 			i += 1
