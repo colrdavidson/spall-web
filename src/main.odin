@@ -605,7 +605,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 						continue
 					}
 
-					e_idx := cur_depth_off + start_idx + de_id
+					e_idx := start_idx + de_id
 					rect_color := color_choices[name_color_idx(ev.name)]
 					if int(selected_event.pid) == p_idx &&
 					   int(selected_event.tid) == t_idx &&
