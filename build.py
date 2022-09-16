@@ -47,7 +47,7 @@ subprocess.run([
     '-target:js_wasm32',
     f"-out:{wasm_out}",
     *build_str,
-])
+], check=True)
 print("Compiled in {:.1f} seconds".format(time.time() - start_time))
 
 if EXTRARELEASE:
@@ -58,7 +58,7 @@ if EXTRARELEASE:
         'wasm2wat',
         '-o', f"build/{program_name}.wat",
         wasm_out,
-    ])
+    ], check=True)
     memcpy = """(\\1
         local.get 0
         local.get 1
@@ -81,7 +81,7 @@ if EXTRARELEASE:
         'wat2wasm',
         '-o', f"build/{program_name}_patched.wasm",
         f"build/{program_name}_patched.wat",
-    ])
+    ], check=True)
     wasm_out = f"build/{program_name}_patched.wasm"
     print("Patched in {:.1f} seconds".format(time.time() - start_time))
 
