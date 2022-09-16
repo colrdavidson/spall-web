@@ -60,6 +60,7 @@ start_loading_file :: proc "contextless" (size: u32) {
 
 	init_loading_state(size)
 	get_chunk(0, CHUNK_SIZE)
+
 }
 
 manual_load :: proc(config: string) {
@@ -86,6 +87,9 @@ init_loading_state :: proc(size: u32) {
 
 	first_chunk = true
 	event_count = 0
+
+	loading_config = true
+	post_loading = false
 
 	fmt.printf("Loading a %.1f MB config\n", f64(size) / 1024 / 1024)
 	start_bench("parse config")
@@ -124,7 +128,7 @@ finish_loading :: proc (p: ^Parser) {
 	free_all(scratch_allocator)
 
 	loading_config = false
-	finished_loading = true
+	post_loading = true
 	return
 }
 
@@ -155,9 +159,6 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			bp = init_parser(total_size)
 			bp.pos += u32(header_sz)
 		}
-
-		loading_config = true
-		first_chunk = false
 	}
 
 	if is_json {

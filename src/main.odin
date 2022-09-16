@@ -79,7 +79,7 @@ build_hash := 0
 
 first_frame := true
 loading_config := true
-finished_loading := false
+post_loading := false
 update_fonts := true
 start_profiling := false
 colormode := ColorMode.Dark
@@ -306,7 +306,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	end_y   := info_pane_y
 	display_height := end_y - start_y
 
-	if finished_loading {
+	if post_loading {
 		cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
 
 		if event_count == 0 { total_min_time = 0; total_max_time = 1000 }
@@ -319,7 +319,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		arena := cast(^Arena)context.allocator.data
 		current_alloc_offset = arena.offset
 
-		finished_loading = false
+		post_loading = false
 	}
 
 	canvas_clear()
@@ -952,7 +952,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	if button(rect(edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
 		// I'm sorry. this is a dumb hack
-		finished_loading = true		
+		post_loading = false
 	}
 	if button(rect(edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 		open_file_dialog()
@@ -1011,6 +1011,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	seed_width := measure_text(seed_str, p_font_size, monospace_font)
 	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
+	// save me my battery, plz
 	if cam.pan.x == cam.target_pan_x && 
 	   cam.vel.y == 0 && 
 	   cam.current_scale == cam.target_scale {
