@@ -44,10 +44,11 @@ icon_font      := `FontAwesome`
 EventID :: struct {
 	pid: i64,
 	tid: i64,
+	did: i64,
 	eid: i64,
 }
 
-selected_event := EventID{-1, -1, -1}
+selected_event := EventID{-1, -1, -1, -1}
 
 dpr: f64
 
@@ -606,6 +607,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					rect_color := color_choices[name_color_idx(ev.name)]
 					if int(selected_event.pid) == p_idx &&
 					   int(selected_event.tid) == t_idx &&
+					   int(selected_event.did) == d_idx &&
 					   int(selected_event.eid) == e_idx {
 						rect_color.x += 30
 						rect_color.y += 30
@@ -617,7 +619,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
 						set_cursor("pointer")
 						if clicked {
-							selected_event = {i64(p_idx), i64(t_idx), i64(e_idx)}
+							selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
 							clicked_on_rect = true
 							did_multiselect = false
 						}
@@ -669,7 +671,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	if clicked && !clicked_on_rect && !shift_down {
-		selected_event = {-1, -1, -1}
+		selected_event = {-1, -1, -1, -1}
 		selected_rect = Rect{}
 		did_multiselect = false
 	}
@@ -939,16 +941,17 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			next_line(&y, em)
 			i += 1
 		}
-	} else if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.eid != -1 {
+	} else if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.did != -1 && selected_event.eid != -1 {
 		p_idx := int(selected_event.pid)
 		t_idx := int(selected_event.tid)
+		d_idx := int(selected_event.did)
 		e_idx := int(selected_event.eid)
 
 		y := info_pane_y + top_line_gap
 
 
 		thread := processes[p_idx].threads[t_idx]
-		event := thread.events[e_idx]
+		event := thread.depths[d_idx][e_idx]
 		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start timestamp: %s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)

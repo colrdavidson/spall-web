@@ -147,11 +147,11 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 				timestamp = (event.timestamp) * stamp_scale,
 			}
 
-			event_count += 1
 			p_idx, t_idx, e_idx := bin_push_event(&processes, event.process_id, event.thread_id, new_event)
 
 			thread := &processes[p_idx].threads[t_idx]
 			queue.push_back(&thread.bande_q, e_idx)
+			event_count += 1
 		case .End:
 			p_idx, ok1 := vh_find(&process_map, event.process_id)
 			if !ok1 {
@@ -167,8 +167,9 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 			thread := &processes[p_idx].threads[t_idx]
 			if queue.len(thread.bande_q) > 0 {
 				jev_idx := queue.pop_back(&thread.bande_q)
-				jev := &thread.events[jev_idx]
-				jev.duration = (jp.cur_event.timestamp - jev.timestamp) * stamp_scale
+				thread.current_depth -= 1
+				jev := &thread.bs_depths[thread.current_depth][jev_idx]
+				jev.duration = (event.timestamp - jev.timestamp) * stamp_scale
 				thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 				total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 			}
@@ -196,8 +197,8 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 		t := Thread{
 			min_time = 0x7fefffffffffffff, 
 			thread_id = thread_id,
-			events = make([dynamic]Event),
 			depths = make([dynamic][]Event),
+			bs_depths = make([dynamic][dynamic]Event),
 		}
 		queue.init(&t.bande_q, 0, scratch_allocator)
 		append(threads, t)
@@ -217,8 +218,16 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
-	append(&t.events, event)
-	return p_idx, t_idx, len(t.events)-1
+	if int(t.current_depth) >= len(t.bs_depths) {
+		events := make([dynamic]Event)
+		append(&t.bs_depths, events)
+	}
+
+	depths := &t.bs_depths[t.current_depth]
+	append(depths, event)
+
+	t.current_depth += 1
+	return p_idx, t_idx, len(depths)-1
 }
 
 bin_process_events :: proc(processes: ^[dynamic]Process) {
@@ -230,72 +239,10 @@ bin_process_events :: proc(processes: ^[dynamic]Process) {
 		process := &processes[proc_idx]
 
 		slice.sort_by(process.threads[:], tid_sort_proc)
-
-		// generate depth mapping
 		for tm in &process.threads {
-			slice.sort_by(tm.events[:], event_buildsort_proc)
-
-			queue.clear(&ev_stack)		
-			for event, e_idx in &tm.events {
-				cur_start := event.timestamp
-				cur_end   := event.timestamp + bound_duration(event, tm.max_time)
-				if queue.len(ev_stack) == 0 {
-					queue.push_back(&ev_stack, e_idx)
-				} else {
-					prev_e_idx := queue.peek_back(&ev_stack)^
-					prev_ev := tm.events[prev_e_idx]
-
-					prev_start := prev_ev.timestamp
-					prev_end   := prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
-
-					// if it fits within the parent
-					if cur_start >= prev_start && cur_end <= prev_end {
-						queue.push_back(&ev_stack, e_idx)
-					} else {
-
-						// while it doesn't overlap the parent
-						for queue.len(ev_stack) > 0 {
-							prev_e_idx = queue.peek_back(&ev_stack)^
-							prev_ev = tm.events[prev_e_idx]
-
-							prev_start = prev_ev.timestamp
-							prev_end   = prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
-
-							if cur_start >= prev_start && cur_end > prev_end {
-								queue.pop_back(&ev_stack)
-							} else {
-								break
-							}
-						}
-						queue.push_back(&ev_stack, e_idx)
-					}
-				}
-
-				event.depth = u16(queue.len(ev_stack))
-				tm.max_depth = max(tm.max_depth, event.depth)
-			}
-			slice.sort_by(tm.events[:], event_rendersort_step1_proc)
-
-			i := 0
-			ev_start := 0
-			cur_depth : u16 = 0
-			for ; i < len(tm.events) - 1; i += 1 {
-				ev := tm.events[i]
-				next_ev := tm.events[i+1]
-
-				if ev.depth != next_ev.depth {
-					append(&tm.depths, tm.events[ev_start:i+1])
-					ev_start = i + 1
-					cur_depth = next_ev.depth
-				}
-			}
-
-			if len(tm.events) > 0 {
-				append(&tm.depths, tm.events[ev_start:i+1])
-			}
-
-			for depth_arr in tm.depths {
-				slice.sort_by(depth_arr, event_rendersort_step2_proc)
+			for depth in &tm.bs_depths {
+				slice.sort_by(depth[:], event_buildsort_proc)
+				append(&tm.depths, depth[:])
 			}
 		}
 	}

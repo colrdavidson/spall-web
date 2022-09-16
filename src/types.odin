@@ -55,9 +55,12 @@ Thread :: struct {
 	max_time: f64,
 	max_depth: u16,
 
+	current_depth: int,
+
 	thread_id: u32,
 	events: [dynamic]Event,
 	depths: [dynamic][]Event,
+	bs_depths: [dynamic][dynamic]Event,
 
 	bande_q: EventQueue,
 }

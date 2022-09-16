@@ -76,7 +76,7 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 first_chunk: bool
 init_loading_state :: proc(size: u32) {
 
-	selected_event = EventID{-1, -1, -1}
+	selected_event = EventID{-1, -1, -1, -1}
 	free_all(scratch_allocator)
 	free_all(context.allocator)
 	free_all(context.temp_allocator)
