@@ -401,15 +401,16 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			continue
 		}
 
-		defer {
-			jp.cur_event = TempEvent{}
-			jp.cur_event_id = -1
-			jp.seen_dur = false
-			jp.current_parent = IdPair{}
-		}
 
 		// got the whole event
 		if state == .ScopeExited && tok.id == jp.cur_event_id {
+			defer {
+				jp.cur_event = TempEvent{}
+				jp.cur_event_id = -1
+				jp.seen_dur = false
+				jp.current_parent = IdPair{}
+			}
+
 			switch jp.cur_event.type {
 			case .Complete:
 				if jp.seen_dur {
