@@ -423,6 +423,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 
+
 	start_time, end_time := get_current_window(cam, display_width)
 
 	// Draw time subdivision lines
@@ -1009,6 +1010,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	seed_str := fmt.tprintf("Seed: 0x%X", random_seed)
 	seed_width := measure_text(seed_str, p_font_size, monospace_font)
 	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+
+	if cam.pan.x == cam.target_pan_x && 
+	   cam.vel.y == 0 && 
+	   cam.current_scale == cam.target_scale {
+		return false
+	}
 
 	return true
 }
