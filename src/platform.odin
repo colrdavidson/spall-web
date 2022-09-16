@@ -132,6 +132,7 @@ foreign js {
 
 	get_chunk :: proc(offset, size: u32) ---
 	open_file_dialog :: proc() ---
+	pump_socket :: proc() ---
 }
 
 get_text_height :: #force_inline proc "contextless" (scale: f64, font: string) -> f64 {

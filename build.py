@@ -14,6 +14,7 @@ RELEASE = len(sys.argv) > 1 and sys.argv[1] == 'release'
 EXTRARELEASE = len(sys.argv) > 1 and sys.argv[1] == 'extrarelease'
 
 odin = 'odin'
+golang = 'go'
 program_name = 'spall'
 
 [os.remove(f) for f in glob.iglob('build/dist/*', recursive=True)]
@@ -41,7 +42,15 @@ subprocess.run([
     '-target:js_wasm32',
     f"-out:{wasm_out}",
     *build_str,
-])
+], check=True)
+os.chdir("srvr")
+subprocess.run([
+    golang,
+    'build',
+    '-o',
+    '../build/server',
+], check=True)
+os.chdir("..")
 print("Compiled in {:.1f} seconds".format(time.time() - start_time))
 
 if EXTRARELEASE:
@@ -52,7 +61,7 @@ if EXTRARELEASE:
         'wasm2wat',
         '-o', f"build/{program_name}.wat",
         wasm_out,
-    ])
+    ], check=True)
     memcpy = """(\\1
         local.get 0
         local.get 1
@@ -75,7 +84,7 @@ if EXTRARELEASE:
         'wat2wasm',
         '-o', f"build/{program_name}_patched.wasm",
         f"build/{program_name}_patched.wat",
-    ])
+    ], check=True)
     wasm_out = f"build/{program_name}_patched.wasm"
     print("Patched in {:.1f} seconds".format(time.time() - start_time))
 

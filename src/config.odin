@@ -224,14 +224,20 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 }
 
 first_chunk: bool
-init_loading_state :: proc(size: u32) {
+@export
+init_loading_state :: proc "contextless" (size: u32) {
+	context = wasmContext
 
+	started_loading = true
+	finished_loading = false
 	selected_event = EventID{-1, -1, -1}
 	free_all(scratch_allocator)
 	free_all(context.allocator)
 	free_all(context.temp_allocator)
+
 	processes = make([dynamic]Process)
 	process_map = vh_init(scratch_allocator)
+
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
 
@@ -297,7 +303,7 @@ finish_loading :: proc (p: ^Parser) {
 	free_all(context.temp_allocator)
 	free_all(scratch_allocator)
 
-	loading_config = false
+	started_loading = false
 	finished_loading = true
 	return
 }
@@ -310,8 +316,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 	defer free_all(context.temp_allocator)
 
 	if first_chunk {
-		header_sz := size_of(spall.Header)
-		if len(chunk) < header_sz {
+		if len(chunk) < size_of(u64) {
 			return
 		}
 		magic := (^u64)(raw_data(chunk))^
@@ -321,6 +326,11 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			stamp_scale = 1
 			jp = init_json_parser(total_size)
 		} else {
+			header_sz := size_of(spall.Header)
+			if len(chunk) < header_sz {
+				return
+			}
+			
 			hdr := cast(^spall.Header)raw_data(chunk)
 			if hdr.version != 0 {
 				return
@@ -331,7 +341,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			bp.pos += u32(header_sz)
 		}
 
-		loading_config = true
+		started_loading = true
 		first_chunk = false
 	}
 

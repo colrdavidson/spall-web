@@ -78,7 +78,7 @@ did_select := false
 build_hash := 0
 
 first_frame := true
-loading_config := true
+started_loading := false
 finished_loading := false
 update_fonts := true
 start_profiling := false
@@ -220,7 +220,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	// render loading screen
-	if loading_config {
+	if started_loading {
 		pad_size : f64 = 3
 		chunk_size : f64 = 10
 
@@ -947,6 +947,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 	if button(rect(edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 		open_file_dialog()
+	}
+
+	if button(rect(edge_pad + (button_width * 2) + (button_pad * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf021", icon_font) {
+		pump_socket()
 	}
 
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {

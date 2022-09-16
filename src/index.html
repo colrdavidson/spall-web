@@ -127,6 +127,28 @@
 			let loading_reader = null;
 			let everythings_dead = false;
 
+			let host_src = window.location.host;
+			let socket = new WebSocket(`ws://${host_src}/ws`);
+			let socket_ready = false;
+			socket.addEventListener("open", (e) => {
+				socket_ready = true;
+			});
+			socket.addEventListener("message", (ev) => {
+				console.log("attempting to load socket chunk!");
+
+				(async () => {
+					let message = await ev.data.arrayBuffer();
+					try {
+						window.wasm.init_loading_state(message.byteLength);
+						window.wasm.load_config_chunk(0, message.byteLength, ...bytes(message));
+					} catch (e) {
+						console.error(e);
+						implode();
+						return;
+					}
+				})();
+			});
+
 			function implode() {
 				document.getElementById("error").classList.remove("hide");
 				document.getElementById("display").classList.add("hide");
@@ -294,6 +316,11 @@
 
 						open_file_dialog() {
 							document.getElementById('file-dialog').click();
+						},
+						pump_socket() {
+							if (socket_ready) {
+								socket.send("start");
+							}
 						}
 					},
 				});
