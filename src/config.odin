@@ -159,6 +159,8 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			bp = init_parser(total_size)
 			bp.pos += u32(header_sz)
 		}
+
+		first_chunk = false
 	}
 
 	if is_json {

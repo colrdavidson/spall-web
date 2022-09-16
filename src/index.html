@@ -304,6 +304,7 @@
 					loading_reader = new FileReader();
 					try {
 						window.wasm.start_loading_file(loading_file.size);
+						wakeUp();
 					} catch (e) {
 						console.error(e);
 						implode();
