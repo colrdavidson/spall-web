@@ -206,6 +206,17 @@ get_current_window :: proc(cam: Camera, display_width: f64) -> (f64, f64) {
 	return display_range_start, display_range_end
 }
 
+reset_camera :: proc(display_width: f64) {
+	cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
+
+	if event_count == 0 { total_min_time = 0; total_max_time = 1000 }
+	fmt.printf("min %f μs, max %f μs, range %f μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
+	start_time : f64 = 0
+	end_time   := total_max_time - total_min_time
+	cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, display_width)
+	cam.target_scale = cam.current_scale
+}
+
 @export
 frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	context = wasmContext
@@ -319,18 +330,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	display_height := end_y - start_y
 
 	if post_loading {
-		cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
-
-		if event_count == 0 { total_min_time = 0; total_max_time = 1000 }
-		fmt.printf("min %f μs, max %f μs, range %f μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
-		start_time : f64 = 0
-		end_time   := total_max_time - total_min_time
-		cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, display_width)
-		cam.target_scale = cam.current_scale
-
+		reset_camera(display_width)
 		arena := cast(^Arena)context.allocator.data
 		current_alloc_offset = arena.offset
-
 		post_loading = false
 	}
 
@@ -980,8 +982,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	if button(rect(edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
-		// I'm sorry. this is a dumb hack
-		post_loading = false
+		reset_camera(display_width)
 	}
 	if button(rect(edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 		open_file_dialog()
