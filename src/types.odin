@@ -54,8 +54,7 @@ Thread :: struct {
 	min_time: f64,
 	max_time: f64,
 	max_depth: u16,
-
-	current_depth: int,
+	current_depth: u16,
 
 	thread_id: u32,
 	events: [dynamic]Event,

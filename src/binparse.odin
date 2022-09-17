@@ -148,9 +148,9 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 			}
 
 			p_idx, t_idx, e_idx := bin_push_event(&processes, event.process_id, event.thread_id, new_event)
-
 			thread := &processes[p_idx].threads[t_idx]
 			queue.push_back(&thread.bande_q, e_idx)
+
 			event_count += 1
 		case .End:
 			p_idx, ok1 := vh_find(&process_map, event.process_id)
@@ -166,12 +166,15 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 
 			thread := &processes[p_idx].threads[t_idx]
 			if queue.len(thread.bande_q) > 0 {
-				jev_idx := queue.pop_back(&thread.bande_q)
+				e_idx := queue.pop_back(&thread.bande_q)
+
 				thread.current_depth -= 1
-				jev := &thread.bs_depths[thread.current_depth][jev_idx]
-				jev.duration = (event.timestamp - jev.timestamp) * stamp_scale
+				jev := &thread.bs_depths[thread.current_depth][e_idx]
+				jev.duration = (event.timestamp * stamp_scale) - jev.timestamp
 				thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 				total_max_time = max(total_max_time, jev.timestamp + jev.duration)
+			} else {
+				fmt.printf("Got bad end!\n")
 			}
 		}
 	}
@@ -218,15 +221,16 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
-	if int(t.current_depth) >= len(t.bs_depths) {
+	t.max_depth = max(t.max_depth, t.current_depth)
+	if int(t.max_depth) >= len(t.bs_depths) {
 		events := make([dynamic]Event)
 		append(&t.bs_depths, events)
 	}
 
 	depths := &t.bs_depths[t.current_depth]
+	t.current_depth += 1
 	append(depths, event)
 
-	t.current_depth += 1
 	return p_idx, t_idx, len(depths)-1
 }
 
@@ -234,10 +238,7 @@ bin_process_events :: proc(processes: ^[dynamic]Process) {
 	ev_stack: queue.Queue(int)
 	queue.init(&ev_stack, 0, context.temp_allocator)
 
-	for pe, _ in process_map.entries {
-		proc_idx := pe.val
-		process := &processes[proc_idx]
-
+	for process in processes {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 		for tm in &process.threads {
 			for depth in &tm.bs_depths {
