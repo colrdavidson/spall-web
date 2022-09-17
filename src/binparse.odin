@@ -242,7 +242,7 @@ bin_process_events :: proc(processes: ^[dynamic]Process) {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 		for tm in &process.threads {
 			for depth in &tm.bs_depths {
-				slice.sort_by(depth[:], event_buildsort_proc)
+				//slice.sort_by(depth[:], event_buildsort_proc)
 				append(&tm.depths, depth[:])
 			}
 		}
