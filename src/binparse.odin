@@ -183,7 +183,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 bin_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, int) {
 	p_idx, ok1 := vh_find(&process_map, process_id)
 	if !ok1 {
-		p := init_process(process_id)
+		append(&processes, init_process(process_id))
 		p_idx = len(processes) - 1
 		vh_insert(&process_map, process_id, p_idx)
 	}
