@@ -5,6 +5,7 @@ import "core:strings"
 import "core:container/queue"
 import "core:strconv"
 import "core:slice"
+import "core:c"
 
 JSONState :: enum {
 	InvalidToken,
@@ -130,7 +131,6 @@ parse_primitive :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	state = .TokenDone
 	return
 }
-
 
 parse_string :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	p := &jp.p
@@ -372,12 +372,16 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 
 			switch key {
 			case "ph":
-				if value == "X" {
-					jp.cur_event.type = .Complete
-				} else if value == "B" {
-					jp.cur_event.type = .Begin
-				} else if value == "E" {
-					jp.cur_event.type = .End
+				if len(value) != 1 {
+					continue
+				}
+
+				type_ch := value[0]
+				switch type_ch {
+				case 'X': jp.cur_event.type = .Complete
+				case 'B': jp.cur_event.type = .Begin
+				case 'E': jp.cur_event.type = .End
+				case 'i': jp.cur_event.type = .Instant
 				}
 			case "dur": 
 				dur, ok := strconv.parse_f64(value)
@@ -389,13 +393,24 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				if !ok { continue }
 				jp.cur_event.timestamp = ts
 			case "tid": 
-				tid, ok := parse_u64(value)
+				tid, ok := parse_u32(value)
 				if !ok { continue }
-				jp.cur_event.thread_id = u32(tid)
+				jp.cur_event.thread_id = tid
 			case "pid": 
-				pid, ok := parse_u64(value)
+				pid, ok := parse_u32(value)
 				if !ok { continue }
-				jp.cur_event.process_id = u32(pid)
+				jp.cur_event.process_id = pid
+			case "s": 
+				if len(value) != 1 {
+					continue
+				}
+
+				scope_ch := value[0]
+				switch scope_ch {
+				case 'g': jp.cur_event.scope = .Global
+				case 'p': jp.cur_event.scope = .Process
+				case 't': jp.cur_event.scope = .Thread
+				}
 			}
 
 			continue
@@ -412,6 +427,10 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			}
 
 			switch jp.cur_event.type {
+			case .Instant:
+				jp.cur_event.timestamp *= stamp_scale
+				json_push_instant(jp.cur_event)
+				event_count += 1
 			case .Complete:
 				if jp.seen_dur {
 					event_count += 1
@@ -422,7 +441,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 						duration = jp.cur_event.duration,
 						timestamp = jp.cur_event.timestamp,
 					}
-					json_push_event(&processes, jp.cur_event.process_id, jp.cur_event.thread_id, new_event)
+					json_push_event(u32(jp.cur_event.process_id), u32(jp.cur_event.thread_id), new_event)
 				}
 			case .Begin:
 				new_event := Event{
@@ -433,17 +452,17 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				}
 
 				event_count += 1
-				p_idx, t_idx, e_idx := json_push_event(&processes, jp.cur_event.process_id, jp.cur_event.thread_id, new_event)
+				p_idx, t_idx, e_idx := json_push_event(u32(jp.cur_event.process_id), u32(jp.cur_event.thread_id), new_event)
 
 				thread := &processes[p_idx].threads[t_idx]
 				queue.push_back(&thread.bande_q, e_idx)
 			case .End:
-				p_idx, ok1 := vh_find(&process_map, jp.cur_event.process_id)
+				p_idx, ok1 := vh_find(&process_map, u32(jp.cur_event.process_id))
 				if !ok1 {
 					fmt.printf("invalid end?\n")
 					continue
 				}
-				t_idx, ok2 := vh_find(&processes[p_idx].thread_map, jp.cur_event.thread_id)
+				t_idx, ok2 := vh_find(&processes[p_idx].thread_map, u32(jp.cur_event.thread_id))
 				if !ok1 {
 					fmt.printf("invalid end?\n")
 					continue
@@ -463,15 +482,52 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 	return
 }
 
-json_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32, event: Event) -> (int, int, int) {
+json_push_instant :: proc(event: TempEvent) {
+	instant := Instant{
+		name = event.name,
+		timestamp = event.timestamp,
+	}
+
+	if event.scope == .Global {
+		append(&global_instants, instant)
+		return
+	}
+
+	p_idx, ok1 := vh_find(&process_map, event.process_id)
+	if !ok1 {
+		append(&processes, init_process(event.process_id))
+		p_idx = len(processes) - 1
+		vh_insert(&process_map, event.process_id, p_idx)
+	}
+
+	p := &processes[p_idx]
+
+	if event.scope == .Process {
+		append(&p.instants, instant)
+		return
+	}
+
+	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, event.thread_id)
+	if !ok2 {
+		threads := &processes[p_idx].threads
+		append(threads, init_thread(event.thread_id))
+
+		t_idx = len(threads) - 1
+		thread_map := &processes[p_idx].thread_map
+		vh_insert(thread_map, event.thread_id, t_idx)
+	}
+
+	t := &p.threads[t_idx]
+	if event.scope == .Thread {
+		append(&t.instants, instant)
+		return
+	}
+}
+
+json_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, int) {
 	p_idx, ok1 := vh_find(&process_map, process_id)
 	if !ok1 {
-		append(processes, Process{
-			min_time = 0x7fefffffffffffff, 
-			process_id = process_id,
-			threads = make([dynamic]Thread, small_global_allocator),
-			thread_map = vh_init(scratch_allocator),
-		})
+		append(&processes, init_process(process_id))
 		p_idx = len(processes) - 1
 		vh_insert(&process_map, process_id, p_idx)
 	}
@@ -480,14 +536,7 @@ json_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32
 	if !ok2 {
 		threads := &processes[p_idx].threads
 
-		t := Thread{
-			min_time = 0x7fefffffffffffff, 
-			thread_id = thread_id,
-			events = make([dynamic]Event, big_global_allocator),
-			depths = make([dynamic][]Event, small_global_allocator),
-		}
-		queue.init(&t.bande_q, 0, scratch_allocator)
-		append(threads, t)
+		append(threads, init_thread(thread_id))
 
 		t_idx = len(threads) - 1
 		thread_map := &processes[p_idx].thread_map
@@ -522,10 +571,15 @@ event_rendersort_step1_proc :: proc(a, b: Event) -> bool {
 event_rendersort_step2_proc :: proc(a, b: Event) -> bool {
 	return a.timestamp < b.timestamp
 }
+instant_rendersort_proc :: proc(a, b: Instant) -> bool {
+	return a.timestamp < b.timestamp
+}
 
-json_process_events :: proc(processes: ^[dynamic]Process) {
+json_process_events :: proc() {
 	ev_stack: queue.Queue(int)
 	queue.init(&ev_stack, 0, context.temp_allocator)
+
+	slice.sort_by(global_instants[:], instant_rendersort_proc)
 
 	for pe, _ in process_map.entries {
 		proc_idx := pe.val

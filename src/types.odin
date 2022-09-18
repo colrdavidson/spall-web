@@ -27,18 +27,29 @@ Camera :: struct {
 }
 
 EventType :: enum u8 {
+	Instant,
 	Complete,
 	Begin,
 	End
 }
+EventScope :: enum u8 {
+	Global,
+	Process,
+	Thread,
+}
 
 TempEvent :: struct {
 	type: EventType,
+	scope: EventScope,
 	name: string,
 	duration: f64,
 	timestamp: f64,
 	thread_id: u32,
 	process_id: u32,
+}
+Instant :: struct #packed {
+	name: string,
+	timestamp: f64,
 }
 
 Event :: struct #packed {
@@ -60,6 +71,7 @@ Thread :: struct {
 	events: [dynamic]Event,
 	depths: [dynamic][]Event,
 	bs_depths: [dynamic][dynamic]Event,
+	instants: [dynamic]Instant,
 
 	bande_q: EventQueue,
 }
@@ -69,6 +81,7 @@ Process :: struct {
 
 	process_id: u32,
 	threads: [dynamic]Thread,
+	instants: [dynamic]Instant,
 	thread_map: ValHash,
 }
 
@@ -179,4 +192,27 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 
 	fmt.printf("No more potatoes!\n")
 	trap()
+}
+
+init_process :: proc(process_id: u32) -> Process {
+	return Process{
+		min_time = 0x7fefffffffffffff, 
+		process_id = process_id,
+		threads = make([dynamic]Thread, small_global_allocator),
+		thread_map = vh_init(scratch_allocator),
+		instants = make([dynamic]Instant, big_global_allocator),
+	}
+}
+
+init_thread :: proc(thread_id: u32) -> Thread {
+	t := Thread{
+		min_time = 0x7fefffffffffffff, 
+		thread_id = thread_id,
+		events = make([dynamic]Event, big_global_allocator),
+		depths = make([dynamic][]Event, small_global_allocator),
+		bs_depths = make([dynamic][dynamic]Event, big_global_allocator),
+		instants = make([dynamic]Instant, big_global_allocator),
+	}
+	queue.init(&t.bande_q, 0, scratch_allocator)
+	return t
 }

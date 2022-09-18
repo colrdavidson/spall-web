@@ -83,6 +83,7 @@ init_loading_state :: proc(size: u32) {
 	free_all(context.temp_allocator)
 	processes = make([dynamic]Process, small_global_allocator)
 	process_map = vh_init(scratch_allocator)
+	global_instants = make([dynamic]Instant, big_global_allocator)
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
 
@@ -109,9 +110,9 @@ finish_loading :: proc (p: ^Parser) {
 
 	start_bench("process events")
 	if is_json {
-		json_process_events(&processes)
+		json_process_events()
 	} else {
-		bin_process_events(&processes)
+		bin_process_events()
 	}
 	stop_bench("process events")
 

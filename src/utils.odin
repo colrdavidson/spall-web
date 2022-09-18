@@ -5,6 +5,7 @@ import "core:math/rand"
 import "core:math"
 import "core:math/linalg/glsl"
 import "core:fmt"
+import "core:c"
 
 trap :: proc() {
 	intrinsics.trap()
@@ -97,15 +98,15 @@ time_fmt :: proc(time: f64, aligned := false) -> string {
 	}
 }
 
-parse_u64 :: proc(str: string) -> (u64, bool) {
+parse_u32 :: proc(str: string) -> (u32, bool) {
 	ret : u64 = 0
 
 	s := transmute([]u8)str
 	for ch in s {
-		if ch < '0' || ch > '9' {
+		if ch < '0' || ch > '9' || ret > u64(c.UINT32_MAX) {
 			return 0, false
 		}
 		ret = (ret * 10) + u64(ch & 0xf)
 	}
-	return ret, true
+	return u32(ret), true
 }

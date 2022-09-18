@@ -100,10 +100,10 @@ h2_height      : f64 = 0
 ch_width       : f64 = 0
 thread_gap     : f64 = 8
 
-trace_config : string
-
-process_map: ValHash
 processes: [dynamic]Process
+process_map: ValHash
+
+global_instants: [dynamic]Instant
 color_choices: [dynamic]Vec3
 event_count: i64
 total_max_time: f64
@@ -176,7 +176,7 @@ main :: proc() {
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
 	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 15)
 	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 20)
-	small_global_data, _ := js.page_alloc(ONE_MB_PAGES * 10)
+	small_global_data, _ := js.page_alloc(ONE_MB_PAGES * 1)
 
 	arena_init(&temp_arena, temp_data)
 	arena_init(&scratch_arena, scratch_data)

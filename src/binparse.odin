@@ -147,7 +147,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 				timestamp = (event.timestamp) * stamp_scale,
 			}
 
-			p_idx, t_idx, e_idx := bin_push_event(&processes, event.process_id, event.thread_id, new_event)
+			p_idx, t_idx, e_idx := bin_push_event(event.process_id, event.thread_id, new_event)
 			thread := &processes[p_idx].threads[t_idx]
 			queue.push_back(&thread.bande_q, e_idx)
 
@@ -180,15 +180,10 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 	}
 }
 
-bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32, event: Event) -> (int, int, int) {
+bin_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, int) {
 	p_idx, ok1 := vh_find(&process_map, process_id)
 	if !ok1 {
-		append(processes, Process{
-			min_time = 0x7fefffffffffffff, 
-			process_id = process_id,
-			threads = make([dynamic]Thread, small_global_allocator),
-			thread_map = vh_init(scratch_allocator),
-		})
+		p := init_process(process_id)
 		p_idx = len(processes) - 1
 		vh_insert(&process_map, process_id, p_idx)
 	}
@@ -196,15 +191,7 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, thread_id)
 	if !ok2 {
 		threads := &processes[p_idx].threads
-
-		t := Thread{
-			min_time = 0x7fefffffffffffff, 
-			thread_id = thread_id,
-			depths = make([dynamic][]Event, small_global_allocator),
-			bs_depths = make([dynamic][dynamic]Event, big_global_allocator),
-		}
-		queue.init(&t.bande_q, 0, scratch_allocator)
-		append(threads, t)
+		append(threads, init_thread(thread_id))
 
 		t_idx = len(threads) - 1
 		thread_map := &processes[p_idx].thread_map
@@ -234,15 +221,14 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 	return p_idx, t_idx, len(depths)-1
 }
 
-bin_process_events :: proc(processes: ^[dynamic]Process) {
+bin_process_events :: proc() {
 	ev_stack: queue.Queue(int)
 	queue.init(&ev_stack, 0, context.temp_allocator)
 
-	for process in processes {
+	for process in &processes {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 		for tm in &process.threads {
 			for depth in &tm.bs_depths {
-				//slice.sort_by(depth[:], event_buildsort_proc)
 				append(&tm.depths, depth[:])
 			}
 		}
