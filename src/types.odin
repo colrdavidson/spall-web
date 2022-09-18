@@ -110,9 +110,7 @@ vh_init :: proc(allocator := context.allocator) -> ValHash {
 }
 
 vh_hash :: proc(key: u32) -> u32 {
-	k := key
-	v := mem.byte_slice(&k, size_of(key))
-	return u32(hash.fnv32a(v))
+	return key * 2654435769
 }
 
 vh_find :: proc(v: ^ValHash, key: u32, loc := #caller_location) -> (int, bool) {
