@@ -109,6 +109,7 @@ vh_init :: proc(allocator := context.allocator) -> ValHash {
 	return v
 }
 
+// this is a fibhash.. Replace me if I'm dumb
 vh_hash :: proc(key: u32) -> u32 {
 	return key * 2654435769
 }
