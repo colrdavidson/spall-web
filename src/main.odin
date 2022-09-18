@@ -12,13 +12,16 @@ import "core:intrinsics"
 import "core:slice"
 import "core:container/queue"
 
-global_arena := Arena{}
+big_global_arena := Arena{}
+small_global_arena := Arena{}
 temp_arena := Arena{}
 scratch_arena := Arena{}
 
-global_allocator: mem.Allocator
+big_global_allocator: mem.Allocator
+small_global_allocator: mem.Allocator
 scratch_allocator: mem.Allocator
 temp_allocator: mem.Allocator
+
 current_alloc_offset := 0
 
 wasmContext := runtime.default_context()
@@ -173,13 +176,15 @@ main :: proc() {
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
 	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 15)
 	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 20)
+	small_global_data, _ := js.page_alloc(ONE_MB_PAGES * 10)
 
 	arena_init(&temp_arena, temp_data)
 	arena_init(&scratch_arena, scratch_data)
+	arena_init(&small_global_arena, small_global_data)
 
 	// This must be init last, because it grows infinitely.
 	// We don't want it accidentally growing into anything useful.
-	growing_arena_init(&global_arena)
+	growing_arena_init(&big_global_arena)
 
 	// I'm doing olympic-level memory juggling BS in the ingest system because
 	// arenas are *special*, and memory is *precious*. Beware free_all()'ing
@@ -188,9 +193,11 @@ main :: proc() {
 	// need to touch scratch
 	temp_allocator = arena_allocator(&temp_arena)
 	scratch_allocator = arena_allocator(&scratch_arena)
-	global_allocator = growing_arena_allocator(&global_arena)
+	small_global_allocator = arena_allocator(&small_global_arena)
 
-	wasmContext.allocator = global_allocator
+	big_global_allocator = growing_arena_allocator(&big_global_arena)
+
+	wasmContext.allocator = big_global_allocator
 	wasmContext.temp_allocator = temp_allocator
 
 	context = wasmContext
@@ -474,8 +481,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, color)
 	}
 
+	// color_choices must be power of 2
 	name_color_idx :: proc(name: string) -> u32 {
-		return u32(uintptr(raw_data(name))) % u32(len(color_choices))
+		return u32(uintptr(raw_data(name))) & u32(len(color_choices) - 1)
 	}
 
 	// Render flamegraphs

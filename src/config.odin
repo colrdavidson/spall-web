@@ -78,9 +78,10 @@ init_loading_state :: proc(size: u32) {
 
 	selected_event = EventID{-1, -1, -1, -1}
 	free_all(scratch_allocator)
+	free_all(small_global_allocator)
 	free_all(context.allocator)
 	free_all(context.temp_allocator)
-	processes = make([dynamic]Process)
+	processes = make([dynamic]Process, small_global_allocator)
 	process_map = vh_init(scratch_allocator)
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
@@ -115,8 +116,10 @@ finish_loading :: proc (p: ^Parser) {
 	stop_bench("process events")
 
 	// reset render state
-	color_choices = make([dynamic]Vec3)
-	for i := 0; i < 32; i += 1 {
+
+	choice_count := int(_pow(2, 6))
+	color_choices = make([dynamic]Vec3, 0, choice_count, small_global_allocator)
+	for i := 0; i < choice_count; i += 1 {
 		h := rand.float64() * 0.5 + 0.5
 		h *= h
 		h *= h

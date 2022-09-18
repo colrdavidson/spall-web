@@ -186,7 +186,7 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 		append(processes, Process{
 			min_time = 0x7fefffffffffffff, 
 			process_id = process_id,
-			threads = make([dynamic]Thread),
+			threads = make([dynamic]Thread, small_global_allocator),
 			thread_map = vh_init(scratch_allocator),
 		})
 		p_idx = len(processes) - 1
@@ -200,8 +200,8 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 		t := Thread{
 			min_time = 0x7fefffffffffffff, 
 			thread_id = thread_id,
-			depths = make([dynamic][]Event),
-			bs_depths = make([dynamic][dynamic]Event),
+			depths = make([dynamic][]Event, small_global_allocator),
+			bs_depths = make([dynamic][dynamic]Event, big_global_allocator),
 		}
 		queue.init(&t.bande_q, 0, scratch_allocator)
 		append(threads, t)
@@ -223,7 +223,7 @@ bin_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32,
 
 	t.max_depth = max(t.max_depth, t.current_depth)
 	if int(t.max_depth) >= len(t.bs_depths) {
-		events := make([dynamic]Event)
+		events := make([dynamic]Event, big_global_allocator)
 		append(&t.bs_depths, events)
 	}
 

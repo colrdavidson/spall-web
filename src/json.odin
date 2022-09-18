@@ -469,7 +469,7 @@ json_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32
 		append(processes, Process{
 			min_time = 0x7fefffffffffffff, 
 			process_id = process_id,
-			threads = make([dynamic]Thread),
+			threads = make([dynamic]Thread, small_global_allocator),
 			thread_map = vh_init(scratch_allocator),
 		})
 		p_idx = len(processes) - 1
@@ -483,8 +483,8 @@ json_push_event :: proc(processes: ^[dynamic]Process, process_id, thread_id: u32
 		t := Thread{
 			min_time = 0x7fefffffffffffff, 
 			thread_id = thread_id,
-			events = make([dynamic]Event),
-			depths = make([dynamic][]Event),
+			events = make([dynamic]Event, big_global_allocator),
+			depths = make([dynamic][]Event, small_global_allocator),
 		}
 		queue.init(&t.bande_q, 0, scratch_allocator)
 		append(threads, t)
