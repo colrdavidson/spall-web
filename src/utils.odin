@@ -96,3 +96,16 @@ time_fmt :: proc(time: f64, aligned := false) -> string {
 		return fmt.tprintf("%.3f ns", cur_time)
 	}
 }
+
+parse_u64 :: proc(str: string) -> (u64, bool) {
+	ret : u64 = 0
+
+	s := transmute([]u8)str
+	for ch in s {
+		if ch < '0' || ch > '9' {
+			return 0, false
+		}
+		ret = (ret * 10) + u64(ch & 0xf)
+	}
+	return ret, true
+}

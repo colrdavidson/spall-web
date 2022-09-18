@@ -389,11 +389,11 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				if !ok { continue }
 				jp.cur_event.timestamp = ts
 			case "tid": 
-				tid, ok := strconv.parse_u64(value)
+				tid, ok := parse_u64(value)
 				if !ok { continue }
 				jp.cur_event.thread_id = u32(tid)
 			case "pid": 
-				pid, ok := strconv.parse_u64(value)
+				pid, ok := parse_u64(value)
 				if !ok { continue }
 				jp.cur_event.process_id = u32(pid)
 			}
