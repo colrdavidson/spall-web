@@ -47,7 +47,7 @@ JSONParser :: struct {
 	events_id: int,
 	cur_event: TempEvent,
 	cur_event_id: int,
-	obj_map: map[string]string,
+	obj_map: KeyMap,
 	seen_dur: bool,
 	current_parent: IdPair,
 }
@@ -162,9 +162,9 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 	jp.p = init_parser(total_size)
 	queue.init(&jp.parent_stack)
 
-	jp.obj_map = make(map[string]string, 0, scratch_allocator)
+	jp.obj_map = km_init(scratch_allocator)
 	for field in fields {
-		jp.obj_map[field] = field
+		km_insert(&jp.obj_map, field)
 	}
 
 	jp.events_id    = -1
@@ -345,7 +345,8 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 		// gather keys for event
 		if state == .TokenDone && tok.type == .String && parent.id == jp.cur_event_id {
 			key := get_token_str(jp, tok)
-			val, ok := jp.obj_map[key]
+
+			val, ok := km_find(&jp.obj_map, key)
 			if ok {
 				jp.current_parent = IdPair{val, tok.id}
 			}
@@ -362,11 +363,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 
 			value := get_token_str(jp, tok)
 			if key == "name" {
-				str, err := strings.intern_get(&p.intern, value)
-				if err != nil {
-					return
-				}
-
+				str := in_get(&p.intern, value)
 				jp.cur_event.name = str
 			}
 

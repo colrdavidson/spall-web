@@ -22,7 +22,7 @@ Parser :: struct {
 	chunk_start: u32,
 	total_size: u32,
 
-	intern: strings.Intern,
+	intern: INMap,
 }
 
 real_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos }
@@ -33,7 +33,7 @@ init_parser :: proc(size: u32) -> Parser {
 	p.pos    = 0
 	p.offset = 0
 	p.total_size = size
-	strings.intern_init(&p.intern)
+	p.intern = in_init()
 
 	return p
 }
@@ -72,10 +72,7 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		}
 
 		name := string(p.data[chunk_pos(p)+event_sz:chunk_pos(p)+event_sz+u32(event.name_len)])
-		str, err := strings.intern_get(&p.intern, name)
-		if err != nil {
-			trap()
-		}
+		str := in_get(&p.intern, name)
 
 		ev := TempEvent{
 			type = .Begin,
