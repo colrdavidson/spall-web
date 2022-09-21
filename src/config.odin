@@ -73,6 +73,7 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 	p.full_chunk = chunk
 }
 
+instant_count := 0
 first_chunk: bool
 init_loading_state :: proc(size: u32) {
 
@@ -103,7 +104,7 @@ init_loading_state :: proc(size: u32) {
 is_json := false
 finish_loading :: proc (p: ^Parser) {
 	stop_bench("parse config")
-	fmt.printf("Got %d events\n", event_count)
+	fmt.printf("Got %d events, %d instants\n", event_count, instant_count)
 
 	free_all(context.temp_allocator)
 	free_all(scratch_allocator)

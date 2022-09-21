@@ -104,7 +104,7 @@ INMap :: struct {
 	allocator: runtime.Allocator,
 }
 
-in_init :: proc(allocator := context.allocator) -> INMap {
+in_init :: proc(string_allocator: runtime.Allocator) -> INMap {
 	v := INMap{}
 	v.entries = make([dynamic]string, 0, allocator)
 	v.hashes = make([dynamic]int, 32, allocator) // must be a power of two

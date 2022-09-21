@@ -52,7 +52,7 @@ JSONParser :: struct {
 	current_parent: IdPair,
 }
 
-fields := []string{ "dur", "name", "pid", "tid", "ts", "ph" }
+fields := []string{ "dur", "name", "pid", "tid", "ts", "ph", "s" }
 
 init_token :: proc(p: ^JSONParser, type: TokenType, start, end: i64) -> Token {
 	tok := Token{}
@@ -407,6 +407,8 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				case 'g': jp.cur_event.scope = .Global
 				case 'p': jp.cur_event.scope = .Process
 				case 't': jp.cur_event.scope = .Thread
+				case:
+					continue
 				}
 			}
 
@@ -484,6 +486,8 @@ json_push_instant :: proc(event: TempEvent) {
 		name = event.name,
 		timestamp = event.timestamp,
 	}
+
+	instant_count += 1
 
 	if event.scope == .Global {
 		append(&global_instants, instant)

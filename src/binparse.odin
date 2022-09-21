@@ -33,7 +33,7 @@ init_parser :: proc(size: u32) -> Parser {
 	p.pos    = 0
 	p.offset = 0
 	p.total_size = size
-	p.intern = in_init()
+	p.intern = in_init(big_global_allocator)
 
 	return p
 }
