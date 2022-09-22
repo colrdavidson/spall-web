@@ -31,8 +31,6 @@ os.makedirs('build', exist_ok=True)
 build_str = []
 if RELEASE:
     build_str = ['-o:speed']
-elif EXTRARELEASE:
-    build_str = ['-o:speed']
 else:
     build_str = ['-debug']
 
@@ -45,45 +43,11 @@ subprocess.run([
     'build', 'src',
     '-collection:formats=formats',
     '-target:js_wasm32',
+    '-target-features:"+bulk-memory"',
     f"-out:{wasm_out}",
     *build_str,
 ], check=True)
 print("Compiled in {:.1f} seconds".format(time.time() - start_time))
-
-if EXTRARELEASE:
-    # Patch memcpy and memmove
-    start_time = time.time()
-    print('Patching WASM...')
-    subprocess.run([
-        'wasm2wat',
-        '-o', f"build/{program_name}.wat",
-        wasm_out,
-    ], check=True)
-    memcpy = """(\\1
-        local.get 0
-        local.get 1
-        local.get 2
-        memory.copy
-        local.get 0)"""
-    memset = """(\\1
-        local.get 0
-        local.get 1
-        local.get 2
-        memory.fill
-        local.get 0)"""
-    with open(f"build/{program_name}.wat", 'r') as infile, open(f"build/{program_name}_patched.wat", 'w') as outfile:
-        wat = infile.read()
-        wat = re.sub(r'\((func \$memcpy.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
-        wat = re.sub(r'\((func \$memmove.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
-        wat = re.sub(r'\((func \$memset.*?\(result i32\)).*?local.get 0(.*?return)?\)', memset, wat, flags=re.DOTALL)
-        outfile.write(wat)
-    subprocess.run([
-        'wat2wasm',
-        '-o', f"build/{program_name}_patched.wasm",
-        f"build/{program_name}_patched.wat",
-    ], check=True)
-    wasm_out = f"build/{program_name}_patched.wasm"
-    print("Patched in {:.1f} seconds".format(time.time() - start_time))
 
 #
 # Output the dist folder for upload
