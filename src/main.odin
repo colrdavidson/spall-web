@@ -54,6 +54,8 @@ EventID :: struct {
 selected_event := EventID{-1, -1, -1, -1}
 
 dpr: f64
+rect_height: f64
+disp_rect: Rect
 
 _p_font_size : f64 = 1
 _h1_font_size : f64 = 1.25
@@ -142,7 +144,7 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 	}
 }
 
-get_max_y_pan :: proc(processes: []Process, rect_height: f64) -> f64 {
+get_max_y_pan :: proc(processes: []Process) -> f64 {
 	cur_y : f64 = 0
 
 	for proc_v, _ in processes {
@@ -224,6 +226,124 @@ reset_camera :: proc(display_width: f64) {
 	cam.target_scale = cam.current_scale
 }
 
+// color_choices must be power of 2
+name_color_idx :: proc(name: string) -> u32 {
+	return u32(uintptr(raw_data(name))) & u32(len(color_choices) - 1)
+}
+
+render_tree :: proc(thread: ^Thread, depth_idx: int, tree_idx: int, y_start: f64) {
+	cur_node := thread.depths[depth_idx].tree[tree_idx]
+
+	range := cur_node.end_time - cur_node.start_time
+	range_width := range * cam.current_scale
+
+	// draw summary faketangle
+	min_width := 2.0
+	if range_width < min_width {
+		y := rect_height * f64(depth_idx)
+		h := rect_height
+
+		x := cur_node.start_time
+		w := min_width
+		xm := x * cam.target_scale
+
+		r_x   := x * cam.current_scale
+		end_x := r_x + w
+
+		r_x   += cam.pan.x + disp_rect.pos.x
+		end_x += cam.pan.x + disp_rect.pos.x
+
+		r_x    = max(r_x, 0)
+
+		r_y := y_start + y
+		dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
+
+		rect_color := color_choices[0]
+		draw_rect(dr, rect_color)
+
+		return
+	}
+
+	// we're at a bottom node, draw the whole thing
+	if cur_node.left == -1 && cur_node.right == -1 {
+		render_events(cur_node.events, thread.max_time, depth_idx, y_start)
+		return
+	}
+
+	render_tree(thread, depth_idx, cur_node.left, y_start)
+	render_tree(thread, depth_idx, cur_node.right, y_start)
+}
+
+render_events :: proc(scan_arr: []Event, thread_max_time: f64, y_depth: int, y_start: f64) {
+	y := rect_height * f64(y_depth)
+	h := rect_height
+
+	for ev, de_id in scan_arr {
+		x := ev.timestamp - total_min_time
+		duration := bound_duration(ev, thread_max_time)
+		w := duration * cam.current_scale
+		xm := x * cam.target_scale
+
+
+		// Carefully extract the [start, end] interval of the rect so that we can clip the left
+		// side to 0 before sending it to draw_rect, so we can prevent f32 (f64?) precision
+		// problems drawing a rectangle which starts at a massively huge negative number on
+		// the left.
+		r_x   := x * cam.current_scale
+		end_x := r_x + w
+
+		r_x   += cam.pan.x + disp_rect.pos.x
+		end_x += cam.pan.x + disp_rect.pos.x
+
+		r_x    = max(r_x, 0)
+
+		r_y := y_start + y
+		dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
+
+		if !rect_in_rect(dr, disp_rect) {
+			continue
+		}
+
+		idx := name_color_idx(ev.name)
+		rect_color := color_choices[idx]
+		draw_rect(dr, rect_color)
+
+/*
+		e_idx := start_idx + de_id
+		if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
+			set_cursor("pointer")
+			if clicked {
+				//selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
+				did_multiselect = false
+			}
+		}
+*/
+
+		underhang := disp_rect.pos.x - dr.pos.x
+		disp_w := min(dr.size.x - underhang, dr.size.x)
+
+		display_name := ev.name
+		if ev.duration == -1 {
+			display_name = fmt.tprintf("%s (Did Not Finish)", ev.name)
+		}
+		text_pad := (em / 2)
+		text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
+		max_chars := max(0, min(len(display_name), text_width))
+		name_str := display_name[:max_chars]
+
+		if len(name_str) > 4 || max_chars == len(display_name) {
+			if max_chars != len(display_name) {
+				name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
+			}
+
+			str_width := measure_text(name_str, p_font_size, monospace_font)
+			str_x := max(dr.pos.x, disp_rect.pos.x) + text_pad
+
+			draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
+		}
+	}
+}
+
 @export
 frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	context = wasmContext
@@ -303,8 +423,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		update_fonts = false
 	}
 
+	rect_height = em + (0.75 * em)
 	top_line_gap := (em / 1.5)
-	rect_height := em + (0.75 * em)
 	toolbar_height := 4 * em
 
 	pane_y : f64 = 0
@@ -353,7 +473,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	graph_header_height := graph_header_text_height + graph_header_line_gap
 	max_x := width - x_pad_size
 
-	disp_rect := rect(start_x, start_y, display_width, display_height)
+	disp_rect = rect(start_x, start_y, display_width, display_height)
 	//draw_rect_outline(rect(disp_rect.pos.x, disp_rect.pos.y, disp_rect.size.x, disp_rect.size.y - 1), 1, Vec3{255, 0, 0})
 
 	graph_rect := disp_rect
@@ -376,7 +496,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	last_start_time, last_end_time := get_current_window(cam, display_width)
 
-	max_height := get_max_y_pan(processes[:], rect_height)
+	max_height := get_max_y_pan(processes[:])
 	max_y_pan := max(+20 * em + max_height - graph_rect.size.y, 0)
 	min_y_pan := min(-20 * em, max_y_pan)
 	max_x_pan := max(+20 * em, 0)
@@ -481,15 +601,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, color)
 	}
 
-	// color_choices must be power of 2
-	name_color_idx :: proc(name: string) -> u32 {
-		return u32(uintptr(raw_data(name))) & u32(len(color_choices) - 1)
-	}
-
 	// Render flamegraphs
-	clicked_on_rect := false
 	cur_y := graph_rect.pos.y - cam.pan.y
-	proc_loop: for proc_v, p_idx in processes {
+	proc_loop: for proc_v, p_idx in &processes {
 		h1_size : f64 = 0
 		if len(processes) > 1 {
 			row_text := fmt.tprintf("PID: %d", proc_v.process_id)
@@ -499,7 +613,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			cur_y += h1_size
 		}
 
-		thread_loop: for tm, t_idx in proc_v.threads {
+		thread_loop: for tm, t_idx in &proc_v.threads {
 			last_cur_y := cur_y
 			h2_size := h2_height + (h2_height / 2)
 			cur_y += h2_size
@@ -518,169 +632,14 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
 
 			cur_depth_off := 0
-			for depth_arr, d_idx in tm.depths {
-				y := rect_height * f64(d_idx)
-				h := rect_height
-
-				start_idx := find_idx(depth_arr[:], start_time)
-				end_idx := find_idx(depth_arr[:], end_time)
-				if start_idx == -1 {
-					start_idx = 0
-				}
-				if end_idx == -1 {
-					end_idx = len(depth_arr) - 1
-				}
-
-				scan_arr := depth_arr[start_idx:end_idx+1]
-				chunker_x := (scan_arr[0].timestamp - total_min_time) * cam.current_scale
-				chunker_w := 0.0
-				color_weights := make([]f64, len(color_choices), context.temp_allocator)
-				{
-					idx := name_color_idx(scan_arr[0].name)
-					color_weights[idx] += bound_duration(scan_arr[0], tm.max_time)
-				}
-
-				flush_chunker :: proc(chunker_w : ^f64, chunker_color : Vec3, chunker_x, cur_y, y, h : f64, disp_rect : Rect, d_idx : int) {
-					r := Rect{Vec2{chunker_x, y}, Vec2{chunker_w^, h}}
-					r_x := chunker_x + cam.pan.x + disp_rect.pos.x
-					r_y := r.pos.y + cur_y
-					dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
-					draw_rect(dr, chunker_color)
-
-					chunker_w^ = 0
-				}
-
-				for ev, de_id in scan_arr {
-					x := ev.timestamp - total_min_time
-
-					duration := bound_duration(ev, tm.max_time)
-					w := duration * cam.current_scale
-
-					xm := x * cam.target_scale
-
-					idx := name_color_idx(ev.name)
-					color_weights[idx] += max(duration, MIN_WIDTH / cam.current_scale)
-
-					MIN_WIDTH :: 2.0
-					if w < MIN_WIDTH {
-						if de_id - 1 >= 0 {
-							ev_left := scan_arr[de_id - 1]
-							xl := (ev_left.timestamp - total_min_time) * cam.target_scale
-							wl := bound_duration(ev_left, tm.max_time) * cam.target_scale
-							if xl + max(wl, MIN_WIDTH) > xm {
-								chunker_w = max(x * cam.current_scale + MIN_WIDTH - chunker_x, chunker_w)
-								continue
-							}
-						}
-						w = MIN_WIDTH
-					}
-
-					if chunker_w > 0 {
-						chunker_color := Vec3{}
-						weights_sum := 0.0
-						for weight, idx in &color_weights {
-							chunker_color += color_choices[idx] * weight
-							weights_sum += weight
-							weight = 0
-						}
-						if weights_sum <= 0 {
-							fmt.printf("weights sum was <= 0\n")
-							trap()
-						}
-						chunker_color /= weights_sum
-						weights_sum = 0
-						flush_chunker(&chunker_w, chunker_color, chunker_x, cur_y, y, h, disp_rect, d_idx)
-					}
-
-					chunker_x = x * cam.current_scale
-
-					// Carefully extract the [start, end] interval of the rect so that we can clip the left
-					// side to 0 before sending it to draw_rect, so we can prevent f32 (f64?) precision
-					// problems drawing a rectangle which starts at a massively huge negative number on
-					// the left.
-					r_x   := x * cam.current_scale
-					end_x := r_x + w
-
-					r_x   += cam.pan.x + disp_rect.pos.x
-					end_x += cam.pan.x + disp_rect.pos.x
-
-					r_x    = max(r_x, 0)
-
-					r_y := y + cur_y
-					dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
-
-					if !rect_in_rect(dr, disp_rect) {
-						continue
-					}
-
-					e_idx := start_idx + de_id
-					rect_color := color_choices[name_color_idx(ev.name)]
-					if int(selected_event.pid) == p_idx &&
-					   int(selected_event.tid) == t_idx &&
-					   int(selected_event.did) == d_idx &&
-					   int(selected_event.eid) == e_idx {
-						rect_color.x += 30
-						rect_color.y += 30
-						rect_color.z += 30
-					}
-
-					draw_rect(dr, rect_color)
-
-					if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
-						set_cursor("pointer")
-						if clicked {
-							selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
-							clicked_on_rect = true
-							did_multiselect = false
-						}
-					}
-
-					underhang := start_x - dr.pos.x
-					disp_w := min(dr.size.x - underhang, dr.size.x)
-
-					display_name := ev.name
-					if ev.duration == -1 {
-						display_name = fmt.tprintf("%s (Did Not Finish)", ev.name)
-					}
-					text_pad := (em / 2)
-					text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
-					max_chars := max(0, min(len(display_name), text_width))
-					name_str := display_name[:max_chars]
-
-					if len(name_str) > 4 || max_chars == len(display_name) {
-						if max_chars != len(display_name) {
-							name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
-						}
-
-						str_width := measure_text(name_str, p_font_size, monospace_font)
-						str_x := max(dr.pos.x, start_x) + text_pad
-
-						draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
-					}
-				}
-				if chunker_w > 0 {
-					chunker_color := Vec3{}
-					weights_sum := 0.0
-					for weight, idx in &color_weights {
-						chunker_color += color_choices[idx] * weight
-						weights_sum += weight
-						weight = 0
-					}
-					if weights_sum <= 0 {
-						fmt.printf("weights sum was <= 0\n")
-						trap()
-					}
-					chunker_color /= weights_sum
-					weights_sum = 0
-					flush_chunker(&chunker_w, chunker_color, chunker_x, cur_y, y, h, disp_rect, d_idx)
-				}
-				cur_depth_off += len(depth_arr)
+			for depth, d_idx in &tm.depths {
+				render_tree(&tm, d_idx, depth.head, cur_y)
 			}
 			cur_y += thread_advance
 		}
 	}
 
-	if clicked && !clicked_on_rect && !shift_down {
+	if clicked && !shift_down {
 		selected_event = {-1, -1, -1, -1}
 		selected_rect = Rect{}
 		did_multiselect = false
@@ -787,19 +746,19 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					continue
 				}
 
-				for depth_arr, d_idx in tm.depths {
+				for depth, d_idx in tm.depths {
 					y := rect_height * f64(d_idx)
 					h := rect_height
 
-					start_idx := find_idx(depth_arr[:], selected_start_time)
-					end_idx := find_idx(depth_arr[:], selected_end_time)
+					start_idx := find_idx(depth.events, selected_start_time)
+					end_idx := find_idx(depth.events, selected_end_time)
 					if start_idx == -1 {
 						start_idx = 0
 					}
 					if end_idx == -1 {
-						end_idx = len(depth_arr) - 1
+						end_idx = len(depth.events) - 1
 					}
-					scan_arr := depth_arr[start_idx:end_idx+1]
+					scan_arr := depth.events[start_idx:end_idx+1]
 
 					scan_loop: for ev in scan_arr {
 						x := ev.timestamp - total_min_time
@@ -962,7 +921,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 
 		thread := processes[p_idx].threads[t_idx]
-		event := thread.depths[d_idx][e_idx]
+		event := thread.depths[d_idx].events[e_idx]
 		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start timestamp: %s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)

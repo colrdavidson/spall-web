@@ -642,18 +642,26 @@ json_process_events :: proc() {
 				next_ev := tm.events[i+1]
 
 				if ev.depth != next_ev.depth {
-					append(&tm.depths, tm.events[ev_start:i+1])
+					depth := Depth{
+						events = tm.events[ev_start:i+1]
+					}
+
+					append(&tm.depths, depth)
 					ev_start = i + 1
 					cur_depth = next_ev.depth
 				}
 			}
 
 			if len(tm.events) > 0 {
-				append(&tm.depths, tm.events[ev_start:i+1])
+				depth := Depth{
+					events = tm.events[ev_start:i+1]
+				}
+
+				append(&tm.depths, depth)
 			}
 
-			for depth_arr in tm.depths {
-				slice.sort_by(depth_arr, event_rendersort_step2_proc)
+			for depth in tm.depths {
+				slice.sort_by(depth.events, event_rendersort_step2_proc)
 			}
 		}
 	}

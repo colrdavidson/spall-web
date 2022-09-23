@@ -37,6 +37,16 @@ EventScope :: enum u8 {
 	Thread,
 }
 
+ChunkNode :: struct {
+	start_time: f64,
+	end_time: f64,
+
+	left: int,
+	right: int,
+
+	events: []Event,
+}
+
 TempEvent :: struct {
 	type: EventType,
 	scope: EventScope,
@@ -59,6 +69,13 @@ Event :: struct #packed {
 	depth: u16,
 }
 
+Depth :: struct {
+	head: int,
+	tree: [dynamic]ChunkNode,
+	bs_events: [dynamic]Event,
+	events: []Event,
+}
+
 EventQueue :: distinct queue.Queue(int)
 Thread :: struct {
 	min_time: f64,
@@ -68,8 +85,7 @@ Thread :: struct {
 
 	thread_id: u32,
 	events: [dynamic]Event,
-	depths: [dynamic][]Event,
-	bs_depths: [dynamic][dynamic]Event,
+	depths: [dynamic]Depth,
 	instants: [dynamic]Instant,
 
 	bande_q: EventQueue,
@@ -117,8 +133,7 @@ init_thread :: proc(thread_id: u32) -> Thread {
 		min_time = 0x7fefffffffffffff, 
 		thread_id = thread_id,
 		events = make([dynamic]Event, big_global_allocator),
-		depths = make([dynamic][]Event, small_global_allocator),
-		bs_depths = make([dynamic][dynamic]Event, big_global_allocator),
+		depths = make([dynamic]Depth, small_global_allocator),
 		instants = make([dynamic]Instant, big_global_allocator),
 	}
 	queue.init(&t.bande_q, 0, scratch_allocator)

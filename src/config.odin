@@ -73,6 +73,48 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 	p.full_chunk = chunk
 }
 
+build_tree :: proc(tree: ^[dynamic]ChunkNode, events: []Event, start_time, end_time: f64, depth : int = 0) -> int {
+	start_idx := find_idx(events, start_time)
+	end_idx := find_idx(events, end_time)
+
+	if start_idx == -1 { start_idx = 0 }
+	if end_idx   == -1 { end_idx = len(events) - 1 }
+
+	scan_arr := events[start_idx:end_idx+1]
+
+	node := ChunkNode{}
+	node.start_time = start_time
+	node.end_time   = end_time
+	node.events = scan_arr
+
+	range := end_time - start_time
+	mid_time := start_time + (range / 2)
+
+	if len(scan_arr) > 16 {
+		node.left = build_tree(tree, scan_arr, node.start_time, mid_time, depth+1)
+		node.right = build_tree(tree, scan_arr, mid_time, node.end_time, depth+1)
+	} else {
+		node.left = -1
+		node.right = -1
+	}
+
+	append(tree, node)
+	node_idx := len(tree) - 1
+
+	return node_idx
+}
+
+chunk_events :: proc() {
+	for proc_v in &processes {
+		for tm in &proc_v.threads {
+			for depth in &tm.depths {
+				depth.tree = make([dynamic]ChunkNode, big_global_allocator)
+				depth.head = build_tree(&depth.tree, depth.events, tm.min_time, tm.max_time)
+			}
+		}
+	}
+}
+
 instant_count := 0
 first_chunk: bool
 init_loading_state :: proc(size: u32) {
@@ -80,8 +122,8 @@ init_loading_state :: proc(size: u32) {
 	selected_event = EventID{-1, -1, -1, -1}
 	free_all(scratch_allocator)
 	free_all(small_global_allocator)
-	free_all(context.allocator)
-	free_all(context.temp_allocator)
+	free_all(big_global_allocator)
+	free_all(temp_allocator)
 	processes = make([dynamic]Process, small_global_allocator)
 	process_map = vh_init(scratch_allocator)
 	global_instants = make([dynamic]Instant, big_global_allocator)
@@ -106,7 +148,7 @@ finish_loading :: proc (p: ^Parser) {
 	stop_bench("parse config")
 	fmt.printf("Got %d events, %d instants\n", event_count, instant_count)
 
-	free_all(context.temp_allocator)
+	free_all(temp_allocator)
 	free_all(scratch_allocator)
 
 	start_bench("process events")
@@ -115,6 +157,8 @@ finish_loading :: proc (p: ^Parser) {
 	} else {
 		bin_process_events()
 	}
+
+	chunk_events()
 	stop_bench("process events")
 
 	// reset render state

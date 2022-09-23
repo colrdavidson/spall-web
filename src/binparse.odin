@@ -166,7 +166,8 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 				e_idx := queue.pop_back(&thread.bande_q)
 
 				thread.current_depth -= 1
-				jev := &thread.bs_depths[thread.current_depth][e_idx]
+				depth := &thread.depths[thread.current_depth]
+				jev := &depth.bs_events[e_idx]
 				jev.duration = (event.timestamp * stamp_scale) - jev.timestamp
 				thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 				total_max_time = max(total_max_time, jev.timestamp + jev.duration)
@@ -206,16 +207,18 @@ bin_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, i
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
 	t.max_depth = max(t.max_depth, t.current_depth)
-	if int(t.max_depth) >= len(t.bs_depths) {
-		events := make([dynamic]Event, big_global_allocator)
-		append(&t.bs_depths, events)
+	if int(t.max_depth) >= len(t.depths) {
+		depth := Depth{
+			bs_events = make([dynamic]Event, big_global_allocator)
+		}
+		append(&t.depths, depth)
 	}
 
-	depths := &t.bs_depths[t.current_depth]
+	depth := &t.depths[t.current_depth]
 	t.current_depth += 1
-	append(depths, event)
+	append(&depth.bs_events, event)
 
-	return p_idx, t_idx, len(depths)-1
+	return p_idx, t_idx, len(depth.bs_events)-1
 }
 
 bin_process_events :: proc() {
@@ -225,8 +228,8 @@ bin_process_events :: proc() {
 	for process in &processes {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 		for tm in &process.threads {
-			for depth in &tm.bs_depths {
-				append(&tm.depths, depth[:])
+			for depth in &tm.depths {
+				depth.events = depth.bs_events[:]
 			}
 		}
 	}
