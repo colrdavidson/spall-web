@@ -760,7 +760,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			histogram: [22]u32,
 		}
 
-		stats := make(map[string]Stats, 0, context.temp_allocator)
+		big_global_arena.offset = current_alloc_offset
+		stats := make(map[string]Stats, 0, big_global_allocator)
 
 		total_tracked_time := 0.0
 
