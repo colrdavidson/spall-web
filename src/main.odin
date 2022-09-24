@@ -278,7 +278,7 @@ render_tree :: proc(thread: ^Thread, depth_idx: int, y_start: f64, start_time, e
 			rect_color := color_choices[0]
 			//draw_rect(dr, rect_color)
 
-			draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
+			draw_rect := DrawRect{f32(dr.pos.x * dpr), f32(dr.size.x * dpr), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 			append(&gl_rects, draw_rect)
 
 			rect_count += 1
@@ -329,7 +329,7 @@ render_events :: proc(events: []Event, thread_max_time: f64, y_depth: int, y_sta
 		idx := name_color_idx(ev.name)
 		rect_color := color_choices[idx]
 		//draw_rect(dr, rect_color)
-		draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
+		draw_rect := DrawRect{f32(dr.pos.x * dpr), f32(dr.size.x * dpr), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 		append(&gl_rects, draw_rect)
 		rect_count += 1
 
@@ -662,7 +662,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			cur_depth_off := 0
 			for depth, d_idx in &tm.depths {
 				render_tree(&tm, d_idx, cur_y, start_time, end_time)
-				gl_push_rects(gl_rects[:], cur_y + (rect_height * f64(d_idx)) + 1, rect_height)
+				gl_push_rects(gl_rects[:], (cur_y + (rect_height * f64(d_idx))) * dpr, rect_height * dpr)
 
 				resize(&gl_rects, 0)
 			}
