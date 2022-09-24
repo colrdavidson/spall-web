@@ -85,7 +85,6 @@ did_multiselect := false
 
 build_hash := 0
 
-first_frame := true
 loading_config := true
 post_loading := false
 update_fonts := true
@@ -206,6 +205,10 @@ main :: proc() {
 
 	context = wasmContext
 
+	random_seed = u64(get_time()) * 11400714819323198485
+	rand.set_global_seed(random_seed)
+	fmt.printf("Seed is 0x%X\n", random_seed)
+
 	manual_load(default_config)
 }
 
@@ -275,9 +278,7 @@ render_tree :: proc(thread: ^Thread, depth_idx: int, y_start: f64, start_time, e
 			r_y := y_start + y
 			dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
 
-			rect_color := color_choices[0]
-			//draw_rect(dr, rect_color)
-
+			rect_color := cur_node.avg_color
 			draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 			append(&gl_rects, draw_rect)
 
@@ -328,7 +329,6 @@ render_events :: proc(events: []Event, thread_max_time: f64, y_depth: int, y_sta
 
 		idx := name_color_idx(ev.name)
 		rect_color := color_choices[idx]
-		//draw_rect(dr, rect_color)
 		draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 		append(&gl_rects, draw_rect)
 		rect_count += 1
@@ -373,15 +373,6 @@ render_events :: proc(events: []Event, thread_max_time: f64, y_depth: int, y_sta
 frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	context = wasmContext
 	defer frame_count += 1
-
-	// This is nasty code that allows me to do load-time things once the wasm context is init
-	if first_frame {
-		random_seed = u64(get_time())
-		fmt.printf("Seed is 0x%X\n", random_seed)
-		rand.set_global_seed(random_seed)
-
-		first_frame = false
-	}
 
 	// render loading screen
 	if loading_config {
