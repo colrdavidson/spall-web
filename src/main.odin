@@ -57,6 +57,7 @@ selected_event := EventID{-1, -1, -1, -1}
 dpr: f64
 rect_height: f64
 disp_rect: Rect
+gl_rects: [dynamic]DrawRect
 
 _p_font_size : f64 = 1
 _h1_font_size : f64 = 1.25
@@ -275,7 +276,7 @@ render_tree :: proc(thread: ^Thread, depth_idx: int, y_start: f64, start_time, e
 			dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
 
 			rect_color := color_choices[0]
-			draw_rect(dr, rect_color)
+			//draw_rect(dr, rect_color)
 
 			rect_count += 1
 			continue
@@ -324,7 +325,7 @@ render_events :: proc(events: []Event, thread_max_time: f64, y_depth: int, y_sta
 
 		idx := name_color_idx(ev.name)
 		rect_color := color_choices[idx]
-		draw_rect(dr, rect_color)
+		//draw_rect(dr, rect_color)
 		rect_count += 1
 
 /*
@@ -425,6 +426,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		was_mouse_down = false
 	}
 
+	gl_rects = make([dynamic]DrawRect, 0, int(width / 2), temp_allocator)
+
 	t += dt
 
 	if (width / dpr) < 400 {
@@ -485,7 +488,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	canvas_clear()
 
 	// Render background
-	draw_rect(rect(0, toolbar_height, width, height), bg_color2)
+	gl_init_frame(bg_color2)
 
 	graph_header_text_height := (top_line_gap * 2) + em
 	graph_header_line_gap := em
@@ -654,6 +657,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			cur_depth_off := 0
 			for depth, d_idx in &tm.depths {
 				render_tree(&tm, d_idx, cur_y, start_time, end_time)
+				append(&gl_rects, DrawRect{5, 10, {0, 0, 0, 255}})
+				gl_push_rects(gl_rects[:], cur_y, rect_height)
 			}
 			cur_y += thread_advance
 		}

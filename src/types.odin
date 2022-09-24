@@ -16,6 +16,12 @@ rect :: #force_inline proc(x, y, w, h: f64) -> Rect {
 	return Rect{Vec2{x, y}, Vec2{w, h}}
 }
 
+DrawRect :: struct #packed {
+	start: f32,
+	width: f32,
+	color: [4]u8,
+}
+
 Camera :: struct {
 	pan: Vec2,
 	vel: Vec2,

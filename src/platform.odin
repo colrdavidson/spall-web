@@ -124,6 +124,9 @@ foreign js {
     log_string :: proc(str: string) ---
     log_error :: proc(str: string) ---
 
+	_gl_init_frame :: proc(r, g, b, a: f64) ---
+	_gl_push_rects :: proc(ptr: rawptr, byte_size, real_size: int, y, height: f64) ---
+
 	get_session_storage :: proc(key: string) ---
 	set_session_storage :: proc(key: string, val: string) ---
 	get_time :: proc() -> f64 ---
@@ -140,6 +143,14 @@ get_text_height :: #force_inline proc "contextless" (scale: f64, font: string) -
 
 measure_text :: #force_inline proc "contextless" (str: string, scale: f64, font: string) -> f64 {
 	return _measure_text(str, scale, font)
+}
+
+gl_init_frame :: #force_inline proc "contextless" (color: Vec3) {
+	_gl_init_frame(color.x, color.y, color.z, 255)
+}
+
+gl_push_rects :: #force_inline proc "contextless" (rects: []DrawRect, y, height: f64) {
+	_gl_push_rects(raw_data(rects), len(rects) * size_of(DrawRect), len(rects), y, height)
 }
 
 canvas_clear :: #force_inline proc "contextless" () {
