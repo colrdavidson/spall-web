@@ -37,7 +37,7 @@ EventScope :: enum u8 {
 	Thread,
 }
 
-ChunkNode :: struct {
+ChunkNode :: struct #packed {
 	start_time: f64,
 	end_time: f64,
 

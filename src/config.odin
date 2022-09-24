@@ -2,7 +2,6 @@ package main
 
 import "core:fmt"
 import "core:strings"
-import "core:container/queue"
 import "core:mem"
 import "core:math/rand"
 import "core:strconv"
@@ -108,8 +107,8 @@ chunk_events :: proc() {
 	for proc_v in &processes {
 		for tm in &proc_v.threads {
 			for depth in &tm.depths {
-				depth.tree = make([dynamic]ChunkNode, big_global_allocator)
-				depth.head = build_tree(&depth.tree, depth.events, tm.min_time, tm.max_time)
+				depth.tree = make([dynamic]ChunkNode, 0, big_global_allocator)
+				depth.head = build_tree(&depth.tree, depth.events, tm.min_time - total_min_time, tm.max_time - total_min_time)
 			}
 		}
 	}

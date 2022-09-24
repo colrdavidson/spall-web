@@ -28,6 +28,7 @@ wasmContext := runtime.default_context()
 
 t           : f64
 frame_count : int
+rect_count : int
 
 bg_color      := Vec3{}
 bg_color2     := Vec3{}
@@ -231,57 +232,74 @@ name_color_idx :: proc(name: string) -> u32 {
 	return u32(uintptr(raw_data(name))) & u32(len(color_choices) - 1)
 }
 
-render_tree :: proc(thread: ^Thread, depth_idx: int, tree_idx: int, y_start: f64) {
-	cur_node := thread.depths[depth_idx].tree[tree_idx]
+render_tree :: proc(thread: ^Thread, depth_idx: int, y_start: f64, start_time, end_time: f64) {
+	depth := thread.depths[depth_idx]
+	tree := depth.tree
 
-	range := cur_node.end_time - cur_node.start_time
-	range_width := range * cam.current_scale
+	// If we blow this, we're in space
+	tree_stack := [64]int{}
+	stack_len := 0
 
-	// draw summary faketangle
-	min_width := 2.0
-	if range_width < min_width {
-		y := rect_height * f64(depth_idx)
-		h := rect_height
+	tree_stack[0] = depth.head; stack_len += 1
+	for stack_len > 0 {
+		stack_len -= 1
 
-		x := cur_node.start_time
-		w := min_width
-		xm := x * cam.target_scale
+		tree_idx := tree_stack[stack_len]
+		cur_node := tree[tree_idx]
+		range := cur_node.end_time - cur_node.start_time
+		range_width := range * cam.current_scale
 
-		r_x   := x * cam.current_scale
-		end_x := r_x + w
+		if cur_node.end_time < f64(start_time) || cur_node.start_time > f64(end_time) {
+			continue
+		}
 
-		r_x   += cam.pan.x + disp_rect.pos.x
-		end_x += cam.pan.x + disp_rect.pos.x
+		// draw summary faketangle
+		min_width := 2.0
+		if range_width < min_width {
+			y := rect_height * f64(depth_idx)
+			h := rect_height
 
-		r_x    = max(r_x, 0)
+			x := cur_node.start_time
+			w := min_width
+			xm := x * cam.target_scale
 
-		r_y := y_start + y
-		dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
+			r_x   := x * cam.current_scale
+			end_x := r_x + w
 
-		rect_color := color_choices[0]
-		draw_rect(dr, rect_color)
+			r_x   += cam.pan.x + disp_rect.pos.x
+			end_x += cam.pan.x + disp_rect.pos.x
 
-		return
+			r_x    = max(r_x, 0)
+
+			r_y := y_start + y
+			dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
+
+			rect_color := color_choices[0]
+			draw_rect(dr, rect_color)
+
+			rect_count += 1
+			continue
+		}
+
+		// we're at a bottom node, draw the whole thing
+		if cur_node.left == -1 && cur_node.right == -1 {
+			render_events(cur_node.events, thread.max_time, depth_idx, y_start)
+			continue
+		}
+
+		tree_stack[stack_len] = cur_node.right; stack_len += 1
+		tree_stack[stack_len] = cur_node.left; stack_len += 1
 	}
-
-	// we're at a bottom node, draw the whole thing
-	if cur_node.left == -1 && cur_node.right == -1 {
-		render_events(cur_node.events, thread.max_time, depth_idx, y_start)
-		return
-	}
-
-	render_tree(thread, depth_idx, cur_node.left, y_start)
-	render_tree(thread, depth_idx, cur_node.right, y_start)
 }
 
-render_events :: proc(scan_arr: []Event, thread_max_time: f64, y_depth: int, y_start: f64) {
+render_events :: proc(events: []Event, thread_max_time: f64, y_depth: int, y_start: f64) {
 	y := rect_height * f64(y_depth)
 	h := rect_height
 
-	for ev, de_id in scan_arr {
+	for ev, de_id in events {
 		x := ev.timestamp - total_min_time
 		duration := bound_duration(ev, thread_max_time)
-		w := duration * cam.current_scale
+		w := max(duration * cam.current_scale, 2.0)
 		xm := x * cam.target_scale
 
 
@@ -307,6 +325,7 @@ render_events :: proc(scan_arr: []Event, thread_max_time: f64, y_depth: int, y_s
 		idx := name_color_idx(ev.name)
 		rect_color := color_choices[idx]
 		draw_rect(dr, rect_color)
+		rect_count += 1
 
 /*
 		e_idx := start_idx + de_id
@@ -602,6 +621,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	// Render flamegraphs
+	rect_count = 0
 	cur_y := graph_rect.pos.y - cam.pan.y
 	proc_loop: for proc_v, p_idx in &processes {
 		h1_size : f64 = 0
@@ -633,7 +653,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 			cur_depth_off := 0
 			for depth, d_idx in &tm.depths {
-				render_tree(&tm, d_idx, depth.head, cur_y)
+				render_tree(&tm, d_idx, cur_y, start_time, end_time)
 			}
 			cur_y += thread_advance
 		}
@@ -1009,12 +1029,18 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	seed_width := measure_text(seed_str, p_font_size, monospace_font)
 	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
+	rects_str := fmt.tprintf("Rect Count: %d", rect_count)
+	rects_txt_width := measure_text(rects_str, p_font_size, monospace_font)
+	draw_text(rects_str, Vec2{width - rects_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+
+/*
 	// save me my battery, plz
 	if cam.pan.x == cam.target_pan_x && 
 	   cam.vel.y == 0 && 
 	   cam.current_scale == cam.target_scale {
 		return false
 	}
+*/
 
 	return true
 }
