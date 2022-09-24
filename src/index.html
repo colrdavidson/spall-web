@@ -131,23 +131,21 @@
 				in float x_attr;
 				in float width_attr;
 
-				in uint color;
+				in vec4 color;
 
 				uniform float u_y;
 				uniform float u_height;
 				uniform vec2 u_resolution;
 
-				flat out uint v_color;
+				out vec4 v_color;
 
 				void main() {
-					vec2 zeroToOne = pos_attr / u_resolution;
-					vec2 zeroToTwo = zeroToOne * 2.0;
-					vec2 clipSpace = zeroToTwo - 1.0;
+					// offset/scale quad
+					vec2 xy = vec2(x_attr, u_y) + (pos_attr * vec2(width_attr, u_height));
 
-					vec4 pos = vec4(clipSpace * vec2(1, -1), 0, 1);
-					pos.x += x_attr * width_attr;
-					pos.y += u_y * u_height;
-					gl_Position = pos;
+					// convert to GL-space, send
+					gl_Position = vec4((xy / u_resolution) * 2.0 - 1.0, 0.0, 1.0);
+					gl_Position.y = -gl_Position.y;
 
 					v_color = color;
 				}
@@ -156,16 +154,11 @@
 			const frag_src = `#version 300 es
 				precision mediump float;
 
-				flat in uint v_color;
+				in vec4 v_color;
 				out vec4 out_color;
 
 				void main() {
-					float r = float(v_color << 24) / 255.0;
-					float g = float(v_color << 16) / 255.0;
-					float b = float(v_color << 8)  / 255.0;
-					float a = float(v_color << 0)  / 255.0;
-
-					out_color = vec4(r, g, b, a);
+					out_color = v_color.zyxw;
 				}
 			`;
 
@@ -216,16 +209,11 @@
 			const start_attr = gl_ctx.getAttribLocation(shader, "x_attr");
 			const width_attr = gl_ctx.getAttribLocation(shader, "width_attr");
 			const color_attr = gl_ctx.getAttribLocation(shader, "color");
+
 			const y_uni      = gl_ctx.getUniformLocation(shader, "u_y");
 			const height_uni = gl_ctx.getUniformLocation(shader, "u_height");
 			const resolution_uni = gl_ctx.getUniformLocation(shader, "u_resolution");
 
-			console.log(pos_attr);
-			console.log(start_attr);
-			console.log(width_attr);
-			console.log(color_attr);
-
-			let draw_rect_size = 4 + 4 + 4;
 
 			gl_ctx.useProgram(shader);
 
@@ -235,14 +223,19 @@
 			const rect_deets_buffer = gl_ctx.createBuffer();
 			gl_ctx.bindBuffer(gl_ctx.ARRAY_BUFFER, rect_deets_buffer);
 
+			let draw_rect_size = 4 + 4 + 4;
 			gl_ctx.enableVertexAttribArray(start_attr);
-			gl_ctx.vertexAttribPointer(start_attr, 1, gl_ctx.FLOAT, false, 0, draw_rect_size);
+			gl_ctx.vertexAttribPointer(start_attr, 1, gl_ctx.FLOAT, false, draw_rect_size, 0);
+			gl_ctx.vertexAttribDivisor(start_attr, 1);
 
 			gl_ctx.enableVertexAttribArray(width_attr);
-			gl_ctx.vertexAttribPointer(width_attr, 1, gl_ctx.FLOAT, false, 4, draw_rect_size);
+			gl_ctx.vertexAttribPointer(width_attr, 1, gl_ctx.FLOAT, false, draw_rect_size, 4);
+			gl_ctx.vertexAttribDivisor(width_attr, 1);
 
 			gl_ctx.enableVertexAttribArray(color_attr);
-			gl_ctx.vertexAttribPointer(color_attr, 1, gl_ctx.UNSIGNED_INT, false, 8, draw_rect_size);
+			gl_ctx.vertexAttribPointer(color_attr, 4, gl_ctx.UNSIGNED_BYTE, true, draw_rect_size, 8);
+			gl_ctx.vertexAttribDivisor(color_attr, 1);
+
 
 			const rect_points_buffer = gl_ctx.createBuffer();
 			gl_ctx.bindBuffer(gl_ctx.ARRAY_BUFFER, rect_points_buffer);
@@ -265,6 +258,7 @@
 			const rect_idx_buffer = gl_ctx.createBuffer();
 			gl_ctx.bindBuffer(gl_ctx.ELEMENT_ARRAY_BUFFER, rect_idx_buffer);
 			gl_ctx.bufferData(gl_ctx.ELEMENT_ARRAY_BUFFER, idx_arr, gl_ctx.STATIC_DRAW);
+			gl_ctx.bindVertexArray(null);
 
 			//
 
@@ -395,13 +389,10 @@
 						_gl_init_frame: (r, g, b, a) => {
 							gl_ctx.viewport(0, 0, gl_ctx.canvas.width, gl_ctx.canvas.height);
 							gl_ctx.clearColor(r, g, b, a);
-							//gl_ctx.clear(gl_ctx.COLOR_BUFFER_BIT);
+							gl_ctx.clear(gl_ctx.COLOR_BUFFER_BIT);
 						},
 						_gl_push_rects: (ptr, len, size, y, height) => {
 							let _b = window.wasm.odinMem.loadBytes(ptr, len)
-
-							gl_ctx.useProgram(shader);
-							gl_ctx.bindVertexArray(vao);
 
 							gl_ctx.bindBuffer(gl_ctx.ARRAY_BUFFER, rect_deets_buffer);
 							gl_ctx.bufferData(gl_ctx.ARRAY_BUFFER, _b, gl_ctx.DYNAMIC_DRAW);
@@ -410,7 +401,10 @@
 							gl_ctx.uniform1f(height_uni, height);
 							gl_ctx.uniform2f(resolution_uni, gl_ctx.canvas.width, gl_ctx.canvas.height);
 
-							gl_ctx.drawElementsInstanced(gl_ctx.TRIANGLES, idx_arr.length, gl_ctx.UNSIGNED_SHORT, 0, len);
+							gl_ctx.bindVertexArray(vao);
+							gl_ctx.drawElementsInstanced(gl_ctx.TRIANGLES, idx_arr.length, gl_ctx.UNSIGNED_SHORT, 0, size);
+							gl_ctx.bindVertexArray(null);
+
 						},
 
 						// Debugging
@@ -724,6 +718,8 @@
 					dpr = window.devicePixelRatio;
 					text_canvas.width = text_container.getBoundingClientRect().width * dpr;
 					text_canvas.height = text_container.getBoundingClientRect().height * dpr;
+					rect_canvas.width = rect_container.getBoundingClientRect().width * dpr;
+					rect_canvas.height = rect_container.getBoundingClientRect().height * dpr;
 					window.wasm.set_dpr(dpr);
 
 					text_ctx.textBaseline = 'top';
