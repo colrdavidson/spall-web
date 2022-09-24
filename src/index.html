@@ -134,6 +134,7 @@
 				in vec4 color;
 
 				uniform float u_y;
+				uniform float u_dpr;
 				uniform float u_height;
 				uniform vec2 u_resolution;
 
@@ -141,7 +142,7 @@
 
 				void main() {
 					// offset/scale quad
-					vec2 xy = vec2(x_attr, u_y) + (pos_attr * vec2(width_attr, u_height));
+					vec2 xy = vec2(x_attr * u_dpr, u_y * u_dpr) + (pos_attr * vec2(width_attr * u_dpr, u_height * u_dpr));
 
 					// convert to GL-space, send
 					gl_Position = vec4((xy / u_resolution) * 2.0 - 1.0, 0.0, 1.0);
@@ -211,6 +212,7 @@
 			const color_attr = gl_ctx.getAttribLocation(shader, "color");
 
 			const y_uni      = gl_ctx.getUniformLocation(shader, "u_y");
+			const dpr_uni    = gl_ctx.getUniformLocation(shader, "u_dpr");
 			const height_uni = gl_ctx.getUniformLocation(shader, "u_height");
 			const resolution_uni = gl_ctx.getUniformLocation(shader, "u_resolution");
 
@@ -398,6 +400,7 @@
 							gl_ctx.bufferData(gl_ctx.ARRAY_BUFFER, _b, gl_ctx.DYNAMIC_DRAW);
 
 							gl_ctx.uniform1f(y_uni, y);
+							gl_ctx.uniform1f(dpr_uni, dpr);
 							gl_ctx.uniform1f(height_uni, height);
 							gl_ctx.uniform2f(resolution_uni, gl_ctx.canvas.width, gl_ctx.canvas.height);
 
