@@ -115,7 +115,7 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, color_weights: []f64, events: []
 	range := end_time - start_time
 	mid_time := start_time + (range / 2)
 
-	if len(scan_arr) > 16 {
+	if len(scan_arr) > 32 {
 		node.left = build_tree(tm, depth_idx, color_weights, scan_arr, node.start_time, mid_time, depth+1)
 		node.right = build_tree(tm, depth_idx, color_weights, scan_arr, mid_time, node.end_time, depth+1)
 	} else {

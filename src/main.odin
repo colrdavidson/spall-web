@@ -29,6 +29,7 @@ wasmContext := runtime.default_context()
 t           : f64
 frame_count : int
 rect_count : int
+bucket_count : int
 
 bg_color      := Vec3{}
 bg_color2     := Vec3{}
@@ -290,6 +291,7 @@ render_tree :: proc(thread: ^Thread, depth_idx: int, y_start: f64, start_time, e
 			append(&gl_rects, draw_rect)
 
 			rect_count += 1
+			bucket_count += 1
 			continue
 		}
 
@@ -634,6 +636,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	// Render flamegraphs
 	rect_count = 0
+	bucket_count = 0
 	cur_y := graph_rect.pos.y - cam.pan.y
 	proc_loop: for proc_v, p_idx in &processes {
 		h1_size : f64 = 0
@@ -1052,6 +1055,14 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		rects_str := fmt.tprintf("Rect Count: %d", rect_count)
 		rects_txt_width := measure_text(rects_str, p_font_size, monospace_font)
 		draw_text(rects_str, Vec2{width - rects_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+
+		buckets_str := fmt.tprintf("Bucket Count: %d", bucket_count)
+		buckets_txt_width := measure_text(buckets_str, p_font_size, monospace_font)
+		draw_text(buckets_str, Vec2{width - buckets_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+
+		events_str := fmt.tprintf("Event Count: %d", rect_count - bucket_count)
+		events_txt_width := measure_text(events_str, p_font_size, monospace_font)
+		draw_text(events_str, Vec2{width - events_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 	}
 
 	// save me my battery, plz
