@@ -70,7 +70,7 @@ End events automatically close the most recent begin event with the same pid and
 BinEventType :: enum u8 {
 	Invalid     = 0,
 	Custom_Data = 1,
-	Complete    = 2,
+	StreamOver  = 2,
 	Begin       = 3,
 	End         = 4,
 	Instant     = 5,
@@ -79,21 +79,10 @@ BinEventType :: enum u8 {
 }
 
 BinHeader :: struct #packed {
-	magic:          u64, // Expected to be 0x0BADFOOD
+	magic:          u64, // Expected to be 0x0BADF00D
 	version:        u64, // Currently version 0
 	timestamp_unit: f64, // 1 is 1 microsecond
 	must_be_0:      u64,
-}
-
-Complete_Event :: struct #packed {
-	type: Event_Type,
-	pid:      u32,
-	tid:      u32,
-	time:     f64,
-	duration: f64,
-	name_len: u8,       // if the name is a 0-terminated string, the len must include the 0
-
-	// The name of the event must follow immediately after the begin event struct
 }
 
 BeginEvent :: struct #packed {
@@ -120,11 +109,17 @@ All values should be in little endian.
 A valid file is structured roughly like this:
 ```
 BinHeader
-
-BeginEvent
-event_name
-EndEvent
-...
+[
+    BeginEvent
+    event_name
+    EndEvent
+,
+    BeginEvent
+    event_name
+    EndEvent
+,
+    ...
+]
 ```
 
 ## Important Notes
