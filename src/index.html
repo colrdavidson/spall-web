@@ -394,6 +394,7 @@
 							gl_ctx.uniform2f(resolution_uni, gl_ctx.canvas.width, gl_ctx.canvas.height);
 
 							gl_ctx.bindBuffer(gl_ctx.ARRAY_BUFFER, rect_deets_buffer);
+							gl_ctx.bindVertexArray(vao);
 						},
 						_gl_push_rects: (ptr, len, size, y, height) => {
 							let _b = window.wasm.odinMem.loadBytes(ptr, len)
@@ -403,7 +404,6 @@
 							gl_ctx.uniform1f(height_uni, height);
 							gl_ctx.uniform1f(y_uni, y);
 
-							gl_ctx.bindVertexArray(vao);
 							gl_ctx.drawElementsInstanced(gl_ctx.TRIANGLES, idx_arr.length, gl_ctx.UNSIGNED_SHORT, 0, size);
 						},
 
