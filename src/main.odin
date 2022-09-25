@@ -627,7 +627,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 		color := ((i % 2) == 1 ? line_color : text_color) * 0.75
 
-		draw_rect := DrawRect{f32(start_x + x_off), f32(1.25), {u8(color.x), u8(color.y), u8(color.z), 168}}
+		draw_rect := DrawRect{f32(start_x + x_off), f32(1.5), {u8(color.x), u8(color.y), u8(color.z), 168}}
 		append(&gl_rects, draw_rect)
 	}
 
