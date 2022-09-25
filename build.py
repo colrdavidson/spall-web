@@ -43,7 +43,7 @@ subprocess.run([
     'build', 'src',
     '-collection:formats=formats',
     '-target:js_wasm32',
-    '-target-features:"+bulk-memory"',
+    '-target-features:+bulk-memory',
     f"-out:{wasm_out}",
     *build_str,
 ], check=True)
