@@ -113,6 +113,10 @@ BinHeader
 BeginEvent
 event_name
 EndEvent
+
+BeginEvent
+event_name
+EndEvent
 ...
 ```
 
