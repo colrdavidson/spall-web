@@ -112,7 +112,8 @@ processes: [dynamic]Process
 process_map: ValHash
 
 global_instants: [dynamic]Instant
-color_choices: [dynamic]Vec3
+choice_count :: 64
+color_choices: [choice_count]Vec3
 event_count: i64
 total_max_time: f64
 total_min_time: f64

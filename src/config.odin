@@ -72,7 +72,7 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 	p.full_chunk = chunk
 }
 
-build_tree :: proc(tm: ^Thread, depth_idx: int, color_weights: []f64, events: []Event, start_time, end_time: f64, depth : int = 0) -> int {
+build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event, start_time, end_time: f64, depth : int = 0) -> int {
 
 	tree := &tm.depths[depth_idx].tree
 
@@ -84,40 +84,43 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, color_weights: []f64, events: []
 
 	scan_arr := events[start_idx:end_idx+1]
 
-	{
-		idx := name_color_idx(scan_arr[0].name)
-		color_weights[idx] += bound_duration(scan_arr[0], tm.max_time)
-	}
-
-	for ev in scan_arr {
-		idx := name_color_idx(ev.name)
-		color_weights[idx] += bound_duration(ev, tm.max_time)
-	}
-
 	color := Vec3{}
-	weights_sum := 0.0
-	for weight, idx in color_weights {
-		color += color_choices[idx] * weight
-		weights_sum += weight
+	if len(scan_arr) > 0 {
+		color_weights := [choice_count]f64{}
+		{
+			idx := name_color_idx(scan_arr[0].name)
+			color_weights[idx] += bound_duration(scan_arr[0], tm.max_time)
+		}
+
+		for ev in scan_arr {
+			idx := name_color_idx(ev.name)
+			color_weights[idx] += bound_duration(ev, tm.max_time)
+		}
+
+		weights_sum := 0.0
+		for weight, idx in color_weights {
+			color += color_choices[idx] * weight
+			weights_sum += weight
+		}
+		if weights_sum <= 0 {
+			fmt.printf("Invalid weights sum!\n")
+			trap()
+		}
+		color /= weights_sum
 	}
-	if weights_sum <= 0 {
-		fmt.printf("Invalid weights sum!\n")
-		trap()
-	}
-	mem.zero_slice(color_weights)
 
 	node := ChunkNode{}
 	node.start_time = start_time
 	node.end_time   = end_time
 	node.events = scan_arr
-	node.avg_color = color / weights_sum
+	node.avg_color = color
 
 	range := end_time - start_time
 	mid_time := start_time + (range / 2)
 
 	if len(scan_arr) > 32 {
-		node.left = build_tree(tm, depth_idx, color_weights, scan_arr, node.start_time, mid_time, depth+1)
-		node.right = build_tree(tm, depth_idx, color_weights, scan_arr, mid_time, node.end_time, depth+1)
+		node.left = build_tree(tm, depth_idx, scan_arr, node.start_time, mid_time, depth+1)
+		node.right = build_tree(tm, depth_idx, scan_arr, mid_time, node.end_time, depth+1)
 	} else {
 		node.left = -1
 		node.right = -1
@@ -134,8 +137,7 @@ chunk_events :: proc() {
 		for tm in &proc_v.threads {
 			for depth, d_idx in &tm.depths {
 				depth.tree = make([dynamic]ChunkNode, 0, big_global_allocator)
-				color_weights := make([]f64, len(color_choices), temp_allocator)
-				depth.head = build_tree(&tm, d_idx, color_weights, depth.events, tm.min_time - total_min_time, tm.max_time - total_min_time)
+				depth.head = build_tree(&tm, d_idx, depth.events, tm.min_time - total_min_time, tm.max_time - total_min_time)
 			}
 		}
 	}
@@ -189,8 +191,7 @@ finish_loading :: proc (p: ^Parser) {
 	free_all(scratch_allocator)
 
 	// reset render state
-	choice_count := int(_pow(2, 6))
-	color_choices = make([dynamic]Vec3, 0, choice_count, small_global_allocator)
+	mem.zero_slice(color_choices[:])
 	for i := 0; i < choice_count; i += 1 {
 
 		h := rand.float64() * 0.5 + 0.5
@@ -200,7 +201,7 @@ finish_loading :: proc (p: ^Parser) {
 		s := 0.5 + rand.float64() * 0.1
 		v := 0.85
 
-		append(&color_choices, hsv2rgb(Vec3{h, s, v}) * 255)
+		color_choices[i] = hsv2rgb(Vec3{h, s, v}) * 255
 	}
 
 	start_bench("chunk events")
