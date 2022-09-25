@@ -85,17 +85,6 @@ BinHeader :: struct #packed {
 	must_be_0:      u64,
 }
 
-Complete_Event :: struct #packed {
-	type: Event_Type,
-	pid:      u32,
-	tid:      u32,
-	time:     f64,
-	duration: f64,
-	name_len: u8,       // if the name is a 0-terminated string, the len must include the 0
-
-	// The name of the event must follow immediately after the begin event struct
-}
-
 BeginEvent :: struct #packed {
 	type: BinEventType,
 	pid: u32,
