@@ -40,6 +40,7 @@ button_color2 := Vec3{}
 line_color    := Vec3{}
 outline_color := Vec3{}
 toolbar_color := Vec3{}
+graph_color   := Vec3{}
 
 default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
 monospace_font := `monospace`
@@ -84,6 +85,8 @@ selected_rect := Rect{}
 did_multiselect := false
 
 build_hash := 0
+enable_debug := false
+fps_history: queue.Queue(u32)
 
 loading_config := true
 post_loading := false
@@ -102,6 +105,7 @@ h1_height      : f64 = 0
 h2_height      : f64 = 0
 ch_width       : f64 = 0
 thread_gap     : f64 = 8
+graph_size: f64 = 150
 
 processes: [dynamic]Process
 process_map: ValHash
@@ -125,6 +129,7 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 		line_color    = Vec3{100, 100, 100}
 		outline_color = Vec3{80,   80,  80}
 		toolbar_color = Vec3{120, 120, 120}
+		graph_color   = Vec3{180, 180, 180}
 	} else {
 		bg_color      = Vec3{254, 252, 248}
 		bg_color2     = Vec3{255, 255, 255}
@@ -136,6 +141,7 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 		line_color    = Vec3{150, 150, 150}
 		outline_color = Vec3{219, 211, 205}
 		toolbar_color = Vec3{219, 211, 205}
+		graph_color   = Vec3{69,   49,  34}
 	}
 
 	if auto {
@@ -210,6 +216,7 @@ main :: proc() {
 	fmt.printf("Seed is 0x%X\n", random_seed)
 
 	manual_load(default_config)
+	queue.init(&fps_history, 0, small_global_allocator)
 }
 
 random_seed: u64
@@ -983,6 +990,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	if button(rect(edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 		open_file_dialog()
 	}
+	if button(rect(edge_pad + (button_width * 2) + (button_pad * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", icon_font) {
+		enable_debug = !enable_debug
+	}
 
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
 		new_colormode: ColorMode
@@ -1022,31 +1032,36 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		return res
 	}
 
-	// Render debug info
-	y := height - em - top_line_gap
 
-	fps_str := fmt.tprintf("FPS: %.0f", 1/dt)
-	fps_width := measure_text(fps_str, p_font_size, monospace_font)
-	draw_text(fps_str, Vec2{width - fps_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+	if enable_debug {
+		// Render debug info
+		y := height - em - top_line_gap
 
-	hash_str := fmt.tprintf("Build: 0x%X", abs(build_hash))
-	hash_width := measure_text(hash_str, p_font_size, monospace_font)
-	draw_text(hash_str, Vec2{width - hash_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+		if queue.len(fps_history) > 100 { queue.pop_front(&fps_history) }
+		queue.push_back(&fps_history, u32(1 / dt))
+		draw_graph("FPS", &fps_history, Vec2{width - 160, disp_rect.pos.y + graph_header_height})
 
-	seed_str := fmt.tprintf("Seed: 0x%X", random_seed)
-	seed_width := measure_text(seed_str, p_font_size, monospace_font)
-	draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+		hash_str := fmt.tprintf("Build: 0x%X", abs(build_hash))
+		hash_width := measure_text(hash_str, p_font_size, monospace_font)
+		draw_text(hash_str, Vec2{width - hash_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
-	rects_str := fmt.tprintf("Rect Count: %d", rect_count)
-	rects_txt_width := measure_text(rects_str, p_font_size, monospace_font)
-	draw_text(rects_str, Vec2{width - rects_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+		seed_str := fmt.tprintf("Seed: 0x%X", random_seed)
+		seed_width := measure_text(seed_str, p_font_size, monospace_font)
+		draw_text(seed_str, Vec2{width - seed_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
+		rects_str := fmt.tprintf("Rect Count: %d", rect_count)
+		rects_txt_width := measure_text(rects_str, p_font_size, monospace_font)
+		draw_text(rects_str, Vec2{width - rects_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+	}
+
+/*
 	// save me my battery, plz
 	if cam.pan.x == cam.target_pan_x && 
 	   cam.vel.y == 0 && 
 	   cam.current_scale == cam.target_scale {
 		return false
 	}
+*/
 
 	return true
 }
@@ -1066,58 +1081,71 @@ button :: proc(in_rect: Rect, text: string, font: string) -> bool {
 	return false
 }
 
-/* make this use ems. Eww
 draw_graph :: proc(header: string, history: ^queue.Queue(u32), pos: Vec2) {
 	line_width : f64 = 1
-	graph_edge_pad : f64 = 15
-	graph_size: f64 = 150
+	graph_edge_pad : f64 = 2 * em
+	line_gap := (em / 1.5)
 
 	max_val : u32 = 0
 	min_val : u32 = 100
+	sum_val : u32 = 0
 	for i := 0; i < queue.len(history^); i += 1 {
 		entry := queue.get(history, i)
 		max_val = max(max_val, entry)
 		min_val = min(min_val, entry)
+		sum_val += entry
 	}
 	max_range := max_val - min_val
+	avg_val := sum_val / 100
 
 	text_width := measure_text(header, 1, default_font)
 	center_offset := (graph_size / 2) - (text_width / 2)
 	draw_text(header, Vec2{pos.x + center_offset, pos.y}, 1, default_font, text_color)
 
 	graph_top := pos.y + em + line_gap
-	draw_rect(rect(pos.x, graph_top, graph_size, graph_size), 0, bg_color2)
+	draw_rect(rect(pos.x, graph_top, graph_size, graph_size), bg_color2)
 	draw_rect_outline(rect(pos.x, graph_top, graph_size, graph_size), 2, outline_color)
 
 	draw_line(Vec2{pos.x - 5, graph_top + graph_size - graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_size - graph_edge_pad}, 1, graph_color)
 	draw_line(Vec2{pos.x - 5, graph_top + graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_edge_pad}, 1, graph_color)
 
 	if queue.len(history^) > 1 {
+		high_height := graph_top + graph_edge_pad - (em / 2)
+		low_height := graph_top + graph_size - graph_edge_pad - (em / 2)
+		avg_height := rescale(f64(avg_val), f64(min_val), f64(max_val), low_height, high_height)
+
 		high_str := fmt.tprintf("%d", max_val)
 		high_width := measure_text(high_str, 1, default_font) + line_gap
-		draw_text(high_str, Vec2{(pos.x - 5) - high_width, graph_top + graph_edge_pad - (text_height / 2) + 1}, 1, default_font, text_color)
+		draw_text(high_str, Vec2{(pos.x - 5) - high_width, high_height}, 1, default_font, text_color)
+
+		if queue.len(history^) > 90 {
+			draw_line(Vec2{pos.x - 5, avg_height + (em / 2)}, Vec2{pos.x + 5, avg_height + (em / 2)}, 1, graph_color)
+			avg_str := fmt.tprintf("%d", avg_val)
+			avg_width := measure_text(avg_str, 1, default_font) + line_gap
+			draw_text(avg_str, Vec2{(pos.x - 5) - avg_width, avg_height}, 1, default_font, text_color)
+		}
 
 		low_str := fmt.tprintf("%d", min_val)
 		low_width := measure_text(low_str, 1, default_font) + line_gap
-		draw_text(low_str, Vec2{(pos.x - 5) - low_width, graph_top + graph_size - graph_edge_pad - (text_height / 2) + 2}, 1, default_font, text_color)
+		draw_text(low_str, Vec2{(pos.x - 5) - low_width, low_height}, 1, default_font, text_color)
 	}
 
 	graph_y_bounds := graph_size - (graph_edge_pad * 2)
 	graph_x_bounds := graph_size - graph_edge_pad
 
-	last_x : f32 = 0
-	last_y : f32 = 0
+	last_x : f64 = 0
+	last_y : f64 = 0
 	for i := 0; i < queue.len(history^); i += 1 {
 		entry := queue.get(history, i)
 
-		point_x_offset : f32 = 0
+		point_x_offset : f64 = 0
 		if queue.len(history^) != 0 {
-			point_x_offset = f32(i) * (graph_x_bounds / f32(queue.len(history^)))
+			point_x_offset = f64(i) * (graph_x_bounds / f64(queue.len(history^)))
 		}
 
-		point_y_offset : f32 = 0
+		point_y_offset : f64 = 0
 		if max_range != 0 {
-			point_y_offset = f32(entry - min_val) * (graph_y_bounds / f32(max_range))
+			point_y_offset = f64(entry - min_val) * (graph_y_bounds / f64(max_range))
 		}
 
 		point_x := pos.x + point_x_offset + (graph_edge_pad / 2)
@@ -1131,4 +1159,3 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), pos: Vec2) {
 		last_y = point_y
 	}
 }
-*/
