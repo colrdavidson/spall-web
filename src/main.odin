@@ -609,15 +609,21 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 	line_x_start := -4
 	line_x_end   := ticks * 2
+
+	line_start := disp_rect.pos.y + graph_header_height - top_line_gap
+	line_height := graph_rect.size.y
 	for i := line_x_start; i < line_x_end; i += 1 {
 		tick_time := draw_tick_start + (f64(i) * (division / 2))
 		x_off := (tick_time * cam.current_scale) + cam.pan.x
 
 		color := (i % 2) == 1 ? line_color : text_color
 
-		line_start := disp_rect.pos.y + graph_header_height - top_line_gap
-		draw_line(Vec2{start_x + x_off, line_start}, Vec2{start_x + x_off, graph_rect.pos.y + graph_rect.size.y}, 0.5, color)
+		draw_rect := DrawRect{f32(start_x + x_off), f32(0.5), {u8(color.x), u8(color.y), u8(color.z), 255}}
+		append(&gl_rects, draw_rect)
 	}
+
+	gl_push_rects(gl_rects[:], line_start, line_height)
+	resize(&gl_rects, 0)
 
 	// Render flamegraphs
 	rect_count = 0
