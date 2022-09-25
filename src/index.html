@@ -216,6 +216,10 @@
 			const height_uni = gl_ctx.getUniformLocation(shader, "u_height");
 			const resolution_uni = gl_ctx.getUniformLocation(shader, "u_resolution");
 
+			gl_ctx.enable(gl_ctx.FRAMEBUFFER_SRGB);
+			gl_ctx.enable(gl_ctx.BLEND);
+			gl_ctx.blendFunc(gl_ctx.SRC_ALPHA, gl_ctx.ONE_MINUS_SRC_ALPHA);
+
 			gl_ctx.useProgram(shader);
 
 			let vao = gl_ctx.createVertexArray();
