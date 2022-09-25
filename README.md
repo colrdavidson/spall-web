@@ -79,7 +79,7 @@ BinEventType :: enum u8 {
 }
 
 BinHeader :: struct #packed {
-	magic:          u64, // Expected to be 0x0BADFOOD
+	magic:          u64, // Expected to be 0x0BADF00D
 	version:        u64, // Currently version 0
 	timestamp_unit: f64, // 1 is 1 microsecond
 	must_be_0:      u64,
