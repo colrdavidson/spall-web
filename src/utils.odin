@@ -40,11 +40,11 @@ i_round_up :: proc(x, align: $T) -> T {
 }
 
 f_round_down :: proc(x, align: $T) -> T {
-	return x - math.mod(x, align)
+	return x - math.remainder(x, align)
 }
 
 f_round_up :: proc(x, align: $T) -> T {
-	return x - math.mod(x, align)
+	return x - math.remainder(x, align)
 }
 
 pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
