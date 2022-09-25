@@ -216,7 +216,6 @@
 			const height_uni = gl_ctx.getUniformLocation(shader, "u_height");
 			const resolution_uni = gl_ctx.getUniformLocation(shader, "u_resolution");
 
-
 			gl_ctx.useProgram(shader);
 
 			let vao = gl_ctx.createVertexArray();
@@ -260,8 +259,6 @@
 			const rect_idx_buffer = gl_ctx.createBuffer();
 			gl_ctx.bindBuffer(gl_ctx.ELEMENT_ARRAY_BUFFER, rect_idx_buffer);
 			gl_ctx.bufferData(gl_ctx.ELEMENT_ARRAY_BUFFER, idx_arr, gl_ctx.STATIC_DRAW);
-			gl_ctx.bindVertexArray(null);
-
 			//
 
 			let dpr;
@@ -392,22 +389,22 @@
 							gl_ctx.viewport(0, 0, gl_ctx.canvas.width, gl_ctx.canvas.height);
 							gl_ctx.clearColor(r, g, b, a);
 							gl_ctx.clear(gl_ctx.COLOR_BUFFER_BIT);
+
+							gl_ctx.uniform1f(dpr_uni, dpr);
+							gl_ctx.uniform2f(resolution_uni, gl_ctx.canvas.width, gl_ctx.canvas.height);
+
+							gl_ctx.bindBuffer(gl_ctx.ARRAY_BUFFER, rect_deets_buffer);
 						},
 						_gl_push_rects: (ptr, len, size, y, height) => {
 							let _b = window.wasm.odinMem.loadBytes(ptr, len)
 
-							gl_ctx.bindBuffer(gl_ctx.ARRAY_BUFFER, rect_deets_buffer);
 							gl_ctx.bufferData(gl_ctx.ARRAY_BUFFER, _b, gl_ctx.DYNAMIC_DRAW);
 
-							gl_ctx.uniform1f(y_uni, y);
-							gl_ctx.uniform1f(dpr_uni, dpr);
 							gl_ctx.uniform1f(height_uni, height);
-							gl_ctx.uniform2f(resolution_uni, gl_ctx.canvas.width, gl_ctx.canvas.height);
+							gl_ctx.uniform1f(y_uni, y);
 
 							gl_ctx.bindVertexArray(vao);
 							gl_ctx.drawElementsInstanced(gl_ctx.TRIANGLES, idx_arr.length, gl_ctx.UNSIGNED_SHORT, 0, size);
-							gl_ctx.bindVertexArray(null);
-
 						},
 
 						// Debugging
