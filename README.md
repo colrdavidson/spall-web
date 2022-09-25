@@ -109,15 +109,17 @@ All values should be in little endian.
 A valid file is structured roughly like this:
 ```
 BinHeader
-
-BeginEvent
-event_name
-EndEvent
-
-BeginEvent
-event_name
-EndEvent
-...
+[
+    BeginEvent
+    event_name
+    EndEvent
+,
+    BeginEvent
+    event_name
+    EndEvent
+,
+    ...
+]
 ```
 
 ## Important Notes
