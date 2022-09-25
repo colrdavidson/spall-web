@@ -1041,14 +1041,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	rects_txt_width := measure_text(rects_str, p_font_size, monospace_font)
 	draw_text(rects_str, Vec2{width - rects_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 
-/*
 	// save me my battery, plz
 	if cam.pan.x == cam.target_pan_x && 
 	   cam.vel.y == 0 && 
 	   cam.current_scale == cam.target_scale {
 		return false
 	}
-*/
 
 	return true
 }
