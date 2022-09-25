@@ -70,7 +70,7 @@ End events automatically close the most recent begin event with the same pid and
 BinEventType :: enum u8 {
 	Invalid     = 0,
 	Custom_Data = 1,
-	Complete    = 2,
+	StreamOver  = 2,
 	Begin       = 3,
 	End         = 4,
 	Instant     = 5,
