@@ -50,8 +50,8 @@ ChunkNode :: struct #packed {
 	avg_color: Vec3,
 	weight: f64,
 
-	left: int,
-	right: int,
+	children: [CHUNK_NARY_WIDTH]int,
+	child_count: int,
 
 	start_idx: int,
 	end_idx: int,

@@ -251,7 +251,7 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 	tree := depth.tree
 
 	// If we blow this, we're in space
-	tree_stack := [64]int{}
+	tree_stack := [128]int{}
 	stack_len := 0
 
 	tree_stack[0] = depth.head; stack_len += 1
@@ -298,15 +298,14 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 		}
 
 		// we're at a bottom node, draw the whole thing
-		if cur_node.left == -1 && cur_node.right == -1 {
+		if cur_node.child_count == 0 {
 			render_events(pid, tid, depth_idx, depth.events, cur_node.start_idx, cur_node.end_idx, thread.max_time, depth_idx, y_start)
 			continue
 		}
 
-		if cur_node.right != -1 {
-			tree_stack[stack_len] = cur_node.right; stack_len += 1
+		for i := (cur_node.child_count - 1); i >= 0; i -= 1 {
+			tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
 		}
-		tree_stack[stack_len] = cur_node.left; stack_len += 1
 	}
 }
 
@@ -346,15 +345,12 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 		rect_color := color_choices[idx]
 
 		e_idx := start_idx + de_id
-		if int(selected_event.pid) == p_idx &&
-		   int(selected_event.tid) == t_idx &&
-		   int(selected_event.did) == d_idx &&
-		   int(selected_event.eid) == e_idx {
+		if int(selected_event.pid) == p_idx && int(selected_event.tid) == t_idx &&
+		   int(selected_event.did) == d_idx && int(selected_event.eid) == e_idx {
 			rect_color.x += 30
 			rect_color.y += 30
 			rect_color.z += 30
 		}
-
 
 		draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 		append(&gl_rects, draw_rect)
