@@ -377,7 +377,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 		max_chars := max(0, min(len(display_name), text_width))
 		name_str := display_name[:max_chars]
 
-		if len(name_str) > 6 || max_chars == len(display_name) {
+		if len(name_str) > 4 || max_chars == len(display_name) {
 			if max_chars != len(display_name) {
 				name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
 			}
