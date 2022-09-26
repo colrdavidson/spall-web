@@ -77,11 +77,6 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f32) {
 
 	color := FVec3{}
 	color_weights := [choice_count]f32{}
-	{
-		idx := name_color_idx(events[0].name)
-		color_weights[idx] += f32(bound_duration(events[0], thread_max))
-	}
-
 	for ev in events {
 		idx := name_color_idx(ev.name)
 
