@@ -46,12 +46,15 @@ EventScope :: enum u8 {
 ChunkNode :: struct #packed {
 	start_time: f64,
 	end_time: f64,
+
 	avg_color: Vec3,
+	weight: f64,
 
 	left: int,
 	right: int,
 
-	events: []Event,
+	start_idx: int,
+	end_idx: int,
 }
 
 TempEvent :: struct {

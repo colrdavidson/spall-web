@@ -72,64 +72,140 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 	p.full_chunk = chunk
 }
 
-build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event, start_time, end_time: f64, depth : int = 0) -> int {
-
-	tree := &tm.depths[depth_idx].tree
-
-	start_idx := find_idx(events, start_time)
-	end_idx := find_idx(events, end_time)
-
-	if start_idx == -1 { start_idx = 0 }
-	if end_idx   == -1 { end_idx = len(events) - 1 }
-
-	scan_arr := events[start_idx:end_idx+1]
+gen_event_color :: proc(events: []Event, thread_max: f64) -> (Vec3, f64) {
+	total_weight := 0.0
 
 	color := Vec3{}
-	if len(scan_arr) > 0 {
-		color_weights := [choice_count]f64{}
-		{
-			idx := name_color_idx(scan_arr[0].name)
-			color_weights[idx] += bound_duration(scan_arr[0], tm.max_time)
-		}
-
-		for ev in scan_arr {
-			idx := name_color_idx(ev.name)
-			color_weights[idx] += bound_duration(ev, tm.max_time)
-		}
-
-		weights_sum := 0.0
-		for weight, idx in color_weights {
-			color += color_choices[idx] * weight
-			weights_sum += weight
-		}
-		if weights_sum <= 0 {
-			fmt.printf("Invalid weights sum!\n")
-			trap()
-		}
-		color /= weights_sum
+	color_weights := [choice_count]f64{}
+	{
+		idx := name_color_idx(events[0].name)
+		color_weights[idx] += bound_duration(events[0], thread_max)
 	}
 
-	node := ChunkNode{}
-	node.start_time = start_time
-	node.end_time   = end_time
-	node.events = scan_arr
-	node.avg_color = color
+	for ev in events {
+		idx := name_color_idx(ev.name)
+		color_weights[idx] += bound_duration(ev, thread_max)
+		total_weight += bound_duration(ev, thread_max)
+	}
 
-	range := end_time - start_time
-	mid_time := start_time + (range / 2)
+	weights_sum := 0.0
+	for weight, idx in color_weights {
+		color += color_choices[idx] * weight
+		weights_sum += weight
+	}
+	if weights_sum <= 0 {
+		fmt.printf("Invalid weights sum!\n")
+		trap()
+	}
+	color /= weights_sum
 
-	if len(scan_arr) > 32 {
-		node.left = build_tree(tm, depth_idx, scan_arr, node.start_time, mid_time, depth+1)
-		node.right = build_tree(tm, depth_idx, scan_arr, mid_time, node.end_time, depth+1)
-	} else {
+	return color, total_weight
+}
+
+build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
+	tree := &tm.depths[depth_idx].tree
+
+	bucket_size :: 32
+	bucket_count := i_round_up(len(events), bucket_size) / bucket_size
+	for i := 0; i < bucket_count; i += 1 {
+		start_idx := i * bucket_size
+		end_idx := start_idx + min(len(events) - start_idx, bucket_size)
+		scan_arr := events[start_idx:end_idx]
+
+		start_ev := scan_arr[0]
+		end_ev := scan_arr[len(scan_arr)-1]
+
+		node := ChunkNode{}
+		node.start_time = start_ev.timestamp - total_min_time
+		node.end_time   = end_ev.timestamp + bound_duration(end_ev, tm.max_time) - total_min_time
+		node.start_idx = start_idx
+		node.end_idx   = end_idx
+
+		avg_color, weight := gen_event_color(scan_arr, tm.max_time)
+		node.avg_color = avg_color
+		node.weight = weight
+
 		node.left = -1
 		node.right = -1
+
+		append(tree, node)
 	}
 
-	append(tree, node)
-	node_idx := len(tree) - 1
+	tree_start_idx := 0
+	tree_end_idx := len(tree)
 
-	return node_idx
+	// this creates extra right children if the bottom buckets are odd. oh well
+	row_count := len(tree)
+	parent_row_count := (row_count + 1) / 2
+	for row_count > 1 {
+
+		for i := 0; i < parent_row_count; i += 1 {
+			start_idx := tree_start_idx + (i * 2)
+			end_idx := start_idx + min(tree_end_idx - start_idx, 2)
+
+			children := tree[start_idx:end_idx]
+
+			start_node := children[0]
+			end_node := children[len(children)-1]
+
+			node := ChunkNode{}
+			node.start_time = start_node.start_time
+			node.end_time   = end_node.end_time
+			node.start_idx  = start_node.start_idx
+			node.end_idx    = end_node.end_idx
+
+			if len(children) > 1 {
+				node.left = start_idx
+				node.right = start_idx + 1
+			} else {
+				node.left = start_idx
+				node.right = -1
+			}
+
+			node.weight = start_node.weight + end_node.weight
+			node.avg_color = ((start_node.avg_color * start_node.weight) + (end_node.avg_color * end_node.weight)) / node.weight
+
+			append(tree, node)
+		}
+
+		tree_start_idx = tree_end_idx
+		tree_end_idx = len(tree)
+		row_count = tree_end_idx - tree_start_idx
+		parent_row_count = (row_count + 1) / 2
+	}
+
+	return len(tree) - 1
+}
+
+print_tree :: proc(tree: []ChunkNode, head: int) {
+	fmt.printf("mah tree!\n")
+	// If we blow this, we're in space
+	tree_stack := [64]int{}
+	stack_len := 0
+	pad_buf := [?]u8{0..<64 = '\t',}
+
+	tree_stack[0] = head; stack_len += 1
+	for stack_len > 0 {
+		stack_len -= 1
+
+		tree_idx := tree_stack[stack_len]
+		if tree_idx == -1 {
+			continue
+		}
+
+		cur_node := tree[tree_idx]
+
+		padding := pad_buf[len(pad_buf) - stack_len:]
+		fmt.printf("%s%d | %v\n", padding, tree_idx, cur_node)
+
+		if cur_node.left == -1 && cur_node.right == -1 {
+			continue
+		}
+
+		tree_stack[stack_len] = cur_node.right; stack_len += 1
+		tree_stack[stack_len] = cur_node.left; stack_len += 1
+	}
+	fmt.printf("ded!\n")
 }
 
 chunk_events :: proc() {
@@ -137,7 +213,9 @@ chunk_events :: proc() {
 		for tm in &proc_v.threads {
 			for depth, d_idx in &tm.depths {
 				depth.tree = make([dynamic]ChunkNode, 0, big_global_allocator)
-				depth.head = build_tree(&tm, d_idx, depth.events, tm.min_time - total_min_time, tm.max_time - total_min_time)
+				depth.head = build_tree(&tm, d_idx, depth.events)
+
+				//print_tree(depth.tree[:], depth.head)
 			}
 		}
 	}
@@ -269,7 +347,8 @@ default_config := `[
 	{"cat":"function", "name":"1", "ph":"X", "pid":0, "tid": 0, "ts": 1, "dur": 1},
 	{"cat":"function", "name":"2", "ph":"X", "pid":0, "tid": 0, "ts": 3, "dur": 1},
 	{"cat":"function", "name":"3", "ph":"X", "pid":0, "tid": 0, "ts": 4, "dur": 1},
-	{"cat":"function", "name":"4", "ph":"X", "pid":0, "tid": 1, "ts": 1, "dur": 1},
+	{"cat":"function", "name":"4", "ph":"X", "pid":0, "tid": 0, "ts": 6, "dur": 1},
+	{"cat":"function", "name":"5", "ph":"X", "pid":0, "tid": 1, "ts": 1, "dur": 1},
 ]`
 */
 

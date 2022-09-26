@@ -36,14 +36,10 @@ i_round_down :: proc(x, align: $T) -> T {
 }
 
 i_round_up :: proc(x, align: $T) -> T {
-	return x - (x %% align)
+	return ((x + align - 1) / align) * align
 }
 
 f_round_down :: proc(x, align: $T) -> T {
-	return x - math.remainder(x, align)
-}
-
-f_round_up :: proc(x, align: $T) -> T {
 	return x - math.remainder(x, align)
 }
 

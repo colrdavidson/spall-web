@@ -84,6 +84,7 @@ is_hovering   := false
 
 selected_rect := Rect{}
 did_multiselect := false
+clicked_on_rect := false
 
 build_hash := 0
 enable_debug := false
@@ -245,7 +246,7 @@ name_color_idx :: proc(name: string) -> u32 {
 	return u32(uintptr(raw_data(name))) & u32(len(color_choices) - 1)
 }
 
-render_tree :: proc(thread: ^Thread, depth_idx: int, y_start: f64, start_time, end_time: f64) {
+render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64, start_time, end_time: f64) {
 	depth := thread.depths[depth_idx]
 	tree := depth.tree
 
@@ -298,20 +299,24 @@ render_tree :: proc(thread: ^Thread, depth_idx: int, y_start: f64, start_time, e
 
 		// we're at a bottom node, draw the whole thing
 		if cur_node.left == -1 && cur_node.right == -1 {
-			render_events(cur_node.events, thread.max_time, depth_idx, y_start)
+			render_events(pid, tid, depth_idx, depth.events, cur_node.start_idx, cur_node.end_idx, thread.max_time, depth_idx, y_start)
 			continue
 		}
 
-		tree_stack[stack_len] = cur_node.right; stack_len += 1
+		if cur_node.right != -1 {
+			tree_stack[stack_len] = cur_node.right; stack_len += 1
+		}
 		tree_stack[stack_len] = cur_node.left; stack_len += 1
 	}
 }
 
-render_events :: proc(events: []Event, thread_max_time: f64, y_depth: int, y_start: f64) {
+render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_idx: int, thread_max_time: f64, y_depth: int, y_start: f64) {
+
+	scan_arr := events[start_idx:end_idx]
 	y := rect_height * f64(y_depth)
 	h := rect_height
 
-	for ev, de_id in events {
+	for ev, de_id in scan_arr {
 		x := ev.timestamp - total_min_time
 		duration := bound_duration(ev, thread_max_time)
 		w := max(duration * cam.current_scale, 2.0)
@@ -339,20 +344,30 @@ render_events :: proc(events: []Event, thread_max_time: f64, y_depth: int, y_sta
 
 		idx := name_color_idx(ev.name)
 		rect_color := color_choices[idx]
+
+		e_idx := start_idx + de_id
+		if int(selected_event.pid) == p_idx &&
+		   int(selected_event.tid) == t_idx &&
+		   int(selected_event.did) == d_idx &&
+		   int(selected_event.eid) == e_idx {
+			rect_color.x += 30
+			rect_color.y += 30
+			rect_color.z += 30
+		}
+
+
 		draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 		append(&gl_rects, draw_rect)
 		rect_count += 1
 
-/*
-		e_idx := start_idx + de_id
 		if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
 			set_cursor("pointer")
 			if clicked {
-				//selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
+				selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
+				clicked_on_rect = true
 				did_multiselect = false
 			}
 		}
-*/
 
 		underhang := disp_rect.pos.x - dr.pos.x
 		disp_w := min(dr.size.x - underhang, dr.size.x)
@@ -636,6 +651,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	resize(&gl_rects, 0)
 
 	// Render flamegraphs
+	clicked_on_rect = false
 	rect_count = 0
 	bucket_count = 0
 	cur_y := graph_rect.pos.y - cam.pan.y
@@ -669,7 +685,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 			cur_depth_off := 0
 			for depth, d_idx in &tm.depths {
-				render_tree(&tm, d_idx, cur_y, start_time, end_time)
+				render_tree(p_idx, t_idx, &tm, d_idx, cur_y, start_time, end_time)
 				gl_push_rects(gl_rects[:], (cur_y + (rect_height * f64(d_idx))), rect_height)
 
 				resize(&gl_rects, 0)
@@ -678,7 +694,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		}
 	}
 
-	if clicked && !shift_down {
+	if clicked && !clicked_on_rect && !shift_down {
 		selected_event = {-1, -1, -1, -1}
 		selected_rect = Rect{}
 		did_multiselect = false
