@@ -630,7 +630,6 @@ json_process_events :: proc() {
 				}
 
 				event.depth = u16(queue.len(ev_stack))
-				tm.max_depth = max(tm.max_depth, event.depth)
 			}
 			slice.sort_by(tm.events[:], event_rendersort_step1_proc)
 

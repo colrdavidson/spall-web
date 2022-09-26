@@ -206,8 +206,7 @@ bin_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, i
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
-	t.max_depth = max(t.max_depth, t.current_depth)
-	if int(t.max_depth) >= len(t.depths) {
+	if int(t.current_depth) >= len(t.depths) {
 		depth := Depth{
 			bs_events = make([dynamic]Event, big_global_allocator)
 		}

@@ -165,7 +165,7 @@ get_max_y_pan :: proc(processes: []Process) -> f64 {
 
 		for tm, _ in proc_v.threads {
 			h2_size := h2_height + (h2_height / 2)
-			cur_y += h2_size + ((f64(tm.max_depth) * rect_height) + thread_gap)
+			cur_y += h2_size + ((f64(len(tm.depths)) * rect_height) + thread_gap)
 		}
 	}
 

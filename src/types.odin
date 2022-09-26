@@ -91,7 +91,6 @@ EventQueue :: distinct queue.Queue(int)
 Thread :: struct {
 	min_time: f64,
 	max_time: f64,
-	max_depth: u16,
 	current_depth: u16,
 
 	thread_id: u32,
