@@ -823,7 +823,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 						w := duration * cam.current_scale
 
 						r := Rect{Vec2{x, y}, Vec2{w, h}}
-						r_x := (r.pos.x * cam.current_scale) + cam.pan.x + disp_rect.pos.x
+						r_x := (r.pos.x * cam.current_scale) + cam.pan.x
 						r_y := cur_y + r.pos.y
 						dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
 
