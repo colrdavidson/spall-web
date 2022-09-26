@@ -162,7 +162,7 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 				avg_color += children[j].avg_color * children[j].weight
 				node.weight += children[j].weight
 			}
-			node.child_count = len(children)
+			node.child_count = i8(len(children))
 			node.avg_color = avg_color / node.weight
 
 			append(tree, node)
