@@ -806,6 +806,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 					y := rect_height * f64(d_idx)
 					h := rect_height
 
+					dy := cur_y + y
+					dy2 := cur_y + y + h
+					if dy > (flopped_rect.pos.y + flopped_rect.size.y) || dy2 < flopped_rect.pos.y {
+						continue
+					}
+
 					start_idx := find_idx(depth.events, selected_start_time)
 					end_idx := find_idx(depth.events, selected_end_time)
 					if start_idx == -1 {
