@@ -110,12 +110,12 @@ foreign import "js"
 foreign js {
     _canvas_clear :: proc() ---
     _canvas_clip :: proc(x, y, w, h: f64) ---
-    _canvas_rect :: proc(x, y, w, h: f64, r, g, b, a: f64) ---
-    _canvas_rectc :: proc(x, y, w, h, radius: f64, r, g, b, a: f64) ---
-    _canvas_circle :: proc(x, y, radius: f64, r, g, b, a: f64) ---
-    _canvas_text :: proc(str: string, x, y: f64, r, g, b, a: f64, scale: f64, font: string) ---
-    _canvas_line :: proc(x1, y1, x2, y2: f64, r, g, b, a: f64, strokeWidth: f64) ---
-    _canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f64, r, g, b, a: f64, strokeWidth: f64) ---
+    _canvas_rect :: proc(x, y, w, h: f64, r, g, b, a: f32) ---
+    _canvas_rectc :: proc(x, y, w, h, radius: f64, r, g, b, a: f32) ---
+    _canvas_circle :: proc(x, y, radius: f64, r, g, b, a: f32) ---
+    _canvas_text :: proc(str: string, x, y: f64, r, g, b, a: f32, scale: f64, font: string) ---
+    _canvas_line :: proc(x1, y1, x2, y2: f64, r, g, b, a: f32, strokeWidth: f64) ---
+    _canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f64, r, g, b, a: f32, strokeWidth: f64) ---
     _measure_text :: proc(str: string, scale: f64, font: string) -> f64 ---
     _get_text_height :: proc(scale: f64, font: string) -> f64 ---
 	_pow :: proc(x, power: f64) -> f64 ---
@@ -124,7 +124,7 @@ foreign js {
     log_string :: proc(str: string) ---
     log_error :: proc(str: string) ---
 
-	_gl_init_frame :: proc(r, g, b, a: f64) ---
+	_gl_init_frame :: proc(r, g, b, a: f32) ---
 	_gl_push_rects :: proc(ptr: rawptr, byte_size, real_size: int, y, height: f64) ---
 
 	get_session_storage :: proc(key: string) ---
@@ -145,7 +145,7 @@ measure_text :: #force_inline proc "contextless" (str: string, scale: f64, font:
 	return _measure_text(str, scale, font)
 }
 
-gl_init_frame :: #force_inline proc "contextless" (color: Vec3) {
+gl_init_frame :: #force_inline proc "contextless" (color: FVec3) {
 	_gl_init_frame(color.x, color.y, color.z, 255)
 }
 
@@ -159,26 +159,26 @@ canvas_clear :: #force_inline proc "contextless" () {
 draw_clip :: #force_inline proc "contextless" (x, y, w, h: f64) {
 	_canvas_clip(x * dpr, y * dpr, w * dpr, h * dpr)
 }
-draw_rect :: #force_inline proc "contextless" (rect: Rect, color: Vec3, a: f64 = 255) {
+draw_rect :: #force_inline proc "contextless" (rect: Rect, color: FVec3, a: f32 = 255) {
     _canvas_rect(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, color.x, color.y, color.z, a)
 }
-draw_rectc :: #force_inline proc "contextless" (rect: Rect, radius: f64, color: Vec3, a: f64 = 255) {
+draw_rectc :: #force_inline proc "contextless" (rect: Rect, radius: f64, color: FVec3, a: f32 = 255) {
     _canvas_rectc(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, radius * dpr, color.x, color.y, color.z, a)
 }
-draw_circle :: #force_inline proc "contextless" (center: Vec2, radius: f64, color: Vec3, a: f64 = 255) {
+draw_circle :: #force_inline proc "contextless" (center: Vec2, radius: f64, color: FVec3, a: f32 = 255) {
     _canvas_circle(center.x * dpr, center.y * dpr, radius * dpr, color.x, color.y, color.z, a)
 }
-draw_text :: #force_inline proc "contextless" (str: string, pos: Vec2, scale: f64, font: string, color: Vec3, a: f64 = 255) {
+draw_text :: #force_inline proc "contextless" (str: string, pos: Vec2, scale: f64, font: string, color: FVec3, a: f32 = 255) {
     _canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, a, scale, font)
 }
-draw_line :: #force_inline proc "contextless" (start, end: Vec2, strokeWidth: f64, color: Vec3, a: f64 = 255) {
+draw_line :: #force_inline proc "contextless" (start, end: Vec2, strokeWidth: f64, color: FVec3, a: f32 = 255) {
     _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, color.x, color.y, color.z, a, strokeWidth * dpr * dpr)
 }
-draw_arc :: #force_inline proc "contextless" (center: Vec2, radius, angleStart, angleEnd: f64, strokeWidth: f64, color: Vec3, a: f64) {
+draw_arc :: #force_inline proc "contextless" (center: Vec2, radius, angleStart, angleEnd: f64, strokeWidth: f64, color: FVec3, a: f32) {
     _canvas_arc(center.x * dpr, center.y * dpr, radius * dpr, angleStart, angleEnd, color.x, color.y, color.z, a, strokeWidth * dpr)
 }
 
-draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: Vec3, a: f64 = 255) {
+draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: FVec3, a: f32 = 255) {
 	x1 := rect.pos.x
 	y1 := rect.pos.y
 	x2 := rect.pos.x + rect.size.x

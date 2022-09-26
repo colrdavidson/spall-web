@@ -72,20 +72,20 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 	p.full_chunk = chunk
 }
 
-gen_event_color :: proc(events: []Event, thread_max: f64) -> (Vec3, f64) {
-	total_weight := 0.0
+gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f32) {
+	total_weight : f32 = 0
 
-	color := Vec3{}
-	color_weights := [choice_count]f64{}
+	color := FVec3{}
+	color_weights := [choice_count]f32{}
 	{
 		idx := name_color_idx(events[0].name)
-		color_weights[idx] += bound_duration(events[0], thread_max)
+		color_weights[idx] += f32(bound_duration(events[0], thread_max))
 	}
 
 	for ev in events {
 		idx := name_color_idx(ev.name)
 
-		duration := bound_duration(ev, thread_max)
+		duration := f32(bound_duration(ev, thread_max))
 		if duration <= 0 {
 			//fmt.printf("weird duration: %d, %#v\n", duration, ev)
 			duration = 0.1
@@ -94,7 +94,7 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (Vec3, f64) {
 		total_weight += duration
 	}
 
-	weights_sum := 0.0
+	weights_sum : f32 = 0
 	for weight, idx in color_weights {
 		color += color_choices[idx] * weight
 		weights_sum += weight
@@ -112,7 +112,7 @@ CHUNK_NARY_WIDTH :: 8
 build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 	tree := &tm.depths[depth_idx].tree
 
-	bucket_size :: 16
+	bucket_size :: 8 
 	bucket_count := i_round_up(len(events), bucket_size) / bucket_size
 	for i := 0; i < bucket_count; i += 1 {
 		start_idx := i * bucket_size
@@ -156,7 +156,7 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 			node.start_idx  = start_node.start_idx
 			node.end_idx    = end_node.end_idx
 
-			avg_color := Vec3{}
+			avg_color := FVec3{}
 			for j := 0; j < len(children); j += 1 {
 				node.children[j] = start_idx + j
 				avg_color += children[j].avg_color * children[j].weight
@@ -269,14 +269,14 @@ finish_loading :: proc (p: ^Parser) {
 	mem.zero_slice(color_choices[:])
 	for i := 0; i < choice_count; i += 1 {
 
-		h := rand.float64() * 0.5 + 0.5
+		h := rand.float32() * 0.5 + 0.5
 		h *= h
 		h *= h
 		h *= h
-		s := 0.5 + rand.float64() * 0.1
-		v := 0.85
+		s := 0.5 + rand.float32() * 0.1
+		v : f32 = 0.85
 
-		color_choices[i] = hsv2rgb(Vec3{h, s, v}) * 255
+		color_choices[i] = hsv2rgb(FVec3{h, s, v}) * 255
 	}
 
 	start_bench("chunk events")

@@ -31,17 +31,17 @@ frame_count : int
 rect_count : int
 bucket_count : int
 
-bg_color      := Vec3{}
-bg_color2     := Vec3{}
-text_color    := Vec3{}
-text_color2   := Vec3{}
-text_color3   := Vec3{}
-button_color  := Vec3{}
-button_color2 := Vec3{}
-line_color    := Vec3{}
-outline_color := Vec3{}
-toolbar_color := Vec3{}
-graph_color   := Vec3{}
+bg_color      := FVec3{}
+bg_color2     := FVec3{}
+text_color    := FVec3{}
+text_color2   := FVec3{}
+text_color3   := FVec3{}
+button_color  := FVec3{}
+button_color2 := FVec3{}
+line_color    := FVec3{}
+outline_color := FVec3{}
+toolbar_color := FVec3{}
+graph_color   := FVec3{}
 
 default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
 monospace_font := `monospace`
@@ -114,7 +114,7 @@ process_map: ValHash
 
 global_instants: [dynamic]Instant
 choice_count :: 64
-color_choices: [choice_count]Vec3
+color_choices: [choice_count]FVec3
 event_count: i64
 total_max_time: f64
 total_min_time: f64
@@ -122,29 +122,29 @@ total_min_time: f64
 @export
 set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 	if is_dark {
-		bg_color      = Vec3{15,   15,  15}
-		bg_color2     = Vec3{0,     0,   0}
-		text_color    = Vec3{255, 255, 255}
-		text_color2   = Vec3{180, 180, 180}
-		text_color3   = Vec3{0,     0,   0}
-		button_color  = Vec3{40,   40,  40}
-		button_color2 = Vec3{20,   20,  20}
-		line_color    = Vec3{100, 100, 100}
-		outline_color = Vec3{80,   80,  80}
-		toolbar_color = Vec3{120, 120, 120}
-		graph_color   = Vec3{180, 180, 180}
+		bg_color      = FVec3{15,   15,  15}
+		bg_color2     = FVec3{0,     0,   0}
+		text_color    = FVec3{255, 255, 255}
+		text_color2   = FVec3{180, 180, 180}
+		text_color3   = FVec3{0,     0,   0}
+		button_color  = FVec3{40,   40,  40}
+		button_color2 = FVec3{20,   20,  20}
+		line_color    = FVec3{100, 100, 100}
+		outline_color = FVec3{80,   80,  80}
+		toolbar_color = FVec3{120, 120, 120}
+		graph_color   = FVec3{180, 180, 180}
 	} else {
-		bg_color      = Vec3{254, 252, 248}
-		bg_color2     = Vec3{255, 255, 255}
-		text_color    = Vec3{0,     0,   0}
-		text_color2   = Vec3{80,   80,  80}
-		text_color3   = Vec3{0, 0, 0}
-		button_color  = Vec3{141, 119, 104}
-		button_color2 = Vec3{191, 169, 154}
-		line_color    = Vec3{150, 150, 150}
-		outline_color = Vec3{219, 211, 205}
-		toolbar_color = Vec3{219, 211, 205}
-		graph_color   = Vec3{69,   49,  34}
+		bg_color      = FVec3{254, 252, 248}
+		bg_color2     = FVec3{255, 255, 255}
+		text_color    = FVec3{0,     0,   0}
+		text_color2   = FVec3{80,   80,  80}
+		text_color3   = FVec3{0, 0, 0}
+		button_color  = FVec3{141, 119, 104}
+		button_color2 = FVec3{191, 169, 154}
+		line_color    = FVec3{150, 150, 150}
+		outline_color = FVec3{219, 211, 205}
+		toolbar_color = FVec3{219, 211, 205}
+		graph_color   = FVec3{69,   49,  34}
 	}
 
 	if auto {
@@ -377,7 +377,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 		max_chars := max(0, min(len(display_name), text_width))
 		name_str := display_name[:max_chars]
 
-		if len(name_str) > 4 || max_chars == len(display_name) {
+		if len(name_str) > 6 || max_chars == len(display_name) {
 			if max_chars != len(display_name) {
 				name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
 			}
@@ -408,7 +408,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			load_box.size.y + pad_size
 		)
 
-		draw_rectc(load_box, 3, Vec3{50, 50, 50})
+		draw_rectc(load_box, 3, FVec3{50, 50, 50})
 
 		p: Parser
 		if is_json {
@@ -430,7 +430,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				start_y + (cur_y * chunk_size), 
 				chunk_size - pad_size, 
 				chunk_size - pad_size
-			), Vec3{0, 255, 0})
+			), FVec3{0, 255, 0})
 		}
 
 		return true
@@ -733,8 +733,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
 		delta := mouse_pos_extrapolated - clicked_pos
 		selected_rect = rect(clicked_pos.x, clicked_pos.y, delta.x, delta.y)
-		draw_rect_outline(selected_rect, 1, Vec3{0, 0, 255})
-		draw_rect(selected_rect, Vec3{0, 0, 255}, 100)
+		draw_rect_outline(selected_rect, 1, FVec3{0, 0, 255})
+		draw_rect(selected_rect, FVec3{0, 0, 255}, 100)
 		did_multiselect = true
 	}
 
