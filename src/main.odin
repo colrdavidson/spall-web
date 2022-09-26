@@ -742,6 +742,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		did_multiselect = true
 	}
 
+	selected_events := 0
 	if did_multiselect {
 		flopped_rect := Rect{}
 		flopped_rect.pos.x = min(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
@@ -840,6 +841,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 						s.min_time = min(s.min_time, f32(duration))
 						s.max_time = max(s.max_time, f32(duration))
 						total_tracked_time += duration
+						selected_events += 1
 					}
 				}
 				cur_y += thread_advance
@@ -1080,6 +1082,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		events_str := fmt.tprintf("Event Count: %d", rect_count - bucket_count)
 		events_txt_width := measure_text(events_str, p_font_size, monospace_font)
 		draw_text(events_str, Vec2{width - events_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+
+		selected_events_str := fmt.tprintf("Selected Event Count: %d", selected_events)
+		selected_events_txt_width := measure_text(selected_events_str, p_font_size, monospace_font)
+		draw_text(selected_events_str, Vec2{width - selected_events_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 	}
 
 	// save me my battery, plz
