@@ -1,9 +1,49 @@
 "use strict";
 
-(function() {
+// bleh this is gross
+function arr_to_str(array) {
+	// Preallocate the cache for the common single byte chars
+    let charCache = new Array(128);  
+    let charFromCodePt = String.fromCodePoint || String.fromCharCode;
+    let result = [];
+
+	let buf_len = array.length;
+	result.length = 0;
+
+	let codePt;
+	for (var i = 0; i < buf_len;) {
+		let b1 = array[i++];
+
+		if (b1 <= 0x7F) {
+			codePt = b1;
+		} else if (b1 <= 0xDF) {
+			let b2 = array[i++];
+			codePt = ((b1 & 0x1F) << 6) | (b2 & 0x3F);
+		} else if (b1 <= 0xEF) {
+			let b2 = array[i++];
+			let b3 = array[i++];
+			codePt = ((b1 & 0x0F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+		} else if (String.fromCodePoint) {
+			let b2 = array[i++];
+			let b3 = array[i++];
+			let b4 = array[i++];
+			codePt = ((b1 & 0x07) << 18) | ((b2 & 0x3F) << 12) | 
+					 ((b3 & 0x3F) << 6) | (b4 & 0x3F);
+		} else {
+			// Cannot convert four byte code points, so use "?" instead
+			codePt = 63;    
+			i += 3;
+		}
+
+		result.push(charCache[codePt] || (charCache[codePt] = charFromCodePt(codePt)));
+	}
+
+	return result.join('');
+}
+
 class WasmMemoryInterface {
-	constructor() {
-		this.memory = null;
+	constructor(memory) {
+		this.memory = memory;
 		this.exports = null;
 		this.listenerMap = {};
 	}
@@ -67,7 +107,7 @@ class WasmMemoryInterface {
 
 	loadString(ptr, len) {
 		const bytes = this.loadBytes(ptr, len);
-		return new TextDecoder("utf-8").decode(bytes);
+		return arr_to_str(bytes);
 	}
 	putString(ptr, str) {
 		const buf = new Uint8Array(this.memory.buffer);
@@ -99,7 +139,7 @@ class WasmMemoryInterface {
 	storeUint(addr, value) { this.mem.setUint32 (addr, value, true); }
 };
 
-function odinSetupDefaultImports(wasmMemoryInterface, consoleElement) {
+function odinSetupDefaultImports(wasmMemoryInterface, consoleElement, memory) {
 	const MAX_INFO_CONSOLE_LINES = 512;
 	let infoConsoleLines = new Array();
 	let currentLine = {};
@@ -222,7 +262,9 @@ function odinSetupDefaultImports(wasmMemoryInterface, consoleElement) {
 	let event_temp_data = {};
 
 	return {
-		"env": {},
+		"env": {
+			memory
+		},
 		"odin_env": {
 			write: (fd, ptr, len) => {
 				const str = wasmMemoryInterface.loadString(ptr, len);
@@ -266,10 +308,10 @@ function generateHash(blob) {
     return hash;
 }
 
-async function runWasm(wasmPath, consoleElement, extraForeignImports) {
-	let wasmMemoryInterface = new WasmMemoryInterface();
+async function runWasm(wasmPath, consoleElement, memory, extraForeignImports) {
+	let wasmMemoryInterface = new WasmMemoryInterface(memory);
 
-	let imports = odinSetupDefaultImports(wasmMemoryInterface, consoleElement);
+	let imports = odinSetupDefaultImports(wasmMemoryInterface, consoleElement, memory);
 	let exports = {};
 
 	if (extraForeignImports !== undefined) {
@@ -285,7 +327,6 @@ async function runWasm(wasmPath, consoleElement, extraForeignImports) {
 
 	exports = wasm.instance.exports;
 	wasmMemoryInterface.setExports(exports);
-	wasmMemoryInterface.setMemory(exports.memory);
 
 	exports._start();
 
@@ -313,7 +354,7 @@ async function runWasm(wasmPath, consoleElement, extraForeignImports) {
 	return jsExports;
 };
 
-window.odin = {
+let odin = {
 	// Interface Types
 	WasmMemoryInterface: WasmMemoryInterface,
 
@@ -321,4 +362,4 @@ window.odin = {
 	setupDefaultImports: odinSetupDefaultImports,
 	runWasm:             runWasm,
 };
-})();
+export { odin };

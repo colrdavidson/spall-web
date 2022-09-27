@@ -36,6 +36,9 @@ else:
 
 wasm_out = f"build/{program_name}.wasm"
 
+initial_size = (64 * 1024) * 2000
+max_size     = (64 * 1024) * 65536
+
 start_time = time.time()
 print('Compiling...')
 subprocess.run([
@@ -43,7 +46,8 @@ subprocess.run([
     'build', 'src',
     '-collection:formats=formats',
     '-target:js_wasm32',
-    '-target-features:+bulk-memory',
+    '-target-features:+bulk-memory,+atomics',
+    f"-extra-linker-flags:--import-memory --shared-memory --initial-memory={initial_size} --max-memory={max_size}",
     f"-out:{wasm_out}",
     *build_str,
 ], check=True)
@@ -56,32 +60,10 @@ print("Compiled in {:.1f} seconds".format(time.time() - start_time))
 print('Building dist folder...')
 os.makedirs('build/dist', exist_ok=True)
 
-buildId = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8)) # so beautiful. so pythonic.
-
-root = 'src/index.html'
-rootContents = open(root).read()
-
-def addId(filename, id):
-    parts = filename.split('.')
-    parts.insert(-1, buildId)
-    return '.'.join(parts)
-
-def patchFile(filename, embed_name):
-    global rootContents
-
-    basename = os.path.basename(filename)
-    embed_base = os.path.basename(embed_name)
-    new_filename = addId(embed_base, buildId)
-    shutil.copy(filename, 'build/dist/{}'.format(new_filename))
-
-    rootContents = rootContents.replace(embed_base, new_filename)
-
-
-patchFile('src/runtime.js', 'src/runtime.js')
-patchFile(wasm_out, f"src/{program_name}.wasm")
-
-with open('build/dist/index.html', 'w') as f:
-    f.write(rootContents)
+shutil.copyfile('src/index.html', 'build/dist/index.html')
+shutil.copyfile('src/index.js', 'build/dist/index.js')
+shutil.copyfile('src/runtime.js', 'build/dist/runtime.js')
+shutil.copyfile(f"build/{program_name}.wasm", f"build/dist/{program_name}.wasm")
 
 print('Done!')
 
