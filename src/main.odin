@@ -799,6 +799,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	draw_line(Vec2{mini_start_x, disp_rect.pos.y}, Vec2{mini_start_x, height}, 0.5, line_color)
 
 	mini_rect_height := (em / 2)
+	mini_thread_gap := 8.0
 	x_scale := rescale(1.0, 0, total_max_time - total_min_time, 0, mini_graph_width)
 	y_scale := mini_rect_height / rect_height
 
@@ -811,7 +812,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				resize(&gl_rects, 0)
 			}
 
-			tree_y += ((f64(len(tm.depths)) * mini_rect_height) + thread_gap)
+			tree_y += ((f64(len(tm.depths)) * mini_rect_height) + mini_thread_gap)
 		}
 	}
 
