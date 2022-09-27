@@ -187,7 +187,7 @@ function get_system_colormode() {
 }
 
 async function init() {
-	const memory = new WebAssembly.Memory({ initial: 2000, maximum: 65536, shared: true});
+	const memory = new WebAssembly.Memory({ initial: 2000, maximum: 65536 });
 	window.wasm = await odin.runWasm(`spall.wasm`, null, memory, {
 		js: {
 			// Canvas
