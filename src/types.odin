@@ -7,7 +7,7 @@ import "core:runtime"
 
 Vec2 :: [2]f64
 Vec3 :: [3]f64
-FVec3 :: [3]f32
+FVec4 :: [4]f32
 Rect :: struct {
 	pos: Vec2,
 	size: Vec2,
@@ -48,7 +48,7 @@ ChunkNode :: struct #packed {
 	start_time: f64,
 	end_time: f64,
 
-	avg_color: FVec3,
+	avg_color: FVec4,
 	weight: f32,
 
 	children: [CHUNK_NARY_WIDTH]int,

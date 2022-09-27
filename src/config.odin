@@ -72,10 +72,10 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 	p.full_chunk = chunk
 }
 
-gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f32) {
+gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec4, f32) {
 	total_weight : f32 = 0
 
-	color := FVec3{}
+	color := FVec4{}
 	color_weights := [choice_count]f32{}
 	for ev in events {
 		idx := name_color_idx(ev.name)
@@ -151,7 +151,7 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 			node.start_idx  = start_node.start_idx
 			node.end_idx    = end_node.end_idx
 
-			avg_color := FVec3{}
+			avg_color := FVec4{}
 			for j := 0; j < len(children); j += 1 {
 				node.children[j] = start_idx + j
 				avg_color += children[j].avg_color * children[j].weight
@@ -271,7 +271,7 @@ finish_loading :: proc (p: ^Parser) {
 		s := 0.5 + rand.float32() * 0.1
 		v : f32 = 0.85
 
-		color_choices[i] = hsv2rgb(FVec3{h, s, v}) * 255
+		color_choices[i] = hsv2rgb(FVec4{h, s, v, 255}) * 255
 	}
 
 	start_bench("chunk events")
@@ -333,6 +333,7 @@ bound_duration :: proc(ev: Event, max_ts: f64) -> f64 {
 	return ev.duration == -1 ? (max_ts - ev.timestamp) : ev.duration
 }
 
+/*
 default_config := `[
 	{"cat":"function", "name":"0", "ph":"X", "pid":0, "tid": 0, "ts": 0, "dur": 1},
 	{"cat":"function", "name":"1", "ph":"X", "pid":0, "tid": 0, "ts": 1, "dur": 1},
@@ -341,6 +342,7 @@ default_config := `[
 	{"cat":"function", "name":"4", "ph":"X", "pid":0, "tid": 0, "ts": 6, "dur": 1},
 	{"cat":"function", "name":"5", "ph":"X", "pid":0, "tid": 1, "ts": 1, "dur": 1},
 ]`
+*/
 
 /*
 default_config := `[
@@ -352,4 +354,4 @@ default_config := `[
 ]`
 */
 
-//default_config := string(#load("../demos/example_config.json"))
+default_config := string(#load("../demos/example_config.json"))

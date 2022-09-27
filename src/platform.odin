@@ -145,8 +145,8 @@ measure_text :: #force_inline proc "contextless" (str: string, scale: f64, font:
 	return _measure_text(str, scale, font)
 }
 
-gl_init_frame :: #force_inline proc "contextless" (color: FVec3) {
-	_gl_init_frame(color.x, color.y, color.z, 255)
+gl_init_frame :: #force_inline proc "contextless" (color: FVec4) {
+	_gl_init_frame(color[0], color[1], color[2], color[3])
 }
 
 gl_push_rects :: #force_inline proc "contextless" (rects: []DrawRect, y, height: f64) {
@@ -159,35 +159,35 @@ canvas_clear :: #force_inline proc "contextless" () {
 draw_clip :: #force_inline proc "contextless" (x, y, w, h: f64) {
 	_canvas_clip(x * dpr, y * dpr, w * dpr, h * dpr)
 }
-draw_rect :: #force_inline proc "contextless" (rect: Rect, color: FVec3, a: f32 = 255) {
-    _canvas_rect(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, color.x, color.y, color.z, a)
+draw_rect :: #force_inline proc "contextless" (rect: Rect, color: FVec4) {
+    _canvas_rect(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, color.x, color.y, color.z, color.w)
 }
-draw_rectc :: #force_inline proc "contextless" (rect: Rect, radius: f64, color: FVec3, a: f32 = 255) {
-    _canvas_rectc(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, radius * dpr, color.x, color.y, color.z, a)
+draw_rectc :: #force_inline proc "contextless" (rect: Rect, radius: f64, color: FVec4) {
+    _canvas_rectc(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, radius * dpr, color.x, color.y, color.z, color.w)
 }
-draw_circle :: #force_inline proc "contextless" (center: Vec2, radius: f64, color: FVec3, a: f32 = 255) {
-    _canvas_circle(center.x * dpr, center.y * dpr, radius * dpr, color.x, color.y, color.z, a)
+draw_circle :: #force_inline proc "contextless" (center: Vec2, radius: f64, color: FVec4) {
+    _canvas_circle(center.x * dpr, center.y * dpr, radius * dpr, color.x, color.y, color.z, color.w)
 }
-draw_text :: #force_inline proc "contextless" (str: string, pos: Vec2, scale: f64, font: string, color: FVec3, a: f32 = 255) {
-    _canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, a, scale, font)
+draw_text :: #force_inline proc "contextless" (str: string, pos: Vec2, scale: f64, font: string, color: FVec4) {
+    _canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, color.w, scale, font)
 }
-draw_line :: #force_inline proc "contextless" (start, end: Vec2, strokeWidth: f64, color: FVec3, a: f32 = 255) {
-    _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, color.x, color.y, color.z, a, strokeWidth * dpr * dpr)
+draw_line :: #force_inline proc "contextless" (start, end: Vec2, strokeWidth: f64, color: FVec4) {
+    _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, color.x, color.y, color.z, color.w, strokeWidth * dpr * dpr)
 }
-draw_arc :: #force_inline proc "contextless" (center: Vec2, radius, angleStart, angleEnd: f64, strokeWidth: f64, color: FVec3, a: f32) {
-    _canvas_arc(center.x * dpr, center.y * dpr, radius * dpr, angleStart, angleEnd, color.x, color.y, color.z, a, strokeWidth * dpr)
+draw_arc :: #force_inline proc "contextless" (center: Vec2, radius, angleStart, angleEnd: f64, strokeWidth: f64, color: FVec4) {
+    _canvas_arc(center.x * dpr, center.y * dpr, radius * dpr, angleStart, angleEnd, color.x, color.y, color.z, color.w, strokeWidth * dpr)
 }
 
-draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: FVec3, a: f32 = 255) {
+draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
 	x1 := rect.pos.x
 	y1 := rect.pos.y
 	x2 := rect.pos.x + rect.size.x
 	y2 := rect.pos.y + rect.size.y
 
-	draw_line(Vec2{x1, y1}, Vec2{x2, y1}, width, color, a)
-	draw_line(Vec2{x1, y1}, Vec2{x1, y2}, width, color, a)
-	draw_line(Vec2{x2, y1}, Vec2{x2, y2}, width, color, a)
-	draw_line(Vec2{x1, y2}, Vec2{x2, y2}, width, color, a)
+	draw_line(Vec2{x1, y1}, Vec2{x2, y1}, width, color)
+	draw_line(Vec2{x1, y1}, Vec2{x1, y2}, width, color)
+	draw_line(Vec2{x2, y1}, Vec2{x2, y2}, width, color)
+	draw_line(Vec2{x1, y2}, Vec2{x2, y2}, width, color)
 }
 
 set_cursor :: proc "contextless" (cursor: string) {

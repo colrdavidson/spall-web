@@ -159,7 +159,7 @@
 				out vec4 out_color;
 
 				void main() {
-					out_color = v_color.zyxw;
+					out_color = v_color.xyzw;
 				}
 			`;
 
@@ -390,7 +390,8 @@
 
 						_gl_init_frame: (r, g, b, a) => {
 							gl_ctx.viewport(0, 0, gl_ctx.canvas.width, gl_ctx.canvas.height);
-							gl_ctx.clearColor(r, g, b, a);
+
+							gl_ctx.clearColor(r / 255, g / 255, b / 255, a / 255);
 							gl_ctx.clear(gl_ctx.COLOR_BUFFER_BIT);
 
 							gl_ctx.uniform1f(dpr_uni, dpr);

@@ -31,17 +31,18 @@ frame_count : int
 rect_count : int
 bucket_count : int
 
-bg_color      := FVec3{}
-bg_color2     := FVec3{}
-text_color    := FVec3{}
-text_color2   := FVec3{}
-text_color3   := FVec3{}
-button_color  := FVec3{}
-button_color2 := FVec3{}
-line_color    := FVec3{}
-outline_color := FVec3{}
-toolbar_color := FVec3{}
-graph_color   := FVec3{}
+bg_color      := FVec4{}
+bg_color2     := FVec4{}
+text_color    := FVec4{}
+text_color2   := FVec4{}
+text_color3   := FVec4{}
+button_color  := FVec4{}
+button_color2 := FVec4{}
+line_color    := FVec4{}
+outline_color := FVec4{}
+toolbar_color := FVec4{}
+graph_color   := FVec4{}
+highlight_color := FVec4{}
 
 default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
 monospace_font := `monospace`
@@ -113,39 +114,46 @@ processes: [dynamic]Process
 process_map: ValHash
 
 global_instants: [dynamic]Instant
-choice_count :: 64
-color_choices: [choice_count]FVec3
+color_choices: [choice_count]FVec4
 event_count: i64
 total_max_time: f64
 total_min_time: f64
 
+default_colors :: proc "contextless" (is_dark: bool) {
+	if is_dark {
+		bg_color         = FVec4{15,   15,  15, 255}
+		bg_color2        = FVec4{0,     0,   0, 255}
+		text_color       = FVec4{255, 255, 255, 255}
+		text_color2      = FVec4{180, 180, 180, 255}
+		text_color3      = FVec4{0,     0,   0, 255}
+		button_color     = FVec4{40,   40,  40, 255}
+		button_color2    = FVec4{20,   20,  20, 255}
+		line_color       = FVec4{100, 100, 100, 255}
+		outline_color    = FVec4{80,   80,  80, 255}
+		toolbar_color    = FVec4{120, 120, 120, 255}
+		graph_color      = FVec4{180, 180, 180, 255}
+		highlight_color  = FVec4{  0,   0, 255, 32}
+	} else {
+		bg_color         = FVec4{254, 252, 248, 255}
+		bg_color2        = FVec4{255, 255, 255, 255}
+		text_color       = FVec4{0,     0,   0, 255}
+		text_color2      = FVec4{80,   80,  80, 255}
+		text_color3      = FVec4{0,     0,   0, 255}
+		button_color     = FVec4{141, 119, 104, 255}
+		button_color2    = FVec4{191, 169, 154, 255}
+		line_color       = FVec4{150, 150, 150, 255}
+		outline_color    = FVec4{219, 211, 205, 255}
+		toolbar_color    = FVec4{219, 211, 205, 255}
+		graph_color      = FVec4{69,   49,  34, 255}
+		highlight_color  = FVec4{255, 255,   0, 32}
+	}
+}
+
+choice_count :: 16
+
 @export
 set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
-	if is_dark {
-		bg_color      = FVec3{15,   15,  15}
-		bg_color2     = FVec3{0,     0,   0}
-		text_color    = FVec3{255, 255, 255}
-		text_color2   = FVec3{180, 180, 180}
-		text_color3   = FVec3{0,     0,   0}
-		button_color  = FVec3{40,   40,  40}
-		button_color2 = FVec3{20,   20,  20}
-		line_color    = FVec3{100, 100, 100}
-		outline_color = FVec3{80,   80,  80}
-		toolbar_color = FVec3{120, 120, 120}
-		graph_color   = FVec3{180, 180, 180}
-	} else {
-		bg_color      = FVec3{254, 252, 248}
-		bg_color2     = FVec3{255, 255, 255}
-		text_color    = FVec3{0,     0,   0}
-		text_color2   = FVec3{80,   80,  80}
-		text_color3   = FVec3{0, 0, 0}
-		button_color  = FVec3{141, 119, 104}
-		button_color2 = FVec3{191, 169, 154}
-		line_color    = FVec3{150, 150, 150}
-		outline_color = FVec3{219, 211, 205}
-		toolbar_color = FVec3{219, 211, 205}
-		graph_color   = FVec3{69,   49,  34}
-	}
+	default_colors(is_dark)
 
 	if auto {
 		colormode = ColorMode.Auto
@@ -246,6 +254,86 @@ name_color_idx :: proc(name: string) -> u32 {
 	return u32(uintptr(raw_data(name))) & u32(len(color_choices) - 1)
 }
 
+render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f64) {
+	depth := thread.depths[depth_idx]
+	tree := depth.tree
+
+	// If we blow this, we're in space
+	tree_stack := [128]int{}
+	stack_len := 0
+
+	tree_stack[0] = depth.head; stack_len += 1
+	for stack_len > 0 {
+		stack_len -= 1
+
+		tree_idx := tree_stack[stack_len]
+		cur_node := tree[tree_idx]
+		range := cur_node.end_time - cur_node.start_time
+		range_width := range * scale
+
+		// draw summary faketangle
+		min_width := 2.0
+		if range_width < min_width {
+			x := cur_node.start_time
+			w := min_width
+			xm := x * scale
+
+			r_x   := x * scale
+			end_x := r_x + w
+
+			r_x   += start_x
+			end_x += start_x
+
+			r_x    = max(r_x, 0)
+			r_w   := end_x - r_x
+
+			rect_color := cur_node.avg_color
+			draw_rect := DrawRect{f32(r_x), f32(r_w), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
+			append(&gl_rects, draw_rect)
+			continue
+		}
+
+		// we're at a bottom node, draw the whole thing
+		if cur_node.child_count == 0 {
+			scan_arr := depth.events[cur_node.start_idx:cur_node.end_idx]
+			render_minievents(scan_arr, thread.max_time, depth_idx, start_x, scale)
+			continue
+		}
+
+		for i := (cur_node.child_count - 1); i >= 0; i -= 1 {
+			tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
+		}
+	}
+}
+
+render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, y_depth: int, start_x: f64, scale: f64) {
+	for ev, de_id in scan_arr {
+		x := ev.timestamp - total_min_time
+		duration := bound_duration(ev, thread_max_time)
+		w := max(duration * scale, 2.0)
+		xm := x * scale
+
+		// Carefully extract the [start, end] interval of the rect so that we can clip the left
+		// side to 0 before sending it to draw_rect, so we can prevent f32 (f64?) precision
+		// problems drawing a rectangle which starts at a massively huge negative number on
+		// the left.
+		r_x   := x * scale
+		end_x := r_x + w
+
+		r_x   += start_x
+		end_x += start_x
+
+		r_x    = max(r_x, 0)
+		r_w   := end_x - r_x
+
+		idx := name_color_idx(ev.name)
+		rect_color := color_choices[idx]
+
+		draw_rect := DrawRect{f32(r_x), f32(r_w), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
+		append(&gl_rects, draw_rect)
+	}
+}
+
 render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64, start_time, end_time: f64) {
 	depth := thread.depths[depth_idx]
 	tree := depth.tree
@@ -310,7 +398,6 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 }
 
 render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_idx: int, thread_max_time: f64, y_depth: int, y_start: f64) {
-
 	scan_arr := events[start_idx:end_idx]
 	y := rect_height * f64(y_depth)
 	h := rect_height
@@ -347,9 +434,9 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 		e_idx := start_idx + de_id
 		if int(selected_event.pid) == p_idx && int(selected_event.tid) == t_idx &&
 		   int(selected_event.did) == d_idx && int(selected_event.eid) == e_idx {
+			rect_color.w += 30
 			rect_color.x += 30
 			rect_color.y += 30
-			rect_color.z += 30
 		}
 
 		draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
@@ -376,14 +463,12 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 		text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
 		max_chars := max(0, min(len(display_name), text_width))
 		name_str := display_name[:max_chars]
+		str_x := max(dr.pos.x, disp_rect.pos.x) + text_pad
 
 		if len(name_str) > 4 || max_chars == len(display_name) {
 			if max_chars != len(display_name) {
 				name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
 			}
-
-			str_width := measure_text(name_str, p_font_size, monospace_font)
-			str_x := max(dr.pos.x, disp_rect.pos.x) + text_pad
 
 			draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 		}
@@ -408,7 +493,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 			load_box.size.y + pad_size
 		)
 
-		draw_rectc(load_box, 3, FVec3{50, 50, 50})
+		draw_rectc(load_box, 3, FVec4{50, 50, 50, 255})
 
 		p: Parser
 		if is_json {
@@ -430,7 +515,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 				start_y + (cur_y * chunk_size), 
 				chunk_size - pad_size, 
 				chunk_size - pad_size
-			), FVec3{0, 255, 0})
+			), FVec4{0, 255, 0, 255})
 		}
 
 		return true
@@ -488,9 +573,14 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		// set_cursor("ns-resize")
 	}
 
+	mini_graph_width := 15 * em
+	mini_graph_pad := (em)
+	mini_graph_padded_width := mini_graph_width + (mini_graph_pad * 2)
+	mini_start_x := width - mini_graph_padded_width
+
 	start_x := x_pad_size
 	end_x := width - x_pad_size
-	display_width := end_x - start_x
+	display_width := width - (start_x + mini_graph_padded_width)
 	start_y := toolbar_height
 	end_y   := info_pane_y
 	display_height := end_y - start_y
@@ -513,7 +603,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	max_x := width - x_pad_size
 
 	disp_rect = rect(start_x, start_y, display_width, display_height)
-	//draw_rect_outline(rect(disp_rect.pos.x, disp_rect.pos.y, disp_rect.size.x, disp_rect.size.y - 1), 1, Vec3{255, 0, 0})
+	//draw_rect_outline(rect(disp_rect.pos.x, disp_rect.pos.y, disp_rect.size.x, disp_rect.size.y - 1), 1, FVec3{255, 0, 0})
 
 	graph_rect := disp_rect
 	graph_rect.pos.y += graph_header_height
@@ -646,6 +736,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	gl_push_rects(gl_rects[:], line_start, line_height)
 	resize(&gl_rects, 0)
 
+
 	// Render flamegraphs
 	clicked_on_rect = false
 	rect_count = 0
@@ -696,11 +787,38 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		did_multiselect = false
 	}
 
+
 	// Chop sides of screen
-	draw_rect(rect(0, disp_rect.pos.y, width, graph_header_text_height), bg_color) // top
+	draw_rect(rect(0, disp_rect.pos.y, width - mini_graph_padded_width, graph_header_text_height), bg_color) // top
 	draw_rect(rect(0, disp_rect.pos.y + graph_header_text_height, graph_rect.pos.x, height), bg_color2) // left
-	draw_rect(rect(graph_rect.pos.x + graph_rect.size.x, disp_rect.pos.y + graph_header_text_height, width, height), bg_color2) // right
-	draw_line(Vec2{0, disp_rect.pos.y + graph_header_text_height}, Vec2{width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
+	draw_line(Vec2{0, disp_rect.pos.y + graph_header_text_height}, Vec2{width - mini_graph_padded_width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
+
+	append(&gl_rects, DrawRect{f32(mini_start_x), f32(mini_graph_width + (mini_graph_pad * 2)), {u8(bg_color.x), u8(bg_color.y), u8(bg_color.z), 255}})
+	gl_push_rects(gl_rects[:], disp_rect.pos.y + graph_header_text_height, height)
+	resize(&gl_rects, 0)
+	draw_line(Vec2{mini_start_x, disp_rect.pos.y}, Vec2{mini_start_x, height}, 0.5, line_color)
+
+	mini_rect_height := (em / 2)
+	x_scale := rescale(1.0, 0, total_max_time - total_min_time, 0, mini_graph_width)
+	y_scale := mini_rect_height / rect_height
+
+	tree_y : f64 = graph_rect.pos.y - (cam.pan.y * y_scale)
+	for proc_v, p_idx in &processes {
+		for tm, t_idx in &proc_v.threads {
+			for depth, d_idx in &tm.depths {
+				render_minitree(&tm, d_idx, mini_start_x + mini_graph_pad, x_scale)
+				gl_push_rects(gl_rects[:], (tree_y + (mini_rect_height * f64(d_idx))), mini_rect_height)
+				resize(&gl_rects, 0)
+			}
+
+			tree_y += ((f64(len(tm.depths)) * mini_rect_height) + thread_gap)
+		}
+	}
+
+	preview_height := display_height * y_scale
+
+	draw_rect(rect(mini_start_x, disp_rect.pos.y, mini_graph_padded_width, preview_height), highlight_color)
+	draw_rect(rect(mini_start_x, disp_rect.pos.y + preview_height, mini_graph_padded_width, display_height - preview_height), FVec4{0, 0, 0, 8})
 
 	// Draw timestamps on subdivision lines
 	ONE_SECOND :: 1000 * 1000
@@ -724,6 +842,9 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		draw_text(time_str, Vec2{start_x + x_off - (text_width / 2), disp_rect.pos.y + (graph_header_text_height / 2) - (em / 2)}, p_font_size, default_font, text_color)
 	}
 
+	// Remove top-right chunk
+	draw_rect(rect(width - mini_graph_padded_width, disp_rect.pos.y, width, graph_header_text_height), bg_color) // top
+
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
 	draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
@@ -733,8 +854,8 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
 		delta := mouse_pos_extrapolated - clicked_pos
 		selected_rect = rect(clicked_pos.x, clicked_pos.y, delta.x, delta.y)
-		draw_rect_outline(selected_rect, 1, FVec3{0, 0, 255})
-		draw_rect(selected_rect, FVec3{0, 0, 255}, 100)
+		draw_rect_outline(selected_rect, 1, FVec4{0, 0, 255, 255})
+		draw_rect(selected_rect, FVec4{0, 0, 255, 100})
 		did_multiselect = true
 	}
 
