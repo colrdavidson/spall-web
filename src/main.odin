@@ -1185,7 +1185,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 		if queue.len(fps_history) > 100 { queue.pop_front(&fps_history) }
 		queue.push_back(&fps_history, u32(1 / dt))
-		draw_graph("FPS", &fps_history, Vec2{width - 160, disp_rect.pos.y + graph_header_height})
+		draw_graph("FPS", &fps_history, Vec2{width - mini_graph_padded_width - 160, disp_rect.pos.y + graph_header_height})
 
 		hash_str := fmt.tprintf("Build: 0x%X", abs(build_hash))
 		hash_width := measure_text(hash_str, p_font_size, monospace_font)
@@ -1213,9 +1213,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	}
 
 	// save me my battery, plz
-	if cam.pan.x == cam.target_pan_x && 
-	   cam.vel.y == 0 && 
-	   cam.current_scale == cam.target_scale {
+	EPSILON :: 0.001
+	if math.abs(cam.pan.x - cam.target_pan_x) < EPSILON && 
+	   math.abs(cam.vel.y - 0) < EPSILON && 
+	   math.abs(cam.current_scale - cam.target_scale) < EPSILON {
 		return false
 	}
 
