@@ -99,10 +99,13 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 	trap()
 }
 
+INMAP_LOAD_FACTOR :: 0.75
 // String interning
 INMap :: struct {
 	entries: [dynamic]string,
 	hashes:  [dynamic]int,
+	resize_threshold: i64,
+	len_minus_one: u32,
 	allocator: runtime.Allocator,
 }
 
@@ -114,6 +117,8 @@ in_init :: proc(string_allocator: runtime.Allocator) -> INMap {
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
+	v.resize_threshold = i64(f64(len(v.hashes)) * INMAP_LOAD_FACTOR) 
+	v.len_minus_one = u32(len(v.hashes) - 1)
 	return v
 }
 
@@ -124,9 +129,9 @@ in_hash :: proc (key: string) -> u32 {
 
 
 in_reinsert :: proc (v: ^INMap, entry: string, v_idx: int) {
-	hv := in_hash(entry) & u32(len(v.hashes) - 1)
+	hv := in_hash(entry) & v.len_minus_one
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := (hv + i) & u32(len(v.hashes) - 1)
+		idx := (hv + i) & v.len_minus_one
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
@@ -142,19 +147,21 @@ in_grow :: proc(v: ^INMap) {
 		v.hashes[i] = -1
 	}
 
+	v.resize_threshold = i64(f64(len(v.hashes)) * INMAP_LOAD_FACTOR) 
+	v.len_minus_one = u32(len(v.hashes) - 1)
 	for entry, idx in v.entries {
 		in_reinsert(v, entry, idx)
 	}
 }
 
 in_get :: proc(v: ^INMap, key: string) -> string {
-	if len(v.entries) >= int(f64(len(v.hashes)) * 0.75) {
+	if i64(len(v.entries)) >= v.resize_threshold {
 		in_grow(v)
 	}
 
-	hv := in_hash(key) & u32(len(v.hashes) - 1)
+	hv := in_hash(key) & v.len_minus_one
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := (hv + i) & u32(len(v.hashes) - 1)
+		idx := (hv + i) & v.len_minus_one
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
