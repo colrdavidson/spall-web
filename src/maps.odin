@@ -13,6 +13,7 @@ PTEntry :: struct {
 ValHash :: struct {
 	entries: [dynamic]PTEntry,
 	hashes:  [dynamic]int,
+	len_minus_one: u32,
 }
 
 vh_init :: proc(allocator := context.allocator) -> ValHash {
@@ -22,6 +23,7 @@ vh_init :: proc(allocator := context.allocator) -> ValHash {
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
+	v.len_minus_one = u32(len(v.hashes) - 1)
 	return v
 }
 
@@ -31,10 +33,10 @@ vh_hash :: proc "contextless" (key: u32) -> u32 {
 }
 
 vh_find :: proc "contextless" (v: ^ValHash, key: u32, loc := #caller_location) -> (int, bool) {
-	hv := vh_hash(key) & u32(len(v.hashes) - 1)
+	hv := vh_hash(key) & v.len_minus_one
 
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := (hv + i) & u32(len(v.hashes) - 1)
+		idx := (hv + i) & v.len_minus_one
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
@@ -54,6 +56,7 @@ vh_grow :: proc(v: ^ValHash) {
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
+	v.len_minus_one = u32(len(v.hashes) - 1)
 
 	for entry, idx in v.entries {
 		vh_reinsert(v, entry, idx)
@@ -61,9 +64,9 @@ vh_grow :: proc(v: ^ValHash) {
 }
 
 vh_reinsert :: proc "contextless" (v: ^ValHash, entry: PTEntry, v_idx: int) {
-	hv := vh_hash(entry.key) & u32(len(v.hashes) - 1)
+	hv := vh_hash(entry.key) & v.len_minus_one
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := (hv + i) & u32(len(v.hashes) - 1)
+		idx := (hv + i) & v.len_minus_one
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
@@ -78,9 +81,9 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 		vh_grow(v)
 	}
 
-	hv := vh_hash(key) & u32(len(v.hashes) - 1)
+	hv := vh_hash(key) & v.len_minus_one
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := (hv + i) & u32(len(v.hashes) - 1)
+		idx := (hv + i) & v.len_minus_one
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
@@ -93,7 +96,6 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 		}
 	}
 
-	fmt.printf("No more potatoes!\n")
 	trap()
 }
 
@@ -165,7 +167,6 @@ in_get :: proc(v: ^INMap, key: string) -> string {
 		}
 	}
 
-	fmt.printf("No more potatoes!\n")
 	trap()
 	return ""
 }
@@ -235,7 +236,6 @@ km_insert :: proc(v: ^KeyMap, key: string) {
 		}
 	}
 
-	fmt.printf("No more potatoes!\n")
 	trap()
 }
 

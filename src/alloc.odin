@@ -68,7 +68,6 @@ arena_allocator_proc :: proc(
 
 		arena.offset += total_size
 		arena.peak_used = max(arena.peak_used, arena.offset)
-		mem.zero(ptr, size)
 		return mem.byte_slice(ptr, size), nil
 
 	case .Free:
@@ -157,7 +156,6 @@ growing_arena_allocator_proc :: proc(
 
 		arena.offset = int(uint(arena.offset) + uint(total_size))
 		arena.peak_used = int(max(uint(arena.peak_used), uint(arena.offset)))
-		mem.zero(ptr, size)
 
 		return _byte_slice(ptr, size), nil
 

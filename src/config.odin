@@ -8,18 +8,18 @@ import "core:strconv"
 import "formats:spall"
 
 start_time: u64
-start_mem: u64
+start_mem: i64
 allocator: mem.Allocator
 start_bench :: proc(name: string, al := context.allocator) {
 	start_time = u64(get_time())
 	allocator = al
 	arena := cast(^Arena)al.data
-	start_mem = u64(arena.offset)
+	start_mem = i64(u32(arena.offset))
 }
 stop_bench :: proc(name: string) {
 	end_time := u64(get_time())
 	arena := cast(^Arena)allocator.data
-	end_mem := u64(arena.offset)
+	end_mem := i64(u32(arena.offset))
 
 	time_range := end_time - start_time
 	mem_range := end_mem - start_mem
@@ -107,7 +107,7 @@ CHUNK_NARY_WIDTH :: 8
 build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 	tree := &tm.depths[depth_idx].tree
 
-	bucket_size :: 8 
+	bucket_size :: 8
 	bucket_count := i_round_up(len(events), bucket_size) / bucket_size
 	for i := 0; i < bucket_count; i += 1 {
 		start_idx := i * bucket_size
@@ -168,6 +168,8 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 		row_count = tree_end_idx - tree_start_idx
 		parent_row_count = (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
 	}
+
+	//fmt.printf("evs: %d, tree: %d, ratio: %f\n", len(events), len(tree), f64(len(tree)) / f64(len(events)))
 
 	return len(tree) - 1
 }
