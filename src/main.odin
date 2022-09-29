@@ -272,7 +272,7 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 		range_width := range * scale
 
 		// draw summary faketangle
-		min_width := 2.0
+		min_width := 2.0 
 		if range_width < min_width {
 			x := cur_node.start_time
 			w := min_width
@@ -1105,9 +1105,10 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		event := thread.depths[d_idx].events[e_idx]
 		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("end time: %s", time_fmt((event.timestamp - total_min_time) + bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("duration: %s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start timestamp: %s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 
-		draw_text(fmt.tprintf("duration: %s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 	}
 
 	// Render toolbar background

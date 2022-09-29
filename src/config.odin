@@ -107,7 +107,7 @@ CHUNK_NARY_WIDTH :: 8
 build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 	tree := &tm.depths[depth_idx].tree
 
-	bucket_size :: 16 
+	bucket_size :: 8 
 	bucket_count := i_round_up(len(events), bucket_size) / bucket_size
 	for i := 0; i < bucket_count; i += 1 {
 		start_idx := i * bucket_size
