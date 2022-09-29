@@ -278,14 +278,14 @@ function odinSetupDefaultImports(wasmMemoryInterface, consoleElement, memory) {
 					throw new Error("Invalid fd to 'write'" + stripNewline(str));
 				}
 			},
-			trap: () => { throw new Error() },
+			trap:  () => { throw new Error() },
 			alert: (ptr, len) => { alert(wasmMemoryInterface.loadString(ptr, len)) },
 			abort: () => { Module.abort() },
 
 			sqrt:    (x) => Math.sqrt(x),
 			sin:     (x) => Math.sin(x),
 			cos:     (x) => Math.cos(x),
-			pow:     (x) => Math.pow(x),
+			pow:     (x, y) => Math.pow(x, y),
 			fmuladd: (x, y, z) => x*y + z,
 			ln:      (x) => Math.log(x),
 			exp:     (x) => Math.exp(x),
@@ -354,7 +354,7 @@ async function runWasm(wasmPath, consoleElement, memory, extraForeignImports) {
 	return jsExports;
 };
 
-let odin = {
+window.odin = {
 	// Interface Types
 	WasmMemoryInterface: WasmMemoryInterface,
 
@@ -362,4 +362,3 @@ let odin = {
 	setupDefaultImports: odinSetupDefaultImports,
 	runWasm:             runWasm,
 };
-export { odin };

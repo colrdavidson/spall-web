@@ -1,7 +1,5 @@
 "use strict";
 
-import { odin } from "./runtime.js"
-
 function str(s) {
 	const bytes = new TextEncoder("utf-8").encode(s);
 	const len = bytes.length;
@@ -188,7 +186,7 @@ function get_system_colormode() {
 
 async function init() {
 	const memory = new WebAssembly.Memory({ initial: 2000, maximum: 65536 });
-	window.wasm = await odin.runWasm(`spall.wasm`, null, memory, {
+	window.wasm = await window.odin.runWasm(`spall.wasm`, null, memory, {
 		js: {
 			// Canvas
 			_canvas_clear() {
