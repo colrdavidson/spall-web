@@ -58,7 +58,7 @@ start_loading_file :: proc "contextless" (size: u32) {
 	context = wasmContext
 
 	init_loading_state(size)
-	get_chunk(0, CHUNK_SIZE)
+	get_chunk(0.0, f64(CHUNK_SIZE))
 
 }
 
@@ -68,7 +68,7 @@ manual_load :: proc(config: string) {
 }
 
 set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
-	p.chunk_start = start
+	p.chunk_start = i64(start)
 	p.full_chunk = chunk
 }
 
@@ -314,7 +314,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 			stamp_scale = hdr.timestamp_unit
 			bp = init_parser(total_size)
-			bp.pos += u32(header_sz)
+			bp.pos += i64(header_sz)
 		}
 
 		first_chunk = false

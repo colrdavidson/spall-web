@@ -133,7 +133,7 @@ foreign js {
 	change_cursor :: proc(cursor: string) ---
 	get_system_color :: proc() -> bool ---
 
-	get_chunk :: proc(offset, size: u32) ---
+	get_chunk :: proc(offset, size: f64) ---
 	open_file_dialog :: proc() ---
 }
 

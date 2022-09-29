@@ -86,7 +86,7 @@ push_wrap :: #force_inline proc(p: ^JSONParser, tok: Token, loc := #caller_locat
 }
 
 get_token_str :: proc(p: ^JSONParser, tok: Token) -> string {
-	str := string(p.p.full_chunk[u32(tok.start)-p.p.chunk_start:u32(tok.end)-p.p.chunk_start])
+	str := string(p.p.full_chunk[tok.start-p.p.chunk_start:tok.end-p.p.chunk_start])
 	return str
 }
 
@@ -96,7 +96,7 @@ parse_primitive :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	start := real_pos(p)
 
 	found := false
-	top_loop: for ; chunk_pos(p) < u32(len(p.data)); p.pos += 1 {
+	top_loop: for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
 		ch := p.data[chunk_pos(p)]
 
 		switch ch {
@@ -138,7 +138,7 @@ parse_string :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	start := real_pos(p)
 	p.pos += 1
 
-	for ; chunk_pos(p) < u32(len(p.data)); p.pos += 1 {
+	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
 		ch := p.data[chunk_pos(p)]
 
 		if ch == '\"' {
@@ -147,7 +147,7 @@ parse_string :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 			return
 		}
 
-		if ch == '\\' && (chunk_pos(p) + 1) < u32(len(p.data)) {
+		if ch == '\\' && (chunk_pos(p) + 1) < i64(len(p.data)) {
 			p.pos += 1
 		}
 	}
@@ -182,7 +182,7 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
 
-	for ; chunk_pos(p) < u32(len(p.data)); p.pos += 1 {
+	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
 		ch := p.data[chunk_pos(p)]
 
 		switch ch {
@@ -273,7 +273,7 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 			return
 		case:
 
-			fmt.printf("Oops, I did a bad? '%c':%d\n", ch, chunk_pos(p))
+			fmt.printf("Oops, I did a bad? '%c':%d,%d\n", ch, chunk_pos(p), real_pos(p))
 			return
 		}
 	}
@@ -300,7 +300,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 		#partial switch state {
 		case .PartialRead:
 			p.offset = p.pos
-			get_chunk(u32(p.pos), CHUNK_SIZE)
+			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
 			return
 		case .InvalidToken:
 			trap()

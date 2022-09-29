@@ -77,12 +77,12 @@ class WasmMemoryInterface {
 		return array;
 	}
 
-	loadU8(addr) { return this.mem.getUint8  (addr, true); }
-	loadI8(addr) { return this.mem.getInt8   (addr, true); }
-	loadU16(addr) { return this.mem.getUint16 (addr, true); }
-	loadI16(addr) { return this.mem.getInt16  (addr, true); }
-	loadU32(addr) { return this.mem.getUint32 (addr, true); }
-	loadI32(addr) { return this.mem.getInt32  (addr, true); }
+	loadU8(addr) { return this.mem.getUint8(addr, true); }
+	loadI8(addr) { return this.mem.getInt8(addr, true); }
+	loadU16(addr) { return this.mem.getUint16(addr, true); }
+	loadI16(addr) { return this.mem.getInt16(addr, true); }
+	loadU32(addr) { return this.mem.getUint32(addr, true); }
+	loadI32(addr) { return this.mem.getInt32(addr, true); }
 	loadU64(addr) {
 		const lo = this.mem.getUint32(addr + 0, true);
 		const hi = this.mem.getUint32(addr + 4, true);
@@ -96,8 +96,8 @@ class WasmMemoryInterface {
 	};
 	loadF32(addr)  { return this.mem.getFloat32(addr, true); }
 	loadF64(addr)  { return this.mem.getFloat64(addr, true); }
-	loadInt(addr)  { return this.mem.getInt32  (addr, true); }
-	loadUint(addr) { return this.mem.getUint32 (addr, true); }
+	loadInt(addr)  { return this.mem.getInt32(addr, true); }
+	loadUint(addr) { return this.mem.getUint32(addr, true); }
 
 	loadPtr(addr) { return this.loadUint(addr); }
 

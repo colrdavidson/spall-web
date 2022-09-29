@@ -4,7 +4,18 @@ import "core:fmt"
 import "core:intrinsics"
 import "core:mem"
 import "core:runtime"
-import "vendor:wasm/js"
+
+PAGE_SIZE :: 64 * 1024
+
+page_alloc :: proc(page_count: uint) -> (data: []byte, err: mem.Allocator_Error) {
+	prev_page_count := intrinsics.wasm_memory_grow(0, uintptr(page_count))
+	if prev_page_count < 0 {
+		return nil, .Out_Of_Memory
+	}
+
+	ptr := ([^]u8)(uintptr(prev_page_count) * PAGE_SIZE)
+	return ptr[:page_count * PAGE_SIZE], nil
+}
 
 Arena :: struct {
 	data:       []byte,
@@ -86,7 +97,7 @@ arena_allocator_proc :: proc(
 }
 
 growing_arena_init :: proc(a: ^Arena, loc := #caller_location) {
-	chunk, err := js.page_alloc(1)
+	chunk, err := page_alloc(1)
 	if err != nil {
 		fmt.printf("OOM'd @ init | %s %s\n", err, loc)
 		trap()
@@ -105,6 +116,15 @@ growing_arena_allocator :: proc(arena: ^Arena) -> mem.Allocator {
 	}
 }
 
+_byte_slice :: #force_inline proc "contextless" (data: rawptr, #any_int len: uint) -> []byte {
+	return ([^]u8)(data)[:len]
+}
+
+_align_formula :: proc "contextless" (size, align: uint) -> uint {
+	result := size + align-1
+	return result - result%align
+}
+
 growing_arena_allocator_proc :: proc(
     allocator_data: rawptr,
     mode: mem.Allocator_Mode,
@@ -117,13 +137,13 @@ growing_arena_allocator_proc :: proc(
 
 	switch mode {
 	case .Alloc:
-		#no_bounds_check end := &arena.data[arena.offset]
+		#no_bounds_check end := &arena.data[uint(arena.offset)]
 		ptr := mem.align_forward(end, uintptr(alignment))
-		total_size := size + mem.ptr_sub((^byte)(ptr), (^byte)(end))
+		total_size := uint(size) + uint(mem.ptr_sub((^byte)(ptr), (^byte)(end)))
 
-		if arena.offset + total_size > len(arena.data) {
-			page_count := mem.align_formula(total_size, js.PAGE_SIZE) / js.PAGE_SIZE
-			new_tail, err := js.page_alloc(page_count)
+		if uint(arena.offset) + uint(total_size) > uint(len(arena.data)) {
+			page_count := _align_formula(total_size, PAGE_SIZE) / PAGE_SIZE
+			new_tail, err := page_alloc(page_count)
 			if err != nil {
 				fmt.printf("tried to get %f MB\n", f64(total_size) / 1024 / 1024)
 				fmt.printf("OOM'd @ %f MB | %s\n", f64(len(arena.data)) / 1024 / 1024, location)
@@ -131,14 +151,15 @@ growing_arena_allocator_proc :: proc(
 			}
 
 			head_ptr := raw_data(arena.data)
-			arena.data = head_ptr[:len(arena.data)+len(new_tail)]
+			#no_bounds_check arena.data = head_ptr[:u64(len(arena.data))+u64(len(new_tail))]
 			//fmt.printf("resized to %f MB\n", f64(len(arena.data)) / 1024 / 1024)
 		}
 
-		arena.offset += total_size
-		arena.peak_used = max(arena.peak_used, arena.offset)
+		arena.offset = int(uint(arena.offset) + uint(total_size))
+		arena.peak_used = int(max(uint(arena.peak_used), uint(arena.offset)))
 		mem.zero(ptr, size)
-		return mem.byte_slice(ptr, size), nil
+
+		return _byte_slice(ptr, size), nil
 
 	case .Free:
 		return nil, .Mode_Not_Implemented
@@ -147,9 +168,7 @@ growing_arena_allocator_proc :: proc(
 		arena.offset = 0
 
 	case .Resize:
-		return mem.default_resize_bytes_align(
-            mem.byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena)
-        )
+		return mem.default_resize_bytes_align(_byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena))
 
 	case .Query_Features:
 		set := (^mem.Allocator_Mode_Set)(old_memory)

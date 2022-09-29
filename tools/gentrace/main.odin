@@ -51,7 +51,7 @@ main :: proc() {
 	}
 
 	fmt.fprintf(json_fd, "{{\n\t\"traceEvents\": [\n")
-	gen_fractals(json_fd, 8, 1_000_000, 1_000_000)
-	//gen_triangles(json_fd, 8, 10, 5_000)
+	//gen_fractals(json_fd, 8, 1_000_000, 20_000_000)
+	gen_triangles(json_fd, 8, 10, 20_000_000)
 	fmt.fprintf(json_fd, "\t]\n}}")
 }

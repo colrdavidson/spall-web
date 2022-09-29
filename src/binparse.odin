@@ -14,25 +14,25 @@ BinaryState :: enum {
 }
 
 Parser :: struct {
-	pos: u32,
-	offset: u32,
+	pos: i64,
+	offset: i64,
 
 	data: []u8,
 	full_chunk: []u8,
-	chunk_start: u32,
-	total_size: u32,
+	chunk_start: i64,
+	total_size: i64,
 
 	intern: INMap,
 }
 
-real_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos }
-chunk_pos :: #force_inline proc(p: ^Parser) -> u32 { return p.pos - p.offset }
+real_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos }
+chunk_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos - p.offset }
 
 init_parser :: proc(size: u32) -> Parser {
 	p := Parser{}
 	p.pos    = 0
 	p.offset = 0
-	p.total_size = size
+	p.total_size = i64(size)
 	p.intern = in_init(big_global_allocator)
 
 	return p
@@ -44,34 +44,34 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 
 	b := p.data[chunk_pos(p):]
 
-	header_sz := u32(size_of(u64))
+	header_sz := i64(size_of(u64))
 	if real_pos(p) + header_sz > p.total_size {
 		return TempEvent{}, .Finished
 	}
-	if int(chunk_pos(p) + header_sz) > len(p.data) {
+	if i64(chunk_pos(p) + header_sz) > i64(len(p.data)) {
 		return TempEvent{}, .PartialRead
 	}
 
 	type := (^spall.Event_Type)(raw_data(p.data[chunk_pos(p):]))^
 	switch type {
 	case .Begin:
-		event_sz := u32(size_of(spall.Begin_Event))
+		event_sz := i64(size_of(spall.Begin_Event))
 		if real_pos(p) + event_sz > p.total_size {
 			return TempEvent{}, .Finished
 		}
-		if int(chunk_pos(p) + event_sz) > len(p.data) {
+		if i64(chunk_pos(p) + event_sz) > i64(len(p.data)) {
 			return TempEvent{}, .PartialRead
 		}
 		event := (^spall.Begin_Event)(raw_data(p.data[chunk_pos(p):]))^
 
-		if (real_pos(p) + event_sz + u32(event.name_len)) > p.total_size {
+		if (real_pos(p) + event_sz + i64(event.name_len)) > p.total_size {
 			return TempEvent{}, .Finished
 		}
-		if int(chunk_pos(p) + event_sz + u32(event.name_len)) > len(p.data) {
+		if i64(chunk_pos(p) + event_sz + i64(event.name_len)) > i64(len(p.data)) {
 			return TempEvent{}, .PartialRead
 		}
 
-		name := string(p.data[chunk_pos(p)+event_sz:chunk_pos(p)+event_sz+u32(event.name_len)])
+		name := string(p.data[chunk_pos(p)+event_sz:chunk_pos(p)+event_sz+i64(event.name_len)])
 		str := in_get(&p.intern, name)
 
 		ev := TempEvent{
@@ -82,14 +82,14 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 			name = str,
 		}
 
-		p.pos += u32(event_sz) + u32(event.name_len)
+		p.pos += i64(event_sz) + i64(event.name_len)
 		return ev, .EventRead
 	case .End:
-		event_sz := u32(size_of(spall.End_Event))
+		event_sz := i64(size_of(spall.End_Event))
 		if real_pos(p) + event_sz > p.total_size {
 			return TempEvent{}, .Finished
 		}
-		if int(chunk_pos(p) + event_sz) > len(p.data) {
+		if i64(chunk_pos(p) + event_sz) > i64(len(p.data)) {
 			return TempEvent{}, .PartialRead
 		}
 		event := (^spall.End_Event)(raw_data(p.data[chunk_pos(p):]))^
@@ -101,7 +101,7 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 			process_id = event.pid,
 		}
 		
-		p.pos += u32(event_sz)
+		p.pos += i64(event_sz)
 		return ev, .EventRead
 	case .StreamOver:
 		fmt.printf("Got what was formerly a Complete event. Delete the file you tried to load!!!\n@Todo: Remove this message when all the files are deleted, and start utilizing StreamOver.\n", type)
@@ -128,7 +128,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 		#partial switch state {
 		case .PartialRead:
 			p.offset = p.pos
-			get_chunk(u32(p.pos), CHUNK_SIZE)
+			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
 			return
 		case .Finished:
 			finish_loading(p)
