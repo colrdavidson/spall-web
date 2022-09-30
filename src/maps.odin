@@ -100,20 +100,24 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 }
 
 INMAP_LOAD_FACTOR :: 0.75
+
+INStr :: struct #packed {
+	start: u32,
+	len: u16,
+}
+
 // String interning
 INMap :: struct {
-	entries: [dynamic]string,
+	entries: [dynamic]INStr,
 	hashes:  [dynamic]int,
 	resize_threshold: i64,
 	len_minus_one: u32,
-	allocator: runtime.Allocator,
 }
 
-in_init :: proc(string_allocator: runtime.Allocator) -> INMap {
+in_init :: proc(allocator := context.allocator) -> INMap {
 	v := INMap{}
-	v.entries = make([dynamic]string, 0, allocator)
+	v.entries = make([dynamic]INStr, 0, allocator)
 	v.hashes = make([dynamic]int, 32, allocator) // must be a power of two
-	v.allocator = allocator
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
@@ -128,8 +132,8 @@ in_hash :: proc (key: string) -> u32 {
 }
 
 
-in_reinsert :: proc (v: ^INMap, entry: string, v_idx: int) {
-	hv := in_hash(entry) & v.len_minus_one
+in_reinsert :: proc (v: ^INMap, entry: INStr, v_idx: int) {
+	hv := in_hash(in_getstr(entry)) & v.len_minus_one
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
 		idx := (hv + i) & v.len_minus_one
 
@@ -154,7 +158,7 @@ in_grow :: proc(v: ^INMap) {
 	}
 }
 
-in_get :: proc(v: ^INMap, key: string) -> string {
+in_get :: proc(v: ^INMap, key: string) -> INStr {
 	if i64(len(v.entries)) >= v.resize_threshold {
 		in_grow(v)
 	}
@@ -166,16 +170,24 @@ in_get :: proc(v: ^INMap, key: string) -> string {
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
 			v.hashes[idx] = len(v.entries)
-			str := strings.clone(key, v.allocator)
-			append(&v.entries, str)
-			return str
-		} else if v.entries[e_idx] == key {
+
+			str_start := u32(len(string_block))
+			in_str := INStr{str_start, u16(len(key))}
+			append_elem_string(&string_block, key)
+
+			append(&v.entries, in_str)
+			return in_str
+		} else if in_getstr(v.entries[e_idx]) == key {
 			return v.entries[e_idx]
 		}
 	}
 
 	trap()
-	return ""
+	return INStr{}
+}
+
+in_getstr :: #force_inline proc(v: INStr) -> string {
+	return string(string_block[v.start:v.start+u32(v.len)])
 }
 
 // Key mashing

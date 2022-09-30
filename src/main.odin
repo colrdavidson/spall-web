@@ -30,6 +30,7 @@ t           : f64
 frame_count : int
 rect_count : int
 bucket_count : int
+was_sleeping : bool
 
 bg_color      := FVec4{}
 bg_color2     := FVec4{}
@@ -109,6 +110,8 @@ h2_height      : f64 = 0
 ch_width       : f64 = 0
 thread_gap     : f64 = 8
 graph_size: f64 = 150
+
+string_block: [dynamic]u8
 
 processes: [dynamic]Process
 process_map: ValHash
@@ -326,7 +329,7 @@ render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, y_depth: int,
 		r_x    = max(r_x, 0)
 		r_w   := end_x - r_x
 
-		idx := name_color_idx(ev.name)
+		idx := name_color_idx(in_getstr(ev.name))
 		rect_color := color_choices[idx]
 
 		draw_rect := DrawRect{f32(r_x), f32(r_w), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
@@ -428,7 +431,8 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 			continue
 		}
 
-		idx := name_color_idx(ev.name)
+		ev_name := in_getstr(ev.name)
+		idx := name_color_idx(ev_name)
 		rect_color := color_choices[idx]
 
 		e_idx := start_idx + de_id
@@ -453,11 +457,12 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 		}
 
 		underhang := disp_rect.pos.x - dr.pos.x
-		disp_w := min(dr.size.x - underhang, dr.size.x)
+		overhang := (disp_rect.pos.x + disp_rect.size.x) - dr.pos.x
+		disp_w := min(dr.size.x - underhang, dr.size.x, overhang)
 
-		display_name := ev.name
+		display_name := ev_name
 		if ev.duration == -1 {
-			display_name = fmt.tprintf("%s (Did Not Finish)", ev.name)
+			display_name = fmt.tprintf("%s (Did Not Finish)", ev_name)
 		}
 		text_pad := (em / 2)
 		text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
@@ -476,7 +481,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 }
 
 @export
-frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
+frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	context = wasmContext
 	defer frame_count += 1
 
@@ -526,6 +531,12 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		clicked = false
 		is_hovering = false
 		was_mouse_down = false
+	}
+
+	dt := _dt
+	if was_sleeping {
+		dt = 0.001
+		was_sleeping = false
 	}
 
 	gl_rects = make([dynamic]DrawRect, 0, int(width / 2), temp_allocator)
@@ -955,10 +966,11 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 							continue scan_loop
 						}
 
-						s, ok := &stats[ev.name]
+						name := in_getstr(ev.name)
+						s, ok := &stats[name]
 						if !ok {
-							stats[ev.name] = Stats{min_time = 1e308}
-							s = &stats[ev.name]
+							stats[name] = Stats{min_time = 1e308}
+							s = &stats[name]
 						}
 						s.count += 1
 						s.total_time += duration
@@ -1103,7 +1115,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 
 		thread := processes[p_idx].threads[t_idx]
 		event := thread.depths[d_idx].events[e_idx]
-		draw_text(fmt.tprintf("Event: \"%s\"", event.name), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("Event: \"%s\"", in_getstr(event.name)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("start time: %s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("end time: %s", time_fmt((event.timestamp - total_min_time) + bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 		draw_text(fmt.tprintf("duration: %s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
@@ -1185,7 +1197,7 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 		y := height - em - top_line_gap
 
 		if queue.len(fps_history) > 100 { queue.pop_front(&fps_history) }
-		queue.push_back(&fps_history, u32(1 / dt))
+		queue.push_back(&fps_history, u32(1 / _dt))
 		draw_graph("FPS", &fps_history, Vec2{width - mini_graph_padded_width - 160, disp_rect.pos.y + graph_header_height})
 
 		hash_str := fmt.tprintf("Build: 0x%X", abs(build_hash))
@@ -1218,9 +1230,11 @@ frame :: proc "contextless" (width, height: f64, dt: f64) -> bool {
 	if math.abs(cam.pan.x - cam.target_pan_x) < EPSILON && 
 	   math.abs(cam.vel.y - 0) < EPSILON && 
 	   math.abs(cam.current_scale - cam.target_scale) < EPSILON {
+		was_sleeping = true
 		return false
 	}
 
+	was_sleeping = false
 	return true
 }
 

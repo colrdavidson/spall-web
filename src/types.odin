@@ -61,20 +61,20 @@ ChunkNode :: struct #packed {
 TempEvent :: struct {
 	type: EventType,
 	scope: EventScope,
-	name: string,
+	name: INStr,
 	duration: f64,
 	timestamp: f64,
 	thread_id: u32,
 	process_id: u32,
 }
 Instant :: struct #packed {
-	name: string,
+	name: INStr,
 	timestamp: f64,
 }
 
 Event :: struct #packed {
 	type: EventType,
-	name: string,
+	name: INStr,
 	timestamp: f64,
 	duration: f64,
 	depth: u16,

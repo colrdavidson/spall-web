@@ -78,7 +78,7 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec4, f32) {
 	color := FVec4{}
 	color_weights := [choice_count]f32{}
 	for ev in events {
-		idx := name_color_idx(ev.name)
+		idx := name_color_idx(in_getstr(ev.name))
 
 		duration := f32(bound_duration(ev, thread_max))
 		if duration <= 0 {
@@ -227,6 +227,7 @@ init_loading_state :: proc(size: u32) {
 	processes = make([dynamic]Process, small_global_allocator)
 	process_map = vh_init(scratch_allocator)
 	global_instants = make([dynamic]Instant, big_global_allocator)
+	string_block = make([dynamic]u8, big_global_allocator)
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
 
