@@ -1226,10 +1226,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	}
 
 	// save me my battery, plz
-	EPSILON :: 0.001
-	if math.abs(cam.pan.x - cam.target_pan_x) < EPSILON && 
-	   math.abs(cam.vel.y - 0) < EPSILON && 
-	   math.abs(cam.current_scale - cam.target_scale) < EPSILON {
+	PAN_EPSILON :: 0.001
+	SCALE_EPSILON :: 0.00000001
+	if math.abs(cam.pan.x - cam.target_pan_x) < PAN_EPSILON && 
+	   math.abs(cam.vel.y - 0) < PAN_EPSILON && 
+	   math.abs(cam.current_scale - cam.target_scale) < SCALE_EPSILON {
 		was_sleeping = true
 		return false
 	}
