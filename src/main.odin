@@ -261,6 +261,11 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 	depth := thread.depths[depth_idx]
 	tree := depth.tree
 
+	if len(tree) == 0 {
+		fmt.printf("depth_idx: %d, depth count: %d, %v\n", depth_idx, len(thread.depths), thread.depths)
+		trap()
+	}
+
 	// If we blow this, we're in space
 	tree_stack := [128]int{}
 	stack_len := 0
@@ -1226,11 +1231,15 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	}
 
 	// save me my battery, plz
-	PAN_EPSILON :: 0.001
+	PAN_X_EPSILON :: 1.0
+	PAN_Y_EPSILON :: 1.0
 	SCALE_EPSILON :: 0.00000001
-	if math.abs(cam.pan.x - cam.target_pan_x) < PAN_EPSILON && 
-	   math.abs(cam.vel.y - 0) < PAN_EPSILON && 
+	if math.abs(cam.pan.x - cam.target_pan_x) < PAN_X_EPSILON && 
+	   math.abs(cam.vel.y - 0) < PAN_Y_EPSILON && 
 	   math.abs(cam.current_scale - cam.target_scale) < SCALE_EPSILON {
+		cam.pan.x = cam.target_pan_x
+		cam.vel.y = 0
+		cam.current_scale = cam.target_scale
 		was_sleeping = true
 		return false
 	}
