@@ -44,6 +44,7 @@ outline_color := FVec4{}
 toolbar_color := FVec4{}
 graph_color   := FVec4{}
 highlight_color := FVec4{}
+shadow_color := FVec4{}
 wide_rect_color := FVec4{}
 wide_bg_color := FVec4{}
 
@@ -142,6 +143,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		highlight_color  = FVec4{  0,   0, 255,  32}
 		wide_rect_color  = FVec4{  0, 255,   0,   0}
 		wide_bg_color    = FVec4{  0,   0,   0, 255}
+		shadow_color     = FVec4{  0,   0,   0, 120}
 	} else {
 		bg_color         = FVec4{254, 252, 248, 255}
 		bg_color2        = FVec4{255, 255, 255, 255}
@@ -157,6 +159,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		highlight_color  = FVec4{255, 255,   0,  32}
 		wide_rect_color  = FVec4{  0, 255,   0,   0}
 		wide_bg_color    = FVec4{  0,  0,    0, 255}
+		shadow_color     = FVec4{  0,   0,   0,  15}
 	}
 }
 
@@ -924,8 +927,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		layer_count += len(proc_v.threads)
 	}
 
-	highlight_start_x := rescale(start_time, 0, total_max_time - total_min_time, 0, display_width)
-	highlight_end_x := rescale(end_time, 0, total_max_time - total_min_time, 0, display_width)
 
 	append(&gl_rects, DrawRect{f32(start_x), f32(display_width), {u8(wide_bg_color.x), u8(wide_bg_color.y), u8(wide_bg_color.z), u8(wide_bg_color.w)}})
 	gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
@@ -943,10 +944,25 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		}
 	}
 
-	highlight_width := max(highlight_end_x - highlight_start_x, 2.0)
-	highlight_box := rect(start_x + highlight_start_x, wide_graph_y, highlight_width, wide_graph_height)
-	draw_rect(highlight_box, FVec4{255, 165, 0, 40})
-	draw_rect_outline(highlight_box, 2, FVec4{255, 130, 0, 255})
+	highlight_start_x := rescale(start_time, 0, total_max_time - total_min_time, 0, display_width)
+	highlight_end_x := rescale(end_time, 0, total_max_time - total_min_time, 0, display_width)
+
+	highlight_width := highlight_end_x - highlight_start_x
+	min_highlight := 5.0
+	if highlight_width < min_highlight {
+		high_center := (highlight_start_x + highlight_end_x) / 2
+		highlight_start_x = high_center - (min_highlight / 2)
+		highlight_end_x = high_center + (min_highlight / 2)
+	}
+
+	highlight_box_l := rect(start_x, wide_graph_y, highlight_start_x, wide_graph_height)
+	draw_rect(highlight_box_l, FVec4{0, 0, 0, 150})
+
+	highlight_box_r := rect(start_x + highlight_end_x, wide_graph_y, display_width - highlight_end_x, wide_graph_height)
+	draw_rect(highlight_box_r, FVec4{0, 0, 0, 150})
+
+	draw_line(Vec2{start_x + highlight_start_x, wide_graph_y}, Vec2{start_x + highlight_start_x, wide_graph_y + wide_graph_height}, 3, bg_color2)
+	draw_line(Vec2{start_x + highlight_end_x, wide_graph_y}, Vec2{start_x + highlight_end_x, wide_graph_y + wide_graph_height}, 3, bg_color2)
 
 	// Draw mini-graph
 	mini_rect_height := (em / 2)
@@ -970,7 +986,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	preview_height := display_height * y_scale
 
 	draw_rect(rect(mini_start_x, disp_rect.pos.y, mini_graph_padded_width, preview_height), highlight_color)
-	draw_rect(rect(mini_start_x, disp_rect.pos.y + preview_height, mini_graph_padded_width, display_height - preview_height), FVec4{0, 0, 0, 8})
+	draw_rect(rect(mini_start_x, disp_rect.pos.y + preview_height, mini_graph_padded_width, display_height - preview_height), shadow_color)
 
 	// Draw timestamps on subdivision lines
 	for i := 0; i < ticks; i += 1 {
