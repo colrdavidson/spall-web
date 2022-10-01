@@ -193,6 +193,7 @@ to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
 	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
 }
 
+first_frame := true
 CHUNK_SIZE :: 10 * 1024 * 1024
 main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
@@ -228,9 +229,6 @@ main :: proc() {
 	random_seed = u64(get_time()) * 11400714819323198485
 	rand.set_global_seed(random_seed)
 	fmt.printf("Seed is 0x%X\n", random_seed)
-
-	manual_load(default_config)
-	queue.init(&fps_history, 0, small_global_allocator)
 }
 
 random_seed: u64
@@ -489,6 +487,12 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	context = wasmContext
 	defer frame_count += 1
+
+	if first_frame {
+		manual_load(default_config)
+		first_frame = false
+		return true
+	}
 
 	// render loading screen
 	if loading_config {

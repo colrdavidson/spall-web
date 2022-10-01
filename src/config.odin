@@ -5,6 +5,7 @@ import "core:strings"
 import "core:mem"
 import "core:math/rand"
 import "core:strconv"
+import "core:container/queue"
 import "formats:spall"
 
 start_time: u64
@@ -286,6 +287,7 @@ finish_loading :: proc (p: ^Parser) {
 
 	free_all(temp_allocator)
 	free_all(scratch_allocator)
+	queue.init(&fps_history, 0, small_global_allocator)
 
 	loading_config = false
 	post_loading = true
