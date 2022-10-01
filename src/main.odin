@@ -61,6 +61,8 @@ selected_event := EventID{-1, -1, -1, -1}
 dpr: f64
 rect_height: f64
 disp_rect: Rect
+graph_rect: Rect
+padded_graph_rect: Rect
 gl_rects: [dynamic]DrawRect
 
 _p_font_size : f64 = 1
@@ -255,6 +257,85 @@ name_color_idx :: proc(name: string) -> u32 {
 	return u32(uintptr(raw_data(name))) & u32(len(color_choices) - 1)
 }
 
+render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: int) {
+	depth := thread.depths[0]
+	tree := depth.tree
+
+	// If we blow this, we're in space
+	tree_stack := [128]int{}
+	stack_len := 0
+
+	alpha : u8 = 255 / u8(layer_count)
+	tree_stack[0] = depth.head; stack_len += 1
+	for stack_len > 0 {
+		stack_len -= 1
+
+		tree_idx := tree_stack[stack_len]
+		cur_node := tree[tree_idx]
+		range := cur_node.end_time - cur_node.start_time
+		range_width := range * scale
+
+		// draw summary faketangle
+		min_width := 2.0 
+		if range_width < min_width {
+			x := cur_node.start_time
+			w := min_width
+			xm := x * scale
+
+			r_x   := x * scale
+			end_x := r_x + w
+
+			r_x   += start_x
+			end_x += start_x
+
+			r_x    = max(r_x, 0)
+			r_w   := end_x - r_x
+
+			rect_color := cur_node.avg_color
+			draw_rect := DrawRect{f32(r_x), f32(r_w), {0, 200, 0, alpha}}
+			append(&gl_rects, draw_rect)
+			continue
+		}
+
+		// we're at a bottom node, draw the whole thing
+		if cur_node.child_count == 0 {
+			scan_arr := depth.events[cur_node.start_idx:cur_node.end_idx]
+			render_wideevents(scan_arr, thread.max_time, start_x, scale, alpha)
+			continue
+		}
+
+		for i := (cur_node.child_count - 1); i >= 0; i -= 1 {
+			tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
+		}
+	}
+}
+
+render_wideevents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64, scale: f64, alpha: u8) {
+
+	for ev, de_id in scan_arr {
+		x := ev.timestamp - total_min_time
+		duration := bound_duration(ev, thread_max_time)
+		w := max(duration * scale, 2.0)
+		xm := x * scale
+
+		// Carefully extract the [start, end] interval of the rect so that we can clip the left
+		// side to 0 before sending it to draw_rect, so we can prevent f32 (f64?) precision
+		// problems drawing a rectangle which starts at a massively huge negative number on
+		// the left.
+		r_x   := x * scale
+		end_x := r_x + w
+
+		r_x   += start_x
+		end_x += start_x
+
+		r_x    = max(r_x, 0)
+		r_w   := end_x - r_x
+
+		draw_rect := DrawRect{f32(r_x), f32(r_w), {0, 200, 0, alpha}}
+		append(&gl_rects, draw_rect)
+	}
+}
+
 render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f64) {
 	depth := thread.depths[depth_idx]
 	tree := depth.tree
@@ -302,7 +383,7 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
 			scan_arr := depth.events[cur_node.start_idx:cur_node.end_idx]
-			render_minievents(scan_arr, thread.max_time, depth_idx, start_x, scale)
+			render_minievents(scan_arr, thread.max_time, start_x, scale)
 			continue
 		}
 
@@ -312,7 +393,7 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 	}
 }
 
-render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, y_depth: int, start_x: f64, scale: f64) {
+render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64, scale: f64) {
 	for ev, de_id in scan_arr {
 		x := ev.timestamp - total_min_time
 		duration := bound_duration(ev, thread_max_time)
@@ -430,7 +511,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 		r_y := y_start + y
 		dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
 
-		if !rect_in_rect(dr, disp_rect) {
+		if !rect_in_rect(dr, graph_rect) {
 			continue
 		}
 
@@ -598,10 +679,13 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	mini_graph_padded_width := mini_graph_width + (mini_graph_pad * 2)
 	mini_start_x := width - mini_graph_padded_width
 
+	wide_graph_y := toolbar_height
+	wide_graph_height := (em * 2)
+
 	start_x := x_pad_size
 	end_x := width - x_pad_size
 	display_width := width - (start_x + mini_graph_padded_width)
-	start_y := toolbar_height
+	start_y := toolbar_height + wide_graph_height
 	end_y   := info_pane_y
 	display_height := end_y - start_y
 
@@ -623,18 +707,22 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	max_x := width - x_pad_size
 
 	disp_rect = rect(start_x, start_y, display_width, display_height)
-	//draw_rect_outline(rect(disp_rect.pos.x, disp_rect.pos.y, disp_rect.size.x, disp_rect.size.y - 1), 1, FVec3{255, 0, 0})
+	//draw_rect_outline(rect(disp_rect.pos.x, disp_rect.pos.y, disp_rect.size.x, disp_rect.size.y - 1), 1, FVec4{255, 0, 0, 255})
 
-	graph_rect := disp_rect
-	graph_rect.pos.y += graph_header_height
-	graph_rect.size.y -= graph_header_height
-	//draw_rect_outline(rect(graph_rect.pos.x, graph_rect.pos.y, graph_rect.size.x, graph_rect.size.y - 1), 1, Vec3{0, 0, 255})
+	graph_rect = disp_rect
+	graph_rect.pos.y += graph_header_text_height
+	graph_rect.size.y -= graph_header_text_height
+	padded_graph_rect = graph_rect
+	padded_graph_rect.pos.y += graph_header_line_gap
+	padded_graph_rect.size.y -= graph_header_line_gap
+
+	//draw_rect_outline(rect(graph_rect.pos.x, graph_rect.pos.y, graph_rect.size.x, graph_rect.size.y - 1), 1, FVec4{0, 0, 255, 255})
 
 	old_scale := cam.target_scale
 
 	max_scale := 10000000.0
 	min_scale := 0.5 * display_width / (total_max_time - total_min_time)
-	/* if pt_in_rect(mouse_pos, disp_rect) */ {
+	{
 		cam.target_scale *= _pow(1.0025, -scroll_val_y)
 		cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
 	}
@@ -713,7 +801,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 
-
 	start_time, end_time := get_current_window(cam, display_width)
 
 	// Draw time subdivision lines
@@ -761,12 +848,14 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	clicked_on_rect = false
 	rect_count = 0
 	bucket_count = 0
-	cur_y := graph_rect.pos.y - cam.pan.y
+	cur_y := padded_graph_rect.pos.y - cam.pan.y
 	proc_loop: for proc_v, p_idx in &processes {
 		h1_size : f64 = 0
 		if len(processes) > 1 {
-			row_text := fmt.tprintf("PID: %d", proc_v.process_id)
-			draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
+			if cur_y > disp_rect.pos.y {
+				row_text := fmt.tprintf("PID: %d", proc_v.process_id)
+				draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
+			}
 
 			h1_size = h1_height + (h1_height / 2)
 			cur_y += h1_size
@@ -787,8 +876,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				continue
 			}
 
-			row_text := fmt.tprintf("TID: %d", tm.thread_id)
-			draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
+			if last_cur_y > disp_rect.pos.y {
+				row_text := fmt.tprintf("TID: %d", tm.thread_id)
+				draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
+			}
 
 			cur_depth_off := 0
 			for depth, d_idx in &tm.depths {
@@ -810,20 +901,55 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	// Chop sides of screen
 	draw_rect(rect(0, disp_rect.pos.y, width - mini_graph_padded_width, graph_header_text_height), bg_color) // top
-	draw_rect(rect(0, disp_rect.pos.y + graph_header_text_height, graph_rect.pos.x, height), bg_color2) // left
-	draw_line(Vec2{0, disp_rect.pos.y + graph_header_text_height}, Vec2{width - mini_graph_padded_width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
+	draw_rect(rect(0, toolbar_height, start_x, height), bg_color) // left
+
+	draw_line(Vec2{start_x, disp_rect.pos.y + graph_header_text_height}, Vec2{width - mini_graph_padded_width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
 
 	append(&gl_rects, DrawRect{f32(mini_start_x), f32(mini_graph_width + (mini_graph_pad * 2)), {u8(bg_color.x), u8(bg_color.y), u8(bg_color.z), 255}})
 	gl_push_rects(gl_rects[:], disp_rect.pos.y + graph_header_text_height, height)
 	resize(&gl_rects, 0)
-	draw_line(Vec2{mini_start_x, disp_rect.pos.y}, Vec2{mini_start_x, height}, 0.5, line_color)
+	draw_line(Vec2{mini_start_x, toolbar_height}, Vec2{mini_start_x, info_pane_y}, 0.5, line_color)
+	draw_line(Vec2{start_x, toolbar_height}, Vec2{start_x, info_pane_y}, 0.5, line_color)
 
+
+	// Draw top wide-graph
+	wide_scale_x := rescale(1.0, 0, total_max_time - total_min_time, 0, display_width)
+	layer_count := 0
+	for proc_v, _ in processes {
+		for _, _ in proc_v.threads {
+			layer_count += 1
+		}
+	}
+
+	highlight_start_x := rescale(start_time, 0, total_max_time - total_min_time, 0, display_width)
+	highlight_end_x := rescale(end_time, 0, total_max_time - total_min_time, 0, display_width)
+
+	append(&gl_rects, DrawRect{f32(start_x), f32(display_width), {0, 0, 0, 255}})
+	gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
+	resize(&gl_rects, 0)
+
+	for proc_v, p_idx in &processes {
+		for tm, t_idx in &proc_v.threads {
+			if len(tm.depths) == 0 {
+				continue
+			}
+
+			render_widetree(&tm, start_x, wide_scale_x, layer_count)
+			gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
+			resize(&gl_rects, 0)
+		}
+	}
+
+	highlight_width := max(highlight_end_x - highlight_start_x, 2.0)
+	draw_rect(rect(start_x + highlight_start_x, wide_graph_y, highlight_width, wide_graph_height), FVec4{255, 165, 0, 150})
+
+	// Draw mini-graph
 	mini_rect_height := (em / 2)
 	mini_thread_gap := 8.0
 	x_scale := rescale(1.0, 0, total_max_time - total_min_time, 0, mini_graph_width)
 	y_scale := mini_rect_height / rect_height
 
-	tree_y : f64 = graph_rect.pos.y - (cam.pan.y * y_scale)
+	tree_y : f64 = padded_graph_rect.pos.y - (cam.pan.y * y_scale)
 	for proc_v, p_idx in &processes {
 		for tm, t_idx in &proc_v.threads {
 			for depth, d_idx in &tm.depths {
@@ -863,8 +989,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		draw_text(time_str, Vec2{start_x + x_off - (text_width / 2), disp_rect.pos.y + (graph_header_text_height / 2) - (em / 2)}, p_font_size, default_font, text_color)
 	}
 
-	// Remove top-right chunk
-	draw_rect(rect(width - mini_graph_padded_width, disp_rect.pos.y, width, graph_header_text_height), bg_color) // top
+	// Remove top-left and top-right chunk
+	draw_rect(rect(width - mini_graph_padded_width, toolbar_height, width, graph_header_text_height + wide_graph_height), bg_color) // top-right
+	draw_rect(rect(0, toolbar_height, start_x, graph_header_text_height + wide_graph_height), bg_color) // top-left
 
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
@@ -1235,7 +1362,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	}
 
 	// save me my battery, plz
-	PAN_X_EPSILON :: 1.0
+	PAN_X_EPSILON :: 0.01
 	PAN_Y_EPSILON :: 1.0
 	SCALE_EPSILON :: 0.00000001
 	if math.abs(cam.pan.x - cam.target_pan_x) < PAN_X_EPSILON && 
