@@ -40,6 +40,8 @@ text_color3   := FVec4{}
 button_color  := FVec4{}
 button_color2 := FVec4{}
 line_color    := FVec4{}
+division_color    := FVec4{}
+subdivision_color := FVec4{}
 outline_color := FVec4{}
 toolbar_color := FVec4{}
 graph_color   := FVec4{}
@@ -144,6 +146,9 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		wide_rect_color  = FVec4{  0, 255,   0,   0}
 		wide_bg_color    = FVec4{  0,   0,   0, 255}
 		shadow_color     = FVec4{  0,   0,   0, 120}
+
+		subdivision_color = FVec4{ 30,  30, 30, 255}
+		division_color    = FVec4{100, 100, 100, 255}
 	} else {
 		bg_color         = FVec4{254, 252, 248, 255}
 		bg_color2        = FVec4{255, 255, 255, 255}
@@ -160,6 +165,9 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		wide_rect_color  = FVec4{  0, 255,   0,   0}
 		wide_bg_color    = FVec4{  0,  0,    0, 255}
 		shadow_color     = FVec4{  0,   0,   0,  15}
+
+		subdivision_color = FVec4{230, 230, 230, 255}
+		division_color    = FVec4{180, 180, 180, 255}
 	}
 }
 
@@ -833,18 +841,19 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	ticks := int(tick_range / division) + 3
 
+	subdivisions := 5
 	line_x_start := -4
-	line_x_end   := ticks * 2
+	line_x_end   := ticks * subdivisions
 
 	line_start := disp_rect.pos.y + graph_header_height - top_line_gap
 	line_height := graph_rect.size.y
 	for i := line_x_start; i < line_x_end; i += 1 {
-		tick_time := draw_tick_start + (f64(i) * (division / 2))
+		tick_time := draw_tick_start + (f64(i) * (division / f64(subdivisions)))
 		x_off := (tick_time * cam.current_scale) + cam.pan.x
 
-		color := ((i % 2) == 1 ? line_color : text_color) * 0.75
+		color := (i % subdivisions) != 0 ? subdivision_color : division_color
 
-		draw_rect := DrawRect{f32(start_x + x_off), f32(1.5), {u8(color.x), u8(color.y), u8(color.z), 168}}
+		draw_rect := DrawRect{f32(start_x + x_off), f32(1.5), {u8(color.x), u8(color.y), u8(color.z), u8(color.w)}}
 		append(&gl_rects, draw_rect)
 	}
 
@@ -1288,14 +1297,16 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		color_text = "\uf111"
 	}
 
-	if button(rect(edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
-		reset_camera(display_width)
-	}
-	if button(rect(edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
+	logo_text := "spall"
+	logo_pad := edge_pad
+	logo_width := measure_text(logo_text, h1_font_size, default_font)
+	draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+
+	if button(rect(edge_pad + logo_width + logo_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 		open_file_dialog()
 	}
-	if button(rect(edge_pad + (button_width * 2) + (button_pad * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", icon_font) {
-		enable_debug = !enable_debug
+	if button(rect(edge_pad + logo_width + logo_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
+		reset_camera(display_width)
 	}
 
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
@@ -1324,6 +1335,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			set_session_storage("colormode", "light")
 		}
 		colormode = new_colormode
+	}
+	if button(rect(width - edge_pad - ((button_width * 2) + (button_pad * 2)), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", icon_font) {
+		enable_debug = !enable_debug
 	}
 
 	if !is_hovering {
