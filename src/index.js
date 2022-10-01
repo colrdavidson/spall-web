@@ -363,6 +363,7 @@ async function init() {
 	function load_file(file) {
 		loading_file = file;
 		loading_reader = new FileReader();
+
 		try {
 			window.wasm.start_loading_file(loading_file.size);
 			wakeUp();
@@ -375,6 +376,10 @@ async function init() {
 
 	let fd = document.getElementById('file-dialog');
 	fd.addEventListener("change", () => {
+		if (fd.files.length == 0) {
+			return;
+		}
+
 		load_file(fd.files[0]);
 	}, false);
 
