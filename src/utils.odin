@@ -111,7 +111,7 @@ time_fmt :: proc(time: f64) -> string {
 
 	secs := math.floor(math.mod(time / ONE_SECOND, 1000))
 	if secs > 0 && secs < 1000 {
-		seconds_str = fmt.tprintf("%.0fs", secs)
+		seconds_str = fmt.tprintf(" %.0fs", secs)
 	} 
 
 	millis := math.floor(math.mod(time / ONE_MILLI, 1000))
