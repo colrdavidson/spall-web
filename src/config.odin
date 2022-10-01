@@ -55,16 +55,15 @@ jp: JSONParser
 bp: Parser
 
 @export
-start_loading_file :: proc "contextless" (size: u32) {
+start_loading_file :: proc "contextless" (size: u32, name: string) {
 	context = wasmContext
-
-	init_loading_state(size)
+	init_loading_state(size, name)
 	get_chunk(0.0, f64(CHUNK_SIZE))
 
 }
 
-manual_load :: proc(config: string) {
-	init_loading_state(u32(len(config)))
+manual_load :: proc(config, name: string) {
+	init_loading_state(u32(len(config)), name)
 	load_config_chunk(0, u32(len(config)), transmute([]u8)config)
 }
 
@@ -218,7 +217,10 @@ chunk_events :: proc() {
 
 instant_count := 0
 first_chunk: bool
-init_loading_state :: proc(size: u32) {
+init_loading_state :: proc(size: u32, name: string) {
+	b := strings.builder_from_slice(file_name_store[:])
+	strings.write_string(&b, name)
+	file_name = strings.to_string(b)
 
 	selected_event = EventID{-1, -1, -1, -1}
 	free_all(scratch_allocator)
@@ -359,4 +361,5 @@ default_config := `[
 ]`
 */
 
-default_config := string(#load("../demos/example_config.json"))
+default_config_name :: "../demos/example_config.json"
+default_config := string(#load(default_config_name))

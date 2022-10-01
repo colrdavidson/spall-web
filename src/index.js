@@ -365,7 +365,7 @@ async function init() {
 		loading_reader = new FileReader();
 
 		try {
-			window.wasm.start_loading_file(loading_file.size);
+			window.wasm.start_loading_file(loading_file.size, ...str(loading_file.name));
 			wakeUp();
 		} catch (e) {
 			console.error(e);
@@ -583,7 +583,6 @@ async function init() {
 			[...e.dataTransfer.items].forEach((item, i) => {
 				if (item.kind === "file") {
 					let file = item.getAsFile();
-
 					load_file(file);
 				}
 			});

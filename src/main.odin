@@ -129,6 +129,9 @@ event_count: i64
 total_max_time: f64
 total_min_time: f64
 
+file_name_store: [1024]u8
+file_name: string
+
 default_colors :: proc "contextless" (is_dark: bool) {
 	if is_dark {
 		bg_color         = FVec4{15,   15,  15, 255}
@@ -586,7 +589,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	defer frame_count += 1
 
 	if first_frame {
-		manual_load(default_config)
+		manual_load(default_config, default_config_name)
 		first_frame = false
 		return true
 	}
@@ -1301,6 +1304,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	logo_pad := edge_pad
 	logo_width := measure_text(logo_text, h1_font_size, default_font)
 	draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+
+	file_name_width := measure_text(file_name, h1_font_size, default_font)
+	draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
 
 	if button(rect(edge_pad + logo_width + logo_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 		open_file_dialog()
