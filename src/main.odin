@@ -973,23 +973,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	draw_rect(rect(mini_start_x, disp_rect.pos.y + preview_height, mini_graph_padded_width, display_height - preview_height), FVec4{0, 0, 0, 8})
 
 	// Draw timestamps on subdivision lines
-	ONE_SECOND :: 1000 * 1000
-	ONE_MILLI :: 1000
 	for i := 0; i < ticks; i += 1 {
 		tick_time := draw_tick_start + (f64(i) * division)
 		x_off := (tick_time * cam.current_scale) + cam.pan.x
 
-		time_str: string
-		if abs(tick_range) > ONE_SECOND {
-			cur_time := tick_time / ONE_SECOND
-			time_str = fmt.tprintf("%.3f s", cur_time)
-		} else if abs(tick_range) > ONE_MILLI {
-			cur_time := tick_time / ONE_MILLI
-			time_str = fmt.tprintf("%.3f ms", cur_time)
-		} else {
-			time_str = fmt.tprintf("%.2f μs", tick_time)
-		}
-
+		time_str := time_fmt(tick_time)
 		text_width := measure_text(time_str, p_font_size, default_font)
 		draw_text(time_str, Vec2{start_x + x_off - (text_width / 2), disp_rect.pos.y + (graph_header_text_height / 2) - (em / 2)}, p_font_size, default_font, text_color)
 	}
@@ -1197,21 +1185,21 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 			perc := (stat.total_time / total_tracked_time) * 100
 
-			total_text := fmt.tprintf("%10s", time_fmt(stat.total_time, true))
+			total_text := fmt.tprintf("%10s", stat_fmt(stat.total_time))
 			perc_text := fmt.tprintf("%.1f%%", perc)
 
 			min := stat.min_time
-			min_text := fmt.tprintf("%10s", time_fmt(f64(min), true))
+			min_text := fmt.tprintf("%10s", stat_fmt(f64(min)))
 
 			avg := stat.total_time / f64(stat.count)
-			avg_text := fmt.tprintf("%10s", time_fmt(avg, true))
+			avg_text := fmt.tprintf("%10s", stat_fmt(avg))
 
 			num_standard_deviations := 2.326348 // ninety-ninth percentile is 2.326348 standard deviations greater than the mean
 			_99p := math.lerp(stat.min_time, stat.max_time, f32((2 + num_standard_deviations) / 4))
-			_99p_text := fmt.tprintf("%10s", time_fmt(f64(_99p), true))
+			_99p_text := fmt.tprintf("%10s", stat_fmt(f64(_99p)))
 
 			max := stat.max_time
-			max_text := fmt.tprintf("%10s", time_fmt(f64(max), true))
+			max_text := fmt.tprintf("%10s", stat_fmt(f64(max)))
 
 			full_perc_width := measure_text(perc_text, p_font_size, monospace_font)
 			perc_width := (ch_width * 6) - full_perc_width

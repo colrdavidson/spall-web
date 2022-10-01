@@ -88,10 +88,10 @@ hex_to_fvec :: proc "contextless" (v: u32) -> FVec4 {
 ONE_SECOND :: 1000 * 1000
 ONE_MILLI :: 1000
 ONE_NANO :: 0.001
-time_fmt :: proc(time: f64, aligned := false) -> string {
+stat_fmt :: proc(time: f64) -> string {
 	if time > ONE_SECOND {
 		cur_time := time / ONE_SECOND
-		return fmt.tprintf("%.3f s%s", cur_time, aligned ? " " : "")
+		return fmt.tprintf("%.3f s%s", cur_time, " ")
 	} else if time > ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.3f ms", cur_time)
@@ -101,6 +101,35 @@ time_fmt :: proc(time: f64, aligned := false) -> string {
 		cur_time := time / ONE_NANO
 		return fmt.tprintf("%.3f ns", cur_time)
 	}
+}
+
+time_fmt :: proc(time: f64) -> string {
+	seconds_str: string
+	millis_str : string
+	micros_str : string
+	nanos_str  : string
+
+	secs := math.floor(math.mod(time / ONE_SECOND, 1000))
+	if secs > 0 && secs < 1000 {
+		seconds_str = fmt.tprintf("%.0f s", secs)
+	} 
+
+	millis := math.floor(math.mod(time / ONE_MILLI, 1000))
+	if millis > 0 && millis < 1000 {
+		millis_str = fmt.tprintf(" %.0f ms", millis)
+	} 
+
+	micros := math.floor(math.mod(time, 1000))
+	if micros > 0 && micros < 1000 {
+		micros_str = fmt.tprintf(" %.0f μs", micros)
+	}
+
+	nanos := math.floor((time - math.floor(time)) * 1000)
+	if (nanos > 0 && nanos < 1000) || time == 0 {
+		nanos_str = fmt.tprintf(" %.0f ns", nanos)
+	}
+
+	return fmt.tprintf("%s%s%s%s", seconds_str, millis_str, micros_str, nanos_str)
 }
 
 parse_u32 :: proc(str: string) -> (u32, bool) {
