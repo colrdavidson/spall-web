@@ -271,7 +271,7 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 	tree_stack := [128]int{}
 	stack_len := 0
 
-	alpha : u8 = u8(255.0 / f64(layer_count))
+	alpha := u8(255.0 / f64(layer_count))
 	tree_stack[0] = depth.head; stack_len += 1
 	for stack_len > 0 {
 		stack_len -= 1

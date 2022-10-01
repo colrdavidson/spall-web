@@ -432,6 +432,7 @@ async function init() {
 
 			window.wasm.zoom(0, -deltaY * 2);
 			pinch_start_pos = new_start_pos;
+			wakeUp();
 		}
 	}, {passive: false});
 	window.addEventListener('touchend', e => {
