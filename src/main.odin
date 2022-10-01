@@ -44,6 +44,8 @@ outline_color := FVec4{}
 toolbar_color := FVec4{}
 graph_color   := FVec4{}
 highlight_color := FVec4{}
+wide_rect_color := FVec4{}
+wide_bg_color := FVec4{}
 
 default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
 monospace_font := `monospace`
@@ -137,7 +139,9 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		outline_color    = FVec4{80,   80,  80, 255}
 		toolbar_color    = FVec4{120, 120, 120, 255}
 		graph_color      = FVec4{180, 180, 180, 255}
-		highlight_color  = FVec4{  0,   0, 255, 32}
+		highlight_color  = FVec4{  0,   0, 255,  32}
+		wide_rect_color  = FVec4{  0, 255,   0,   0}
+		wide_bg_color    = FVec4{  0,   0,   0, 255}
 	} else {
 		bg_color         = FVec4{254, 252, 248, 255}
 		bg_color2        = FVec4{255, 255, 255, 255}
@@ -150,7 +154,9 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		outline_color    = FVec4{219, 211, 205, 255}
 		toolbar_color    = FVec4{219, 211, 205, 255}
 		graph_color      = FVec4{69,   49,  34, 255}
-		highlight_color  = FVec4{255, 255,   0, 32}
+		highlight_color  = FVec4{255, 255,   0,  32}
+		wide_rect_color  = FVec4{  0, 255,   0,   0}
+		wide_bg_color    = FVec4{  0,  0,    0, 255}
 	}
 }
 
@@ -265,7 +271,7 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 	tree_stack := [128]int{}
 	stack_len := 0
 
-	alpha : u8 = 255 / u8(layer_count)
+	alpha : u8 = u8(255.0 / f64(layer_count))
 	tree_stack[0] = depth.head; stack_len += 1
 	for stack_len > 0 {
 		stack_len -= 1
@@ -291,8 +297,7 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 			r_x    = max(r_x, 0)
 			r_w   := end_x - r_x
 
-			rect_color := cur_node.avg_color
-			draw_rect := DrawRect{f32(r_x), f32(r_w), {0, 200, 0, alpha}}
+			draw_rect := DrawRect{f32(r_x), f32(r_w), {u8(wide_rect_color.x), u8(wide_rect_color.y), u8(wide_rect_color.z), alpha}}
 			append(&gl_rects, draw_rect)
 			continue
 		}
@@ -331,7 +336,7 @@ render_wideevents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 		r_x    = max(r_x, 0)
 		r_w   := end_x - r_x
 
-		draw_rect := DrawRect{f32(r_x), f32(r_w), {0, 200, 0, alpha}}
+		draw_rect := DrawRect{f32(r_x), f32(r_w), {u8(wide_rect_color.x), u8(wide_rect_color.y), u8(wide_rect_color.z), alpha}}
 		append(&gl_rects, draw_rect)
 	}
 }
@@ -914,17 +919,15 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	// Draw top wide-graph
 	wide_scale_x := rescale(1.0, 0, total_max_time - total_min_time, 0, display_width)
-	layer_count := 0
+	layer_count := 1
 	for proc_v, _ in processes {
-		for _, _ in proc_v.threads {
-			layer_count += 1
-		}
+		layer_count += len(proc_v.threads)
 	}
 
 	highlight_start_x := rescale(start_time, 0, total_max_time - total_min_time, 0, display_width)
 	highlight_end_x := rescale(end_time, 0, total_max_time - total_min_time, 0, display_width)
 
-	append(&gl_rects, DrawRect{f32(start_x), f32(display_width), {0, 0, 0, 255}})
+	append(&gl_rects, DrawRect{f32(start_x), f32(display_width), {u8(wide_bg_color.x), u8(wide_bg_color.y), u8(wide_bg_color.z), u8(wide_bg_color.w)}})
 	gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
 	resize(&gl_rects, 0)
 
@@ -941,7 +944,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	}
 
 	highlight_width := max(highlight_end_x - highlight_start_x, 2.0)
-	draw_rect(rect(start_x + highlight_start_x, wide_graph_y, highlight_width, wide_graph_height), FVec4{255, 165, 0, 150})
+	highlight_box := rect(start_x + highlight_start_x, wide_graph_y, highlight_width, wide_graph_height)
+	draw_rect(highlight_box, FVec4{255, 165, 0, 40})
+	draw_rect_outline(highlight_box, 2, FVec4{255, 130, 0, 255})
 
 	// Draw mini-graph
 	mini_rect_height := (em / 2)
