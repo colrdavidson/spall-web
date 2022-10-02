@@ -50,8 +50,8 @@ shadow_color := FVec4{}
 wide_rect_color := FVec4{}
 wide_bg_color := FVec4{}
 
-default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
-monospace_font := `monospace`
+default_font   := `'Montserrat',-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
+monospace_font := `'Fira Code', monospace`
 icon_font      := `FontAwesome`
 
 EventID :: struct {
@@ -641,6 +641,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		is_hovering = false
 		was_mouse_down = false
 	}
+
+	update_font_cache()
 
 	dt := _dt
 	if was_sleeping {
