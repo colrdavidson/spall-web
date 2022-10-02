@@ -85,6 +85,7 @@ hex_to_fvec :: proc "contextless" (v: u32) -> FVec4 {
 	return FVec4{r, g, b, a}
 }
 
+ONE_MINUTE :: 1000 * 1000 * 60
 ONE_SECOND :: 1000 * 1000
 ONE_MILLI :: 1000
 ONE_NANO :: 0.001
@@ -104,13 +105,19 @@ stat_fmt :: proc(time: f64) -> string {
 }
 
 time_fmt :: proc(time: f64) -> string {
+	minutes_str: string
 	seconds_str: string
 	millis_str : string
 	micros_str : string
 	nanos_str  : string
 
-	secs := math.floor(math.mod(time / ONE_SECOND, 1000))
-	if secs > 0 && secs < 1000 {
+	mins := math.floor(math.mod(time / ONE_MINUTE, 60))
+	if mins > 0 && mins < 60 {
+		minutes_str = fmt.tprintf(" %.0fm", mins)
+	} 
+
+	secs := math.floor(math.mod(time / ONE_SECOND, 60))
+	if secs > 0 && secs < 60 {
 		seconds_str = fmt.tprintf(" %.0fs", secs)
 	} 
 
@@ -129,7 +136,7 @@ time_fmt :: proc(time: f64) -> string {
 		nanos_str = fmt.tprintf(" %.0fns", nanos)
 	}
 
-	return fmt.tprintf("%s%s%s%s", seconds_str, millis_str, micros_str, nanos_str)
+	return fmt.tprintf("%s%s%s%s%s", minutes_str, seconds_str, millis_str, micros_str, nanos_str)
 }
 
 parse_u32 :: proc(str: string) -> (u32, bool) {
