@@ -105,10 +105,24 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec4, f32) {
 
 CHUNK_NARY_WIDTH :: 8
 build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
+	bucket_size :: 8
+
+	bucket_count := i_round_up(len(events), bucket_size) / bucket_size
+	max_nodes := bucket_count
+	{
+		row_count := bucket_count
+		parent_row_count := (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
+		for row_count > 1 {
+			tmp := (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
+			max_nodes += tmp
+			row_count = parent_row_count
+			parent_row_count = tmp
+		}
+	}
+
+	tm.depths[depth_idx].tree = make([dynamic]ChunkNode, 0, max_nodes, big_global_allocator)
 	tree := &tm.depths[depth_idx].tree
 
-	bucket_size :: 8
-	bucket_count := i_round_up(len(events), bucket_size) / bucket_size
 	for i := 0; i < bucket_count; i += 1 {
 		start_idx := i * bucket_size
 		end_idx := start_idx + min(len(events) - start_idx, bucket_size)
@@ -206,7 +220,6 @@ chunk_events :: proc() {
 	for proc_v in &processes {
 		for tm in &proc_v.threads {
 			for depth, d_idx in &tm.depths {
-				depth.tree = make([dynamic]ChunkNode, 0, big_global_allocator)
 				depth.head = build_tree(&tm, d_idx, depth.events)
 
 				//print_tree(depth.tree[:], depth.head)
