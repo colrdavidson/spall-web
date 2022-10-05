@@ -185,6 +185,7 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 
 	//fmt.printf("evs: %d, tree: %d, ratio: %f\n", len(events), len(tree), f64(len(tree)) / f64(len(events)))
 
+	fmt.printf("tree len: %d, head: %d\n", len(tree), len(tree) - 1)
 	return len(tree) - 1
 }
 
@@ -238,8 +239,7 @@ init_loading_state :: proc(size: u32, name: string) {
 	// reset selection state
 	clicked_on_rect = false
 	did_multiselect = false
-	stats_done = true
-	events_tracked = 0
+	stats_state = .NoStats
 	total_tracked_time = 0.0
 	selected_event = EventID{-1, -1, -1, -1}
 

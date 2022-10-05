@@ -80,14 +80,25 @@ Range :: struct {
 	end: int,
 }
 
+StatState :: enum {
+	NoStats,
+	Started,
+	Finished,
+}
+
+StatOffset :: struct {
+	range_id: int,
+	event_id: int,
+}
+
 did_multiselect := false
 clicked_on_rect := false
 
 stats: map[string]Stats
-stats_done := true
+stats_state := StatState.NoStats
 selected_ranges: [dynamic]Range
+cur_stat_offset := StatOffset{}
 total_tracked_time := 0.0
-events_tracked := 0
 
 
 dpr: f64
@@ -1050,16 +1061,16 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	if clicked && !clicked_on_rect && !shift_down {
 		selected_event = {-1, -1, -1, -1}
 		did_multiselect = false
-		stats_done = true
-		events_tracked = 0
+		stats_state = .NoStats
 	}
 
 	// user wants to multi-select
 	if is_mouse_down && shift_down {
 		// set multiselect flags
-		stats_done = false
+		stats_state = .Started
 		did_multiselect = true
 		total_tracked_time = 0.0
+		cur_stat_offset = StatOffset{}
 
 		// try to fake a reduced frame of latency by extrapolating the position by the delta
 		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
@@ -1214,13 +1225,29 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		}
 	}
 
-	if !stats_done && did_multiselect {
-		events_tracked = 0
-		for range in selected_ranges {
-			thread := processes[range.pid].threads[range.tid]
-			events := thread.depths[range.did].events[range.start:range.end]
+	STATS_PER_ITER :: 200_000
+	if stats_state == .Started && did_multiselect {
+		event_count := 0
 
-			for ev in events {
+		broke_early := false
+		range_loop: for range, r_idx in selected_ranges {
+			start_idx := range.start
+			if cur_stat_offset.range_id > r_idx {
+				continue
+			} else if cur_stat_offset.range_id == r_idx {
+				start_idx = max(start_idx, cur_stat_offset.event_id)
+			}
+
+			thread := processes[range.pid].threads[range.tid]
+			events := thread.depths[range.did].events[start_idx:range.end]
+
+			for ev, e_idx in events {
+				if event_count > STATS_PER_ITER {
+					cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
+					broke_early = true
+					break range_loop
+				}
+
 				duration := bound_duration(ev, thread.max_time)
 
 				name := in_getstr(ev.name)
@@ -1234,31 +1261,33 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				s.min_time = min(s.min_time, f32(duration))
 				s.max_time = max(s.max_time, f32(duration))
 				total_tracked_time += duration
+
+				event_count += 1
 			}
-			events_tracked += len(events)
 		}
 
-		sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
-			Entry :: struct {
-				hash:  uintptr,
-				next:  int,
-				key:   K,
-				value: V,
+		if !broke_early {
+			sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
+				Entry :: struct {
+					hash:  uintptr,
+					next:  int,
+					key:   K,
+					value: V,
+				}
+
+				map_sort :: proc(a: Entry, b: Entry) -> bool {
+					return a.value.total_time > b.value.total_time
+				}
+
+				header := runtime.__get_map_header(m)
+				entries := (^[dynamic]Entry)(&header.m.entries)
+				slice.sort_by(entries[:], map_sort)
+				runtime.__dynamic_map_reset_entries(header, loc)
 			}
 
-			map_sort :: proc(a: Entry, b: Entry) -> bool {
-				return a.value.total_time > b.value.total_time
-			}
-
-			header := runtime.__get_map_header(m)
-			entries := (^[dynamic]Entry)(&header.m.entries)
-			slice.sort_by(entries[:], map_sort)
-			runtime.__dynamic_map_reset_entries(header, loc)
+			sort_map_entries_by_time(&stats)
+			stats_state = .Finished
 		}
-
-		sort_map_entries_by_time(&stats)
-
-		stats_done = true
 	}
 
 	if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.did != -1 && selected_event.eid != -1 {
@@ -1278,7 +1307,28 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		draw_text(fmt.tprintf("start timestamp:%s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 
 	// If we've already got stats
-	} else if stats_done && did_multiselect {
+	} else if stats_state == .Started {
+		y := info_pane_y + top_line_gap
+
+		draw_text("Stats loading...", Vec2{x_subpad, y}, p_font_size, monospace_font, text_color)
+
+		total_count := 0
+		cur_count := 0
+		for range, r_idx in selected_ranges {
+			thread := processes[range.pid].threads[range.tid]
+			events := thread.depths[range.did].events
+
+			total_count += len(events)
+			if cur_stat_offset.range_id > r_idx {
+				cur_count += len(events)
+			} else if cur_stat_offset.range_id == r_idx {
+				cur_count += cur_stat_offset.event_id - range.start
+			}
+		}
+
+		progress_count := fmt.tprintf("%d of %d", cur_count, total_count)
+		draw_text(progress_count, Vec2{x_subpad, y + em}, p_font_size, monospace_font, text_color)
+	} else if stats_state == .Finished && did_multiselect {
 		y := info_pane_y + top_line_gap
 
 		column_gap := 1.5 * em
@@ -1478,10 +1528,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		events_str := fmt.tprintf("Event Count: %d", rect_count - bucket_count)
 		events_txt_width := measure_text(events_str, p_font_size, monospace_font)
 		draw_text(events_str, Vec2{width - events_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
-
-		stats_str := fmt.tprintf("Stat Rects Tracked: %d", events_tracked)
-		stats_txt_width := measure_text(stats_str, p_font_size, monospace_font)
-		draw_text(stats_str, Vec2{width - stats_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 	}
 
 	// save me my battery, plz
@@ -1490,7 +1536,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	SCALE_EPSILON :: 0.00000001
 	if math.abs(cam.pan.x - cam.target_pan_x) < PAN_X_EPSILON && 
 	   math.abs(cam.vel.y - 0) < PAN_Y_EPSILON && 
-	   math.abs(cam.current_scale - cam.target_scale) < SCALE_EPSILON {
+	   math.abs(cam.current_scale - cam.target_scale) < SCALE_EPSILON &&
+	   stats_state != .Started {
 		cam.pan.x = cam.target_pan_x
 		cam.vel.y = 0
 		cam.current_scale = cam.target_scale
