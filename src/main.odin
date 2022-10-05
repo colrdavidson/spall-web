@@ -80,10 +80,14 @@ Range :: struct {
 	end: int,
 }
 
+did_multiselect := false
+clicked_on_rect := false
+
 stats: map[string]Stats
 stats_done := true
 selected_ranges: [dynamic]Range
 total_tracked_time := 0.0
+events_tracked := 0
 
 
 dpr: f64
@@ -114,8 +118,6 @@ was_mouse_down := false
 clicked       := false
 is_hovering   := false
 
-did_multiselect := false
-clicked_on_rect := false
 
 build_hash := 0
 enable_debug := false
@@ -313,6 +315,15 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 		stack_len -= 1
 
 		tree_idx := tree_stack[stack_len]
+		if tree_idx == len(tree) {
+			fmt.printf("%d\n", depth.head)
+			fmt.printf("%d\n", stack_len)
+			fmt.printf("%v\n", tree_stack)
+			fmt.printf("%v\n", tree)
+			fmt.printf("hmm????\n")
+			trap()
+		}
+
 		cur_node := tree[tree_idx]
 		range := cur_node.end_time - cur_node.start_time
 		range_width := range * scale
@@ -1040,6 +1051,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		selected_event = {-1, -1, -1, -1}
 		did_multiselect = false
 		stats_done = true
+		events_tracked = 0
 	}
 
 	// user wants to multi-select
@@ -1187,6 +1199,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	}
 
 	if !stats_done && did_multiselect {
+		events_tracked = 0
 		for range in selected_ranges {
 			thread := processes[range.pid].threads[range.tid]
 			events := thread.depths[range.did].events[range.start:range.end]
@@ -1206,6 +1219,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				s.max_time = max(s.max_time, f32(duration))
 				total_tracked_time += duration
 			}
+			events_tracked += len(events)
 		}
 
 		sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
@@ -1448,6 +1462,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		events_str := fmt.tprintf("Event Count: %d", rect_count - bucket_count)
 		events_txt_width := measure_text(events_str, p_font_size, monospace_font)
 		draw_text(events_str, Vec2{width - events_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+
+		stats_str := fmt.tprintf("Stat Rects Tracked: %d", events_tracked)
+		stats_txt_width := measure_text(stats_str, p_font_size, monospace_font)
+		draw_text(stats_str, Vec2{width - stats_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 	}
 
 	// save me my battery, plz

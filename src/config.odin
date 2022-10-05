@@ -235,7 +235,15 @@ init_loading_state :: proc(size: u32, name: string) {
 	strings.write_string(&b, name)
 	file_name = strings.to_string(b)
 
+	// reset selection state
+	clicked_on_rect = false
+	did_multiselect = false
+	stats_done = true
+	events_tracked = 0
+	total_tracked_time = 0.0
 	selected_event = EventID{-1, -1, -1, -1}
+
+	// wipe all allocators
 	free_all(scratch_allocator)
 	free_all(small_global_allocator)
 	free_all(big_global_allocator)
