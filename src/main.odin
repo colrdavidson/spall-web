@@ -796,7 +796,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	// compute pan, scale + scroll
 	pan_delta := mouse_pos - last_mouse_pos
 	if is_mouse_down && !shift_down {
-		if pt_in_rect(clicked_pos, disp_rect) {
+		if pt_in_rect(clicked_pos, padded_graph_rect) {
 
 			if cam.target_pan_x < min_x_pan {
 				pan_delta.x *= _pow(2, (cam.target_pan_x - min_x_pan) / 32)
@@ -1063,9 +1063,25 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		// try to fake a reduced frame of latency by extrapolating the position by the delta
 		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
-		// draw multiselect box
+
+		// cap multi-select box at graph edges
 		delta := mouse_pos_extrapolated - clicked_pos
-		selected_rect := rect(clicked_pos.x, clicked_pos.y, delta.x, delta.y)
+		c_x := min(clicked_pos.x, graph_rect.pos.x + graph_rect.size.x)
+		c_x = max(c_x, graph_rect.pos.x)
+
+		c_y := min(clicked_pos.y, graph_rect.pos.y + graph_rect.size.y)
+		c_y = max(c_y, graph_rect.pos.y)
+
+		m_x := min(c_x + delta.x, graph_rect.pos.x + graph_rect.size.x)
+		m_x = max(m_x, graph_rect.pos.x)
+		m_y := min(c_y + delta.y, graph_rect.pos.y + graph_rect.size.y)
+		m_y = max(m_y, graph_rect.pos.y)
+
+		d_x := m_x - c_x
+		d_y := m_y - c_y
+
+		// draw multiselect box
+		selected_rect := rect(c_x, c_y, d_x, d_y)
 		draw_rect_outline(selected_rect, 1, FVec4{0, 0, 255, 255})
 		draw_rect(selected_rect, FVec4{0, 0, 255, 100})
 
