@@ -87,8 +87,8 @@ StatState :: enum {
 }
 
 StatOffset :: struct {
-	range_id: int,
-	event_id: int,
+	range_idx: int,
+	event_idx: int,
 }
 
 did_multiselect := false
@@ -1225,24 +1225,27 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		}
 	}
 
-	STATS_PER_ITER :: 200_000
+	INITIAL_ITER :: 10_000
+	FULL_ITER    :: 1_000_000
 	if stats_state == .Started && did_multiselect {
 		event_count := 0
+		just_started := cur_stat_offset.range_idx == 0 && cur_stat_offset.event_idx == 0
+		iter_max := just_started ? INITIAL_ITER : FULL_ITER
 
 		broke_early := false
 		range_loop: for range, r_idx in selected_ranges {
 			start_idx := range.start
-			if cur_stat_offset.range_id > r_idx {
+			if cur_stat_offset.range_idx > r_idx {
 				continue
-			} else if cur_stat_offset.range_id == r_idx {
-				start_idx = max(start_idx, cur_stat_offset.event_id)
+			} else if cur_stat_offset.range_idx == r_idx {
+				start_idx = max(start_idx, cur_stat_offset.event_idx)
 			}
 
 			thread := processes[range.pid].threads[range.tid]
 			events := thread.depths[range.did].events[start_idx:range.end]
 
 			for ev, e_idx in events {
-				if event_count > STATS_PER_ITER {
+				if event_count > iter_max {
 					cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
 					broke_early = true
 					break range_loop
@@ -1319,10 +1322,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			events := thread.depths[range.did].events
 
 			total_count += len(events)
-			if cur_stat_offset.range_id > r_idx {
+			if cur_stat_offset.range_idx > r_idx {
 				cur_count += len(events)
-			} else if cur_stat_offset.range_id == r_idx {
-				cur_count += cur_stat_offset.event_id - range.start
+			} else if cur_stat_offset.range_idx == r_idx {
+				cur_count += cur_stat_offset.event_idx - range.start
 			}
 		}
 

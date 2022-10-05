@@ -87,8 +87,15 @@ key_up :: proc "contextless" (key: int) {
 @export
 text_input :: proc "contextless" (key, code: string) { }
 
+// release all control state if the user tabs away
 @export
-blur :: proc "contextless" () {}
+blur :: proc "contextless" () {
+	shift_down = false
+	is_mouse_down = false
+	was_mouse_down = false
+	clicked = false
+	clicked_pos = Vec2{}
+}
 
 @export
 temp_allocate :: proc(n: int) -> rawptr {
