@@ -96,7 +96,7 @@ arena_allocator_proc :: proc(
 }
 
 growing_arena_init :: proc(a: ^Arena, loc := #caller_location) {
-	chunk, err := page_alloc(1)
+	chunk, err := page_alloc(10)
 	if err != nil {
 		fmt.printf("OOM'd @ init | %s %s\n", err, loc)
 		trap()
@@ -120,8 +120,8 @@ _byte_slice :: #force_inline proc "contextless" (data: rawptr, #any_int len: uin
 }
 
 _align_formula :: proc "contextless" (size, align: uint) -> uint {
-	result := size + align-1
-	return result - result%align
+	result := (size + align) - 1
+	return result - (result % align)
 }
 
 growing_arena_allocator_proc :: proc(
@@ -144,14 +144,14 @@ growing_arena_allocator_proc :: proc(
 			page_count := _align_formula(total_size, PAGE_SIZE) / PAGE_SIZE
 			new_tail, err := page_alloc(page_count)
 			if err != nil {
-				fmt.printf("tried to get %f MB\n", f64(total_size) / 1024 / 1024)
-				fmt.printf("OOM'd @ %f MB | %s\n", f64(len(arena.data)) / 1024 / 1024, location)
+				fmt.printf("tried to get %f MB\n", f64(u32(total_size)) / 1024 / 1024)
+				fmt.printf("OOM'd @ %f MB | %s\n", f64(u32(len(arena.data))) / 1024 / 1024, location)
 				trap()
 			}
 
 			head_ptr := raw_data(arena.data)
 			#no_bounds_check arena.data = head_ptr[:u64(len(arena.data))+u64(len(new_tail))]
-			//fmt.printf("resized to %f MB\n", f64(len(arena.data)) / 1024 / 1024)
+			//fmt.printf("resized to %f MB\n", f64(u32(len(arena.data))) / 1024 / 1024)
 		}
 
 		arena.offset = int(uint(arena.offset) + uint(total_size))

@@ -54,14 +54,37 @@ default_font   := `'Montserrat',-apple-system,BlinkMacSystemFont,segoe ui,Helvet
 monospace_font := `'Fira Code', monospace`
 icon_font      := `FontAwesome`
 
+
 EventID :: struct {
 	pid: i64,
 	tid: i64,
 	did: i64,
 	eid: i64,
 }
-
 selected_event := EventID{-1, -1, -1, -1}
+
+Stats :: struct {
+	total_time: f64,
+	count: u32,
+	min_time: f32,
+	max_time: f32,
+	histogram: [22]u32,
+}
+
+Range :: struct {
+	pid: int,
+	tid: int,
+	did: int,
+
+	start: int,
+	end: int,
+}
+
+stats: map[string]Stats
+stats_done := true
+selected_ranges: [dynamic]Range
+total_tracked_time := 0.0
+
 
 dpr: f64
 rect_height: f64
@@ -91,7 +114,6 @@ was_mouse_down := false
 clicked       := false
 is_hovering   := false
 
-selected_rect := Rect{}
 did_multiselect := false
 clicked_on_rect := false
 
@@ -914,13 +936,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		}
 	}
 
-	if clicked && !clicked_on_rect && !shift_down {
-		selected_event = {-1, -1, -1, -1}
-		selected_rect = Rect{}
-		did_multiselect = false
-	}
-
-
 	// Chop sides of screen
 	draw_rect(rect(0, disp_rect.pos.y, width - mini_graph_padded_width, graph_header_text_height), bg_color) // top
 	draw_rect(rect(0, toolbar_height, start_x, height), bg_color) // left
@@ -940,7 +955,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	for proc_v, _ in processes {
 		layer_count += len(proc_v.threads)
 	}
-
 
 	append(&gl_rects, DrawRect{f32(start_x), f32(display_width), {u8(wide_bg_color.x), u8(wide_bg_color.y), u8(wide_bg_color.z), u8(wide_bg_color.w)}})
 	gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
@@ -1020,18 +1034,30 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
 	draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
 
-	if is_mouse_down && shift_down {
-		// try to fake a reduced frame of latency by extrapolating the position by the delta
-		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
-		delta := mouse_pos_extrapolated - clicked_pos
-		selected_rect = rect(clicked_pos.x, clicked_pos.y, delta.x, delta.y)
-		draw_rect_outline(selected_rect, 1, FVec4{0, 0, 255, 255})
-		draw_rect(selected_rect, FVec4{0, 0, 255, 100})
-		did_multiselect = true
+
+	// Handle select events
+	if clicked && !clicked_on_rect && !shift_down {
+		selected_event = {-1, -1, -1, -1}
+		did_multiselect = false
+		stats_done = true
 	}
 
-	selected_events := 0
-	if did_multiselect {
+	// user wants to multi-select
+	if is_mouse_down && shift_down {
+		// set multiselect flags
+		stats_done = false
+		did_multiselect = true
+		total_tracked_time = 0.0
+
+		// try to fake a reduced frame of latency by extrapolating the position by the delta
+		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
+		// draw multiselect box
+		delta := mouse_pos_extrapolated - clicked_pos
+		selected_rect := rect(clicked_pos.x, clicked_pos.y, delta.x, delta.y)
+		draw_rect_outline(selected_rect, 1, FVec4{0, 0, 255, 255})
+		draw_rect(selected_rect, FVec4{0, 0, 255, 100})
+
+		// transform multiselect rect to screen position
 		flopped_rect := Rect{}
 		flopped_rect.pos.x = min(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
 		x2 := max(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
@@ -1044,32 +1070,31 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		selected_start_time := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x)
 		selected_end_time   := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x + flopped_rect.size.x)
 
-		if is_mouse_down && shift_down {
-			width_text := fmt.tprintf("%s", time_fmt(selected_end_time - selected_start_time))
-			width_text_width := measure_text(width_text, p_font_size, monospace_font)
-			if flopped_rect.size.x > width_text_width {
-				draw_text(width_text, Vec2{flopped_rect.pos.x + (flopped_rect.size.x / 2) - (width_text_width / 2), flopped_rect.pos.y + flopped_rect.size.y - (em * 1.5)}, p_font_size, monospace_font, text_color)
-			}
+		// draw multiselect timerange
+		width_text := fmt.tprintf("%s", time_fmt(selected_end_time - selected_start_time))
+		width_text_width := measure_text(width_text, p_font_size, monospace_font)
+		if flopped_rect.size.x > width_text_width {
+			draw_text(
+				width_text, 
+				Vec2{
+					flopped_rect.pos.x + (flopped_rect.size.x / 2) - (width_text_width / 2), 
+					flopped_rect.pos.y + flopped_rect.size.y - (em * 1.5)
+				}, 
+				p_font_size,
+				monospace_font,
+				text_color
+			)
 		}
 
 		// push it into screen-space
 		flopped_rect.pos.x -= disp_rect.pos.x
 
-		Stats :: struct {
-			total_time: f64,
-			count: u32,
-			min_time: f32,
-			max_time: f32,
-			histogram: [22]u32,
-		}
-
 		big_global_arena.offset = current_alloc_offset
-		stats := make(map[string]Stats, 0, big_global_allocator)
+		stats = make(map[string]Stats, 0, big_global_allocator)
+		selected_ranges = make([dynamic]Range, 0, big_global_allocator)
 
-		total_tracked_time := 0.0
-
-		// Eww... This needs to be a function somwhere
-		cur_y := graph_rect.pos.y - cam.pan.y
+		// build out ranges
+		cur_y := padded_graph_rect.pos.y - cam.pan.y
 		proc_loop2: for proc_v, p_idx in processes {
 			h1_size : f64 = 0
 			if len(processes) > 1 {
@@ -1110,7 +1135,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 					}
 					scan_arr := depth.events[start_idx:end_idx+1]
 
-					scan_loop: for ev in scan_arr {
+					real_start := -1
+					fwd_scan_loop: for i := 0; i < len(scan_arr); i += 1 {
+						ev := scan_arr[i]
 						x := ev.timestamp - total_min_time
 
 						duration := bound_duration(ev, tm.max_time)
@@ -1122,28 +1149,64 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 						dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
 
 						if !rect_in_rect(flopped_rect, dr) {
-							continue scan_loop
+							continue fwd_scan_loop
 						}
 
-						name := in_getstr(ev.name)
-						s, ok := &stats[name]
-						if !ok {
-							stats[name] = Stats{min_time = 1e308}
-							s = &stats[name]
+						real_start = start_idx + i
+						break fwd_scan_loop
+					}
+
+					real_end := -1
+					rev_scan_loop: for i := len(scan_arr) - 1; i >= 0; i -= 1 {
+						ev := scan_arr[i]
+						x := ev.timestamp - total_min_time
+
+						duration := bound_duration(ev, tm.max_time)
+						w := duration * cam.current_scale
+
+						r := Rect{Vec2{x, y}, Vec2{w, h}}
+						r_x := (r.pos.x * cam.current_scale) + cam.pan.x
+						r_y := cur_y + r.pos.y
+						dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
+
+						if !rect_in_rect(flopped_rect, dr) {
+							continue rev_scan_loop
 						}
-						s.count += 1
-						s.total_time += duration
-						s.min_time = min(s.min_time, f32(duration))
-						s.max_time = max(s.max_time, f32(duration))
-						total_tracked_time += duration
-						selected_events += 1
+
+						real_end = start_idx + i + 1
+						break rev_scan_loop
+					}
+
+					if real_start != -1 && real_end != -1 {
+						append(&selected_ranges, Range{p_idx, t_idx, d_idx, real_start, real_end})
 					}
 				}
 				cur_y += thread_advance
 			}
 		}
+	}
 
-		y := info_pane_y + top_line_gap
+	if !stats_done && did_multiselect {
+		for range in selected_ranges {
+			thread := processes[range.pid].threads[range.tid]
+			events := thread.depths[range.did].events[range.start:range.end]
+
+			for ev in events {
+				duration := bound_duration(ev, thread.max_time)
+
+				name := in_getstr(ev.name)
+				s, ok := &stats[name]
+				if !ok {
+					stats[name] = Stats{min_time = 1e308}
+					s = &stats[name]
+				}
+				s.count += 1
+				s.total_time += duration
+				s.min_time = min(s.min_time, f32(duration))
+				s.max_time = max(s.max_time, f32(duration))
+				total_tracked_time += duration
+			}
+		}
 
 		sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
 			Entry :: struct {
@@ -1165,8 +1228,30 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		sort_map_entries_by_time(&stats)
 
+		stats_done = true
+	}
+
+	if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.did != -1 && selected_event.eid != -1 {
+		p_idx := int(selected_event.pid)
+		t_idx := int(selected_event.tid)
+		d_idx := int(selected_event.did)
+		e_idx := int(selected_event.eid)
+
+		y := info_pane_y + top_line_gap
+
+		thread := processes[p_idx].threads[t_idx]
+		event := thread.depths[d_idx].events[e_idx]
+		draw_text(fmt.tprintf("Event: \"%s\"", in_getstr(event.name)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("start time:%s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("end time:%s", time_fmt((event.timestamp - total_min_time) + bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("duration:%s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+		draw_text(fmt.tprintf("start timestamp:%s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+
+	// If we've already got stats
+	} else if stats_done && did_multiselect {
+		y := info_pane_y + top_line_gap
+
 		column_gap := 1.5 * em
-	
 		total_header_text    := fmt.tprintf("%-17s", "      total")
 		min_header_text      := fmt.tprintf("%-10s", "   min.")
 		avg_header_text      := fmt.tprintf("%-10s", "   avg.")
@@ -1248,13 +1333,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			next_line(&y_after, em) // @Speed
 			name_width := measure_text(name, p_font_size, monospace_font)
 
-			dr := rect(
-				cursor, 
-				y_before, 
-				(display_width - cursor - column_gap) * stat.total_time / total_tracked_time, 
-				y_after - y_before
-			)
-
+			dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
 			cursor += column_gap / 2
 
 			draw_rect(dr, color_choices[name_color_idx(name)])
@@ -1263,23 +1342,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			next_line(&y, em)
 			i += 1
 		}
-	} else if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.did != -1 && selected_event.eid != -1 {
-		p_idx := int(selected_event.pid)
-		t_idx := int(selected_event.tid)
-		d_idx := int(selected_event.did)
-		e_idx := int(selected_event.eid)
-
-		y := info_pane_y + top_line_gap
-
-
-		thread := processes[p_idx].threads[t_idx]
-		event := thread.depths[d_idx].events[e_idx]
-		draw_text(fmt.tprintf("Event: \"%s\"", in_getstr(event.name)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("start time:%s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("end time:%s", time_fmt((event.timestamp - total_min_time) + bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("duration:%s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("start timestamp:%s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-
 	}
 
 	// Render toolbar background
@@ -1386,10 +1448,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		events_str := fmt.tprintf("Event Count: %d", rect_count - bucket_count)
 		events_txt_width := measure_text(events_str, p_font_size, monospace_font)
 		draw_text(events_str, Vec2{width - events_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
-
-		selected_events_str := fmt.tprintf("Selected Event Count: %d", selected_events)
-		selected_events_txt_width := measure_text(selected_events_str, p_font_size, monospace_font)
-		draw_text(selected_events_str, Vec2{width - selected_events_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
 	}
 
 	// save me my battery, plz

@@ -174,8 +174,8 @@ in_get :: proc(v: ^INMap, key: string) -> INStr {
 			str_start := u32(len(string_block))
 			in_str := INStr{str_start, u16(len(key))}
 			append_elem_string(&string_block, key)
-
 			append(&v.entries, in_str)
+
 			return in_str
 		} else if in_getstr(v.entries[e_idx]) == key {
 			return v.entries[e_idx]
