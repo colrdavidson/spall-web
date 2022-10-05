@@ -1225,7 +1225,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		}
 	}
 
-	INITIAL_ITER :: 10_000
+	INITIAL_ITER :: 25_000
 	FULL_ITER    :: 1_000_000
 	if stats_state == .Started && did_multiselect {
 		event_count := 0
