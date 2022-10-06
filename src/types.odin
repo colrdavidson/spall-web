@@ -62,6 +62,7 @@ TempEvent :: struct {
 	type: EventType,
 	scope: EventScope,
 	name: INStr,
+	args: INStr,
 	duration: f64,
 	timestamp: f64,
 	thread_id: u32,
@@ -75,6 +76,7 @@ Instant :: struct #packed {
 Event :: struct #packed {
 	type: EventType,
 	name: INStr,
+	args: INStr,
 	timestamp: f64,
 	duration: f64,
 	depth: u16,
