@@ -72,10 +72,10 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 	p.full_chunk = chunk
 }
 
-gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec4, f32) {
+gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f32) {
 	total_weight : f32 = 0
 
-	color := FVec4{}
+	color := FVec3{}
 	color_weights := [choice_count]f32{}
 	for ev in events {
 		idx := name_color_idx(in_getstr(ev.name))
@@ -104,7 +104,7 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec4, f32) {
 }
 
 CHUNK_NARY_WIDTH :: 8
-build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
+build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> uint {
 	bucket_size :: 8
 
 	bucket_count := i_round_up(len(events), bucket_size) / bucket_size
@@ -134,8 +134,8 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 		node := ChunkNode{}
 		node.start_time = start_ev.timestamp - total_min_time
 		node.end_time   = end_ev.timestamp + bound_duration(end_ev, tm.max_time) - total_min_time
-		node.start_idx = start_idx
-		node.end_idx   = end_idx
+		node.start_idx  = uint(start_idx)
+		node.arr_len = i8(len(scan_arr))
 
 		avg_color, weight := gen_event_color(scan_arr, tm.max_time)
 		node.avg_color = avg_color
@@ -163,11 +163,10 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 			node.start_time = start_node.start_time
 			node.end_time   = end_node.end_time
 			node.start_idx  = start_node.start_idx
-			node.end_idx    = end_node.end_idx
 
-			avg_color := FVec4{}
+			avg_color := FVec3{}
 			for j := 0; j < len(children); j += 1 {
-				node.children[j] = start_idx + j
+				node.children[j] = uint(start_idx + j)
 				avg_color += children[j].avg_color * children[j].weight
 				node.weight += children[j].weight
 			}
@@ -189,10 +188,10 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 	return len(tree) - 1
 }
 
-print_tree :: proc(tree: []ChunkNode, head: int) {
+print_tree :: proc(tree: []ChunkNode, head: uint) {
 	fmt.printf("mah tree!\n")
 	// If we blow this, we're in space
-	tree_stack := [128]int{}
+	tree_stack := [128]uint{}
 	stack_len := 0
 	pad_buf := [?]u8{0..<64 = '\t',}
 
@@ -298,7 +297,7 @@ finish_loading :: proc (p: ^Parser) {
 		s := 0.5 + rand.float32() * 0.1
 		v : f32 = 0.85
 
-		color_choices[i] = hsv2rgb(FVec4{h, s, v, 255}) * 255
+		color_choices[i] = hsv2rgb(FVec3{h, s, v}) * 255
 	}
 
 	start_bench("chunk events")

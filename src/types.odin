@@ -7,6 +7,7 @@ import "core:runtime"
 
 Vec2 :: [2]f64
 Vec3 :: [3]f64
+FVec3 :: [3]f32
 FVec4 :: [4]f32
 Rect :: struct {
 	pos: Vec2,
@@ -43,21 +44,6 @@ EventScope :: enum u8 {
 	Process,
 	Thread,
 }
-
-ChunkNode :: struct #packed {
-	start_time: f64,
-	end_time: f64,
-
-	avg_color: FVec4,
-	weight: f32,
-
-	children: [CHUNK_NARY_WIDTH]int,
-	child_count: i8,
-
-	start_idx: int,
-	end_idx: int,
-}
-
 TempEvent :: struct {
 	type: EventType,
 	scope: EventScope,
@@ -72,18 +58,29 @@ Instant :: struct #packed {
 	name: INStr,
 	timestamp: f64,
 }
-
 Event :: struct #packed {
-	type: EventType,
 	name: INStr,
-	args: INStr,
+	depth: u16,
 	timestamp: f64,
 	duration: f64,
-	depth: u16,
+}
+
+ChunkNode :: struct #packed {
+	start_time: f64,
+	end_time: f64,
+
+	avg_color: FVec3,
+	weight: f32,
+
+	start_idx: uint,
+	children: [CHUNK_NARY_WIDTH]uint,
+
+	child_count: i8,
+	arr_len: i8,
 }
 
 Depth :: struct {
-	head: int,
+	head: uint,
 	tree: [dynamic]ChunkNode,
 	bs_events: [dynamic]Event,
 	events: []Event,

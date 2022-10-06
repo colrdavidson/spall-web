@@ -138,7 +138,6 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 		#partial switch event.type {
 		case .Begin:
 			new_event := Event{
-				type = .Complete,
 				name = event.name,
 				duration = -1,
 				timestamp = (event.timestamp) * stamp_scale,

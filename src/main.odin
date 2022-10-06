@@ -159,7 +159,7 @@ processes: [dynamic]Process
 process_map: ValHash
 
 global_instants: [dynamic]Instant
-color_choices: [choice_count]FVec4
+color_choices: [choice_count]FVec3
 event_count: i64
 total_max_time: f64
 total_min_time: f64
@@ -317,7 +317,7 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 	tree := depth.tree
 
 	// If we blow this, we're in space
-	tree_stack := [128]int{}
+	tree_stack := [128]uint{}
 	stack_len := 0
 
 	alpha := u8(255.0 / f64(layer_count))
@@ -362,12 +362,12 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
-			scan_arr := depth.events[cur_node.start_idx:cur_node.end_idx]
+			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
 			render_wideevents(scan_arr, thread.max_time, start_x, scale, alpha)
 			continue
 		}
 
-		for i := (cur_node.child_count - 1); i >= 0; i -= 1 {
+		for i := cur_node.child_count - 1; i >= 0; i -= 1 {
 			tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
 		}
 	}
@@ -409,7 +409,7 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 	}
 
 	// If we blow this, we're in space
-	tree_stack := [128]int{}
+	tree_stack := [128]uint{}
 	stack_len := 0
 
 	tree_stack[0] = depth.head; stack_len += 1
@@ -445,12 +445,12 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
-			scan_arr := depth.events[cur_node.start_idx:cur_node.end_idx]
+			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
 			render_minievents(scan_arr, thread.max_time, start_x, scale)
 			continue
 		}
 
-		for i := (cur_node.child_count - 1); i >= 0; i -= 1 {
+		for i := cur_node.child_count - 1; i >= 0; i -= 1 {
 			tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
 		}
 	}
@@ -489,7 +489,7 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 	tree := depth.tree
 
 	// If we blow this, we're in space
-	tree_stack := [128]int{}
+	tree_stack := [128]uint{}
 	stack_len := 0
 
 	tree_stack[0] = depth.head; stack_len += 1
@@ -537,18 +537,18 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
-			render_events(pid, tid, depth_idx, depth.events, cur_node.start_idx, cur_node.end_idx, thread.max_time, depth_idx, y_start)
+			render_events(pid, tid, depth_idx, depth.events, cur_node.start_idx, cur_node.arr_len, thread.max_time, depth_idx, y_start)
 			continue
 		}
 
-		for i := (cur_node.child_count - 1); i >= 0; i -= 1 {
+		for i := cur_node.child_count - 1; i >= 0; i -= 1 {
 			tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
 		}
 	}
 }
 
-render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_idx: int, thread_max_time: f64, y_depth: int, y_start: f64) {
-	scan_arr := events[start_idx:end_idx]
+render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint, arr_len: i8, thread_max_time: f64, y_depth: int, y_start: f64) {
+	scan_arr := events[start_idx:start_idx+uint(arr_len)]
 	y := rect_height * f64(y_depth)
 	h := rect_height
 
@@ -582,12 +582,12 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 		idx := name_color_idx(ev_name)
 		rect_color := color_choices[idx]
 
-		e_idx := start_idx + de_id
+		e_idx := int(start_idx) + de_id
 		if int(selected_event.pid) == p_idx && int(selected_event.tid) == t_idx &&
 		   int(selected_event.did) == d_idx && int(selected_event.eid) == e_idx {
-			rect_color.w += 30
 			rect_color.x += 30
 			rect_color.y += 30
+			rect_color.z += 30
 		}
 
 		draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
@@ -1421,7 +1421,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
 			cursor += column_gap / 2
 
-			draw_rect(dr, color_choices[name_color_idx(name)])
+			tmp_color := color_choices[name_color_idx(name)]
+			draw_rect(dr, FVec4{tmp_color.x, tmp_color.y, tmp_color.z, 255})
 			draw_text(name, Vec2{cursor, y_before + (em / 3)}, p_font_size, monospace_font, text_color)
 
 			next_line(&y, em)

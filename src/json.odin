@@ -435,7 +435,6 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 					event_count += 1
 
 					new_event := Event{
-						type = .Complete,
 						name = jp.cur_event.name,
 						duration = jp.cur_event.duration,
 						timestamp = jp.cur_event.timestamp,
@@ -444,7 +443,6 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				}
 			case .Begin:
 				new_event := Event{
-					type = .Complete,
 					name = jp.cur_event.name,
 					duration = -1,
 					timestamp = (jp.cur_event.timestamp) * stamp_scale,
