@@ -374,7 +374,6 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 }
 
 render_wideevents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64, scale: f64, alpha: u8) {
-
 	for ev, de_id in scan_arr {
 		x := ev.timestamp - total_min_time
 		duration := bound_duration(ev, thread_max_time)
@@ -1073,6 +1072,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		did_multiselect = true
 		total_tracked_time = 0.0
 		cur_stat_offset = StatOffset{}
+		selected_event = {-1, -1, -1, -1}
 
 		// try to fake a reduced frame of latency by extrapolating the position by the delta
 		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
