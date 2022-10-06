@@ -227,12 +227,12 @@ get_max_y_pan :: proc(processes: []Process) -> f64 {
 
 	for proc_v, _ in processes {
 		if len(processes) > 1 {
-			h1_size := h1_height + (h1_height / 2)
+			h1_size := h1_height + (h1_height / 3)
 			cur_y += h1_size
 		}
 
 		for tm, _ in proc_v.threads {
-			h2_size := h2_height + (h2_height / 2)
+			h2_size := h2_height + (h2_height / 3)
 			cur_y += h2_size + ((f64(len(tm.depths)) * rect_height) + thread_gap)
 		}
 	}
@@ -622,7 +622,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 				name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
 			}
 
-			draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
+			draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 3)}, p_font_size, monospace_font, text_color3)
 		}
 	}
 }
@@ -923,13 +923,13 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
 			}
 
-			h1_size = h1_height + (h1_height / 2)
+			h1_size = h1_height + (h1_height / 3)
 			cur_y += h1_size
 		}
 
 		thread_loop: for tm, t_idx in &proc_v.threads {
 			last_cur_y := cur_y
-			h2_size := h2_height + (h2_height / 2)
+			h2_size := h2_height + (h2_height / 3)
 			cur_y += h2_size
 
 			thread_advance := ((f64(len(tm.depths)) * rect_height) + thread_gap)
@@ -1045,7 +1045,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		time_str := time_fmt(tick_time)
 		text_width := measure_text(time_str, p_font_size, default_font)
-		draw_text(time_str, Vec2{start_x + x_off - (text_width / 2), disp_rect.pos.y + (graph_header_text_height / 2) - (em / 2)}, p_font_size, default_font, text_color)
+		draw_text(time_str, Vec2{start_x + x_off - (text_width / 2), disp_rect.pos.y + (graph_header_text_height / 2) - (em / 3)}, p_font_size, default_font, text_color)
 	}
 
 	// Remove top-left and top-right chunk
@@ -1137,12 +1137,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		proc_loop2: for proc_v, p_idx in processes {
 			h1_size : f64 = 0
 			if len(processes) > 1 {
-				h1_size = h1_height + (h1_height / 2)
+				h1_size = h1_height + (h1_height / 3)
 				cur_y += h1_size
 			}
 
 			for tm, t_idx in proc_v.threads {
-				h2_size := h2_height + (h2_height / 2)
+				h2_size := h2_height + (h2_height / 3)
 				cur_y += h2_size
 				if cur_y > info_pane_y {
 					break proc_loop2
@@ -1411,16 +1411,16 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			text_outf(&cursor, y, _99p_text, text_color2);  cursor += column_gap
 			text_outf(&cursor, y, max_text, text_color2);   cursor += column_gap
 
-			y_before   := y - em / 4
+			y_before   := y - (em / 2)
 			y_after    := y_before
-			next_line(&y_after, em) // @Speed
+			next_line(&y_after, em)
 			name_width := measure_text(name, p_font_size, monospace_font)
 
 			dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
 			cursor += column_gap / 2
 
 			draw_rect(dr, color_choices[name_color_idx(name)])
-			draw_text(name, Vec2{cursor, y}, p_font_size, monospace_font, text_color)
+			draw_text(name, Vec2{cursor, y_before + (em / 3)}, p_font_size, monospace_font, text_color)
 
 			next_line(&y, em)
 			i += 1
@@ -1450,10 +1450,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	logo_text := "spall"
 	logo_pad := edge_pad
 	logo_width := measure_text(logo_text, h1_font_size, default_font)
-	draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+	draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 3)}, h1_font_size, default_font, text_color)
 
 	file_name_width := measure_text(file_name, h1_font_size, default_font)
-	draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+	draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 3)}, h1_font_size, default_font, text_color)
 
 	if button(rect(edge_pad + logo_width + logo_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 		open_file_dialog()
@@ -1499,7 +1499,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	prev_line := proc(y: ^f64, h: f64) -> f64 {
 		res := y^
-		y^ -= h + (h / 1.5)
+		y^ -= h + (h / 3)
 		return res
 	}
 
@@ -1584,9 +1584,9 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), pos: Vec2) {
 	max_range := max_val - min_val
 	avg_val := sum_val / 100
 
-	text_width := measure_text(header, 1, default_font)
+	text_width := measure_text(header, p_font_size, default_font)
 	center_offset := (graph_size / 2) - (text_width / 2)
-	draw_text(header, Vec2{pos.x + center_offset, pos.y}, 1, default_font, text_color)
+	draw_text(header, Vec2{pos.x + center_offset, pos.y}, p_font_size, default_font, text_color)
 
 	graph_top := pos.y + em + line_gap
 	draw_rect(rect(pos.x, graph_top, graph_size, graph_size), bg_color2)
@@ -1601,19 +1601,19 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), pos: Vec2) {
 		avg_height := rescale(f64(avg_val), f64(min_val), f64(max_val), low_height, high_height)
 
 		high_str := fmt.tprintf("%d", max_val)
-		high_width := measure_text(high_str, 1, default_font) + line_gap
-		draw_text(high_str, Vec2{(pos.x - 5) - high_width, high_height}, 1, default_font, text_color)
+		high_width := measure_text(high_str, p_font_size, default_font) + line_gap
+		draw_text(high_str, Vec2{(pos.x - 5) - high_width, high_height}, p_font_size, default_font, text_color)
 
 		if queue.len(history^) > 90 {
 			draw_line(Vec2{pos.x - 5, avg_height + (em / 2)}, Vec2{pos.x + 5, avg_height + (em / 2)}, 1, graph_color)
 			avg_str := fmt.tprintf("%d", avg_val)
-			avg_width := measure_text(avg_str, 1, default_font) + line_gap
-			draw_text(avg_str, Vec2{(pos.x - 5) - avg_width, avg_height}, 1, default_font, text_color)
+			avg_width := measure_text(avg_str, p_font_size, default_font) + line_gap
+			draw_text(avg_str, Vec2{(pos.x - 5) - avg_width, avg_height}, p_font_size, default_font, text_color)
 		}
 
 		low_str := fmt.tprintf("%d", min_val)
-		low_width := measure_text(low_str, 1, default_font) + line_gap
-		draw_text(low_str, Vec2{(pos.x - 5) - low_width, low_height}, 1, default_font, text_color)
+		low_width := measure_text(low_str, p_font_size, default_font) + line_gap
+		draw_text(low_str, Vec2{(pos.x - 5) - low_width, low_height}, p_font_size, default_font, text_color)
 	}
 
 	graph_y_bounds := graph_size - (graph_edge_pad * 2)
