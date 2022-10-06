@@ -108,9 +108,9 @@ graph_rect: Rect
 padded_graph_rect: Rect
 gl_rects: [dynamic]DrawRect
 
-_p_font_size : f64 = 1
-_h1_font_size : f64 = 1.25
-_h2_font_size : f64 = 1.0625
+_p_font_size : f64 = 14
+_h1_font_size : f64 = 18
+_h2_font_size : f64 = 16
 
 p_font_size: f64
 h1_font_size: f64

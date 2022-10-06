@@ -185,7 +185,7 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> int {
 
 	//fmt.printf("evs: %d, tree: %d, ratio: %f\n", len(events), len(tree), f64(len(tree)) / f64(len(events)))
 
-	fmt.printf("tree len: %d, head: %d\n", len(tree), len(tree) - 1)
+	//fmt.printf("tree len: %d, head: %d\n", len(tree), len(tree) - 1)
 	return len(tree) - 1
 }
 

@@ -170,13 +170,13 @@ function implode() {
 }
 
 function updateFont(size, font, forced = false) {
-	let font_str = `${14 * dpr * size}px ${font}`;
-	let cached_font_str = `${14 * dpr * cached_size}px ${cached_font}`;
+	let font_str = `${size * dpr}px ${font}`;
+	let cached_font_str = `${cached_size * dpr}px ${cached_font}`;
 	if (font_str !== cached_font_str || forced) {
 		text_ctx.font = font_str;
 		cached_font = font;
 		cached_size = size;
-		cached_height = text_ctx.measureText('NothinBelowTheBaseline').actualBoundingBoxDescent / dpr;
+		cached_height = size * dpr;
 	}
 }
 

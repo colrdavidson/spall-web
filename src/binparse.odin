@@ -172,7 +172,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 				thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 				total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 			} else {
-				fmt.printf("Got bad end!\n")
+				fmt.printf("Got unexpected end event! [pid: %d, tid: %d, ts: %f]\n", event.process_id, event.thread_id, event.timestamp)
 			}
 		}
 	}
