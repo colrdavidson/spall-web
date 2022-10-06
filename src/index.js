@@ -176,7 +176,7 @@ function updateFont(size, font, forced = false) {
 		text_ctx.font = font_str;
 		cached_font = font;
 		cached_size = size;
-		cached_height = size * dpr;
+		cached_height = text_ctx.measureText('NothinBelowTheBaseline').actualBoundingBoxDescent / dpr;
 	}
 }
 

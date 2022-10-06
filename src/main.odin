@@ -622,7 +622,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx, end_
 				name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
 			}
 
-			draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 3)}, p_font_size, monospace_font, text_color3)
+			draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 		}
 	}
 }
@@ -699,10 +699,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	t += dt
 
 	if (width / dpr) < 400 {
+		em = _p_font_size * dpr
 		p_font_size = _p_font_size * dpr
 		h1_font_size = _h1_font_size * dpr
 		h2_font_size = _h2_font_size * dpr
 	} else {
+		em = _p_font_size
 		p_font_size = _p_font_size
 		h1_font_size = _h1_font_size
 		h2_font_size = _h2_font_size
@@ -715,7 +717,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	rect_height = em + (0.75 * em)
 	top_line_gap := (em / 1.5)
-	toolbar_height := 4 * em
+	toolbar_height := 3 * em
 
 	pane_y : f64 = 0
 	next_line :: proc(y: ^f64, h: f64) -> f64 {
@@ -1432,8 +1434,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	// draw toolbar
 	edge_pad := 1 * em
-	button_height := 2.5 * em
-	button_width  := 2.5 * em
+	button_height := 2 * em
+	button_width  := 2 * em
 	button_pad    := 0.5 * em
 
 	// colormode button nonsense
@@ -1450,10 +1452,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	logo_text := "spall"
 	logo_pad := edge_pad
 	logo_width := measure_text(logo_text, h1_font_size, default_font)
-	draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 3)}, h1_font_size, default_font, text_color)
+	draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
 
 	file_name_width := measure_text(file_name, h1_font_size, default_font)
-	draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 3)}, h1_font_size, default_font, text_color)
+	draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
 
 	if button(rect(edge_pad + logo_width + logo_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 		open_file_dialog()
@@ -1489,7 +1491,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		}
 		colormode = new_colormode
 	}
-	if button(rect(width - edge_pad - ((button_width * 2) + (button_pad * 2)), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", icon_font) {
+	if button(rect(width - edge_pad - ((button_width * 2) + (button_pad)), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", icon_font) {
 		enable_debug = !enable_debug
 	}
 
@@ -1556,7 +1558,11 @@ button :: proc(in_rect: Rect, text: string, font: string) -> bool {
 	draw_rectc(in_rect, 3, button_color)
 	text_width := measure_text(text, p_font_size, font)
 	text_height := get_text_height(p_font_size, font)
-	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, p_font_size, font, text_color)
+	draw_text(text, 
+		Vec2{
+			in_rect.pos.x + (in_rect.size.x / 2) - (text_width / 2), 
+			in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)
+		}, p_font_size, font, text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
 		set_cursor("pointer")

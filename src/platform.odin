@@ -6,10 +6,9 @@ import "core:fmt"
 update_font_cache :: proc "contextless" () {
 	context = wasmContext
 
-	em = get_text_height(p_font_size, monospace_font)
-	h1_height = get_text_height(h1_font_size, default_font)
-	h2_height = get_text_height(h2_font_size, default_font)
-	ch_width = measure_text("a", p_font_size, monospace_font)
+	h1_height = h1_font_size
+	h2_height = h2_font_size
+	ch_width  = measure_text("a", p_font_size, monospace_font)
 }
 
 // eww, this is not a good way to do it
