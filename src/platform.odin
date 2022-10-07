@@ -3,16 +3,23 @@ package main
 import "core:mem"
 import "core:fmt"
 
-update_font_cache :: proc "contextless" () {
-	context = wasmContext
-
+update_font_cache :: proc(width: f64) {
 	h1_height = h1_font_size
 	h2_height = h2_font_size
 	ch_width  = measure_text("a", p_font_size, monospace_font)
-}
 
-// eww, this is not a good way to do it
-last_frame_count := 0
+	if (width / dpr) < 400 {
+		em = _p_font_size * dpr
+		p_font_size = _p_font_size * dpr
+		h1_font_size = _h1_font_size * dpr
+		h2_font_size = _h2_font_size * dpr
+	} else {
+		em = _p_font_size
+		p_font_size = _p_font_size
+		h1_font_size = _h1_font_size
+		h2_font_size = _h2_font_size
+	}
+}
 
 @export
 mouse_move :: proc "contextless" (x, y: f64) {
@@ -57,14 +64,10 @@ mouse_up :: proc "contextless" (x, y: f64) {
 }
 
 @export
-scroll :: proc "contextless" (x, y: f64) {
-	scroll_val_y += y
-}
+scroll :: proc "contextless" (x, y: f64) { scroll_val_y += y }
 
 @export
-zoom :: proc "contextless" (x, y: f64) {
-	scroll_val_y += y
-}
+zoom :: proc "contextless" (x, y: f64) { scroll_val_y += y }
 
 shift_down := false
 @export
@@ -107,9 +110,7 @@ temp_allocate :: proc(n: int) -> rawptr {
 loaded_session_result :: proc "contextless" (key, val: string) { }
 
 @export
-load_build_hash :: proc "contextless" (_hash: int) {
-	build_hash = _hash
-}
+load_build_hash :: proc "contextless" (_hash: int) { build_hash = _hash }
 
 foreign import "js"
 
@@ -143,6 +144,7 @@ foreign js {
 	open_file_dialog :: proc() ---
 }
 
+// a bunch of silly platform wrappers, so I can jam in dpr scaling
 get_text_height :: #force_inline proc "contextless" (scale: f64, font: string) -> f64 {
 	return _get_text_height(scale, font)
 }
@@ -200,13 +202,7 @@ set_cursor :: proc "contextless" (cursor: string) {
 	change_cursor(cursor)
 	is_hovering = true
 }
-
-reset_cursor :: proc "contextless" () {
-	change_cursor("auto")
-}
+reset_cursor :: proc "contextless" () { change_cursor("auto") }
 
 @export
-set_dpr :: proc "contextless" (v: f64) {
-	dpr = v
-	update_fonts = true
-}
+set_dpr :: proc "contextless" (_dpr: f64) { dpr = _dpr }

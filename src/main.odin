@@ -89,6 +89,7 @@ fps_history: queue.Queue(u32)
 
 t           : f64
 frame_count : int
+last_frame_count := 0
 rect_count : int
 bucket_count : int
 was_sleeping : bool
@@ -99,7 +100,6 @@ random_seed: u64
 // loading / trace state
 loading_config := true
 post_loading := false
-update_fonts := true
 event_count: i64
 
 string_block: [dynamic]u8
@@ -114,17 +114,7 @@ file_name_store: [1024]u8
 file_name: string
 CHUNK_SIZE :: 10 * 1024 * 1024
 
-
-to_world_x :: proc(cam: Camera, x: f64) -> f64 {
-	return (x - cam.pan.x) / cam.current_scale
-}
-to_world_y :: proc(cam: Camera, y: f64) -> f64 {
-	return y + cam.pan.y
-}
-to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
-	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
-}
-
+// Most of the action happens in frame(), this is just to set up for the JS/WASM platform layer
 main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
@@ -156,11 +146,118 @@ main :: proc() {
 
 	context = wasmContext
 
+	// fibhashing the time to get better seed distribution
 	random_seed = u64(get_time()) * 11400714819323198485
 	rand.set_global_seed(random_seed)
-	fmt.printf("Seed is 0x%X\n", random_seed)
 }
 
+button :: proc(in_rect: Rect, text: string, font: string) -> bool {
+	draw_rectc(in_rect, 3, button_color)
+	text_width := measure_text(text, p_font_size, font)
+	text_height := get_text_height(p_font_size, font)
+	draw_text(text, 
+		Vec2{
+			in_rect.pos.x + (in_rect.size.x / 2) - (text_width / 2), 
+			in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)
+		}, p_font_size, font, text_color)
+
+	if pt_in_rect(mouse_pos, in_rect) {
+		set_cursor("pointer")
+		if clicked {
+			return true
+		}
+	}
+	return false
+}
+
+draw_graph :: proc(header: string, history: ^queue.Queue(u32), pos: Vec2) {
+	line_width : f64 = 1
+	graph_edge_pad : f64 = 2 * em
+	line_gap := (em / 1.5)
+
+	max_val : u32 = 0
+	min_val : u32 = 100
+	sum_val : u32 = 0
+	for i := 0; i < queue.len(history^); i += 1 {
+		entry := queue.get(history, i)
+		max_val = max(max_val, entry)
+		min_val = min(min_val, entry)
+		sum_val += entry
+	}
+	max_range := max_val - min_val
+	avg_val := sum_val / 100
+
+	text_width := measure_text(header, p_font_size, default_font)
+	center_offset := (graph_size / 2) - (text_width / 2)
+	draw_text(header, Vec2{pos.x + center_offset, pos.y}, p_font_size, default_font, text_color)
+
+	graph_top := pos.y + em + line_gap
+	draw_rect(rect(pos.x, graph_top, graph_size, graph_size), bg_color2)
+	draw_rect_outline(rect(pos.x, graph_top, graph_size, graph_size), 2, outline_color)
+
+	draw_line(Vec2{pos.x - 5, graph_top + graph_size - graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_size - graph_edge_pad}, 1, graph_color)
+	draw_line(Vec2{pos.x - 5, graph_top + graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_edge_pad}, 1, graph_color)
+
+	if queue.len(history^) > 1 {
+		high_height := graph_top + graph_edge_pad - (em / 2)
+		low_height := graph_top + graph_size - graph_edge_pad - (em / 2)
+		avg_height := rescale(f64(avg_val), f64(min_val), f64(max_val), low_height, high_height)
+
+		high_str := fmt.tprintf("%d", max_val)
+		high_width := measure_text(high_str, p_font_size, default_font) + line_gap
+		draw_text(high_str, Vec2{(pos.x - 5) - high_width, high_height}, p_font_size, default_font, text_color)
+
+		if queue.len(history^) > 90 {
+			draw_line(Vec2{pos.x - 5, avg_height + (em / 2)}, Vec2{pos.x + 5, avg_height + (em / 2)}, 1, graph_color)
+			avg_str := fmt.tprintf("%d", avg_val)
+			avg_width := measure_text(avg_str, p_font_size, default_font) + line_gap
+			draw_text(avg_str, Vec2{(pos.x - 5) - avg_width, avg_height}, p_font_size, default_font, text_color)
+		}
+
+		low_str := fmt.tprintf("%d", min_val)
+		low_width := measure_text(low_str, p_font_size, default_font) + line_gap
+		draw_text(low_str, Vec2{(pos.x - 5) - low_width, low_height}, p_font_size, default_font, text_color)
+	}
+
+	graph_y_bounds := graph_size - (graph_edge_pad * 2)
+	graph_x_bounds := graph_size - graph_edge_pad
+
+	last_x : f64 = 0
+	last_y : f64 = 0
+	for i := 0; i < queue.len(history^); i += 1 {
+		entry := queue.get(history, i)
+
+		point_x_offset : f64 = 0
+		if queue.len(history^) != 0 {
+			point_x_offset = f64(i) * (graph_x_bounds / f64(queue.len(history^)))
+		}
+
+		point_y_offset : f64 = 0
+		if max_range != 0 {
+			point_y_offset = f64(entry - min_val) * (graph_y_bounds / f64(max_range))
+		}
+
+		point_x := pos.x + point_x_offset + (graph_edge_pad / 2)
+		point_y := graph_top + graph_size - point_y_offset - graph_edge_pad
+
+		if queue.len(history^) > 1  && i > 0 {
+			draw_line(Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)
+		}
+
+		last_x = point_x
+		last_y = point_y
+	}
+}
+
+to_world_x :: proc(cam: Camera, x: f64) -> f64 {
+	return (x - cam.pan.x) / cam.current_scale
+}
+to_world_y :: proc(cam: Camera, y: f64) -> f64 {
+	return y + cam.pan.y
+}
+to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
+	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
+}
 
 get_current_window :: proc(cam: Camera, display_width: f64) -> (f64, f64) {
 	display_range_start := to_world_x(cam, 0)
@@ -552,34 +649,15 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		was_mouse_down = false
 	}
 
-	update_font_cache()
-
 	dt := _dt
 	if was_sleeping {
 		dt = 0.001
 		was_sleeping = false
 	}
-
-	gl_rects = make([dynamic]DrawRect, 0, int(width / 2), temp_allocator)
-
 	t += dt
 
-	if (width / dpr) < 400 {
-		em = _p_font_size * dpr
-		p_font_size = _p_font_size * dpr
-		h1_font_size = _h1_font_size * dpr
-		h2_font_size = _h2_font_size * dpr
-	} else {
-		em = _p_font_size
-		p_font_size = _p_font_size
-		h1_font_size = _h1_font_size
-		h2_font_size = _h2_font_size
-	}
-
-	if update_fonts {
-		update_font_cache()
-		update_fonts = false
-	}
+	// Set up all the display state we need to render the screen
+	update_font_cache(width)
 
 	rect_height = em + (0.75 * em)
 	top_line_gap := (em / 1.5)
@@ -629,19 +707,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		post_loading = false
 	}
 
-	canvas_clear()
-
-	// Render background
-	gl_init_frame(bg_color2)
-
 	graph_header_text_height := (top_line_gap * 2) + em
 	graph_header_line_gap := em
 	graph_header_height := graph_header_text_height + graph_header_line_gap
 	max_x := width - x_pad_size
 
 	disp_rect = rect(start_x, start_y, display_width, display_height)
-	//draw_rect_outline(rect(disp_rect.pos.x, disp_rect.pos.y, disp_rect.size.x, disp_rect.size.y - 1), 1, FVec4{255, 0, 0, 255})
-
 	graph_rect = disp_rect
 	graph_rect.pos.y += graph_header_text_height
 	graph_rect.size.y -= graph_header_text_height
@@ -649,201 +720,216 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	padded_graph_rect.pos.y += graph_header_line_gap
 	padded_graph_rect.size.y -= graph_header_line_gap
 
-	//draw_rect_outline(rect(graph_rect.pos.x, graph_rect.pos.y, graph_rect.size.x, graph_rect.size.y - 1), 1, FVec4{0, 0, 255, 255})
 
-	old_scale := cam.target_scale
-
-	max_scale := 10000000.0
-	min_scale := 0.5 * display_width / (total_max_time - total_min_time)
+	// process key/mouse inputs
+	start_time, end_time: f64
+	pan_delta: Vec2
 	{
-		cam.target_scale *= _pow(1.0025, -scroll_val_y)
-		cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
-	}
-	scroll_val_y = 0
+		old_scale := cam.target_scale
 
-	cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
-	cam.current_scale = min(max(cam.current_scale, min_scale), max_scale)
+		max_scale := 10000000.0
+		min_scale := 0.5 * display_width / (total_max_time - total_min_time)
+		{
+			cam.target_scale *= _pow(1.0025, -scroll_val_y)
+			cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
+		}
+		scroll_val_y = 0
 
-	last_start_time, last_end_time := get_current_window(cam, display_width)
+		cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
+		cam.current_scale = min(max(cam.current_scale, min_scale), max_scale)
 
-	get_max_y_pan :: proc(processes: []Process) -> f64 {
-		cur_y : f64 = 0
+		last_start_time, last_end_time := get_current_window(cam, display_width)
 
-		for proc_v, _ in processes {
-			if len(processes) > 1 {
-				h1_size := h1_height + (h1_height / 3)
-				cur_y += h1_size
+		get_max_y_pan :: proc(processes: []Process) -> f64 {
+			cur_y : f64 = 0
+
+			for proc_v, _ in processes {
+				if len(processes) > 1 {
+					h1_size := h1_height + (h1_height / 3)
+					cur_y += h1_size
+				}
+
+				for tm, _ in proc_v.threads {
+					h2_size := h2_height + (h2_height / 3)
+					cur_y += h2_size + ((f64(len(tm.depths)) * rect_height) + thread_gap)
+				}
 			}
 
-			for tm, _ in proc_v.threads {
-				h2_size := h2_height + (h2_height / 3)
-				cur_y += h2_size + ((f64(len(tm.depths)) * rect_height) + thread_gap)
+			return cur_y
+		}
+		max_height := get_max_y_pan(processes[:])
+		max_y_pan := max(+20 * em + max_height - graph_rect.size.y, 0)
+		min_y_pan := min(-20 * em, max_y_pan)
+		max_x_pan := max(+20 * em, 0)
+		min_x_pan := min(-20 * em + display_width + -(total_max_time - total_min_time) * cam.target_scale, max_x_pan)
+
+		// compute pan, scale + scroll
+		pan_delta = mouse_pos - last_mouse_pos
+		if is_mouse_down && !shift_down {
+			if pt_in_rect(clicked_pos, padded_graph_rect) {
+
+				if cam.target_pan_x < min_x_pan {
+					pan_delta.x *= _pow(2, (cam.target_pan_x - min_x_pan) / 32)
+				}
+				if cam.target_pan_x > max_x_pan {
+					pan_delta.x *= _pow(2, (max_x_pan - cam.target_pan_x) / 32)
+				}
+				if cam.pan.y < min_y_pan {
+					pan_delta.y *= _pow(2, (cam.pan.y - min_y_pan) / 32)
+				}
+				if cam.pan.y > max_y_pan {
+					pan_delta.y *= _pow(2, (max_y_pan - cam.pan.y) / 32)
+				}
+
+				cam.vel.y = -pan_delta.y / dt
+				cam.vel.x = pan_delta.x / dt
 			}
+			last_mouse_pos = mouse_pos
 		}
 
-		return cur_y
-	}
-	max_height := get_max_y_pan(processes[:])
-	max_y_pan := max(+20 * em + max_height - graph_rect.size.y, 0)
-	min_y_pan := min(-20 * em, max_y_pan)
-	max_x_pan := max(+20 * em, 0)
-	min_x_pan := min(-20 * em + display_width + -(total_max_time - total_min_time) * cam.target_scale, max_x_pan)
 
-	// compute pan, scale + scroll
-	pan_delta := mouse_pos - last_mouse_pos
-	if is_mouse_down && !shift_down {
-		if pt_in_rect(clicked_pos, padded_graph_rect) {
+		cam_mouse_x := mouse_pos.x - start_x
 
+		if cam.target_scale != old_scale {
+			cam.target_pan_x = ((cam.target_pan_x - cam_mouse_x) * (cam.target_scale / old_scale)) + cam_mouse_x
 			if cam.target_pan_x < min_x_pan {
-				pan_delta.x *= _pow(2, (cam.target_pan_x - min_x_pan) / 32)
+				cam.target_pan_x = min_x_pan
 			}
 			if cam.target_pan_x > max_x_pan {
-				pan_delta.x *= _pow(2, (max_x_pan - cam.target_pan_x) / 32)
+				cam.target_pan_x = max_x_pan
 			}
-			if cam.pan.y < min_y_pan {
-				pan_delta.y *= _pow(2, (cam.pan.y - min_y_pan) / 32)
-			}
-			if cam.pan.y > max_y_pan {
-				pan_delta.y *= _pow(2, (max_y_pan - cam.pan.y) / 32)
-			}
-
-			cam.vel.y = -pan_delta.y / dt
-			cam.vel.x = pan_delta.x / dt
 		}
-		last_mouse_pos = mouse_pos
-	}
 
+		cam.target_pan_x = cam.target_pan_x + (cam.vel.x * dt)
+		cam.pan.y = cam.pan.y + (cam.vel.y * dt)
+		cam.vel *= _pow(0.0001, dt)
 
-	cam_mouse_x := mouse_pos.x - start_x
-
-	if cam.target_scale != old_scale {
-		cam.target_pan_x = ((cam.target_pan_x - cam_mouse_x) * (cam.target_scale / old_scale)) + cam_mouse_x
-		if cam.target_pan_x < min_x_pan {
-			cam.target_pan_x = min_x_pan
+		edge_sproing : f64 = 0.0001
+		if cam.pan.y < min_y_pan && !is_mouse_down {
+			cam.pan.y = min_y_pan + (cam.pan.y - min_y_pan) * _pow(edge_sproing, dt)
+			cam.vel.y *= _pow(0.0001, dt)
 		}
-		if cam.target_pan_x > max_x_pan {
-			cam.target_pan_x = max_x_pan
+		if cam.pan.y > max_y_pan && !is_mouse_down {
+			cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * _pow(edge_sproing, dt)
+			cam.vel.y *= _pow(0.0001, dt)
 		}
+
+		if cam.target_pan_x < min_x_pan && !is_mouse_down {
+			cam.target_pan_x = min_x_pan + (cam.target_pan_x - min_x_pan) * _pow(edge_sproing, dt)
+			cam.vel.x *= _pow(0.0001, dt)
+		}
+		if cam.target_pan_x > max_x_pan && !is_mouse_down {
+			cam.target_pan_x = max_x_pan + (cam.target_pan_x - max_x_pan) * _pow(edge_sproing, dt)
+			cam.vel.x *= _pow(0.0001, dt)
+		}
+
+		cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
+		start_time, end_time = get_current_window(cam, display_width)
 	}
 
-	cam.target_pan_x = cam.target_pan_x + (cam.vel.x * dt)
-	cam.pan.y = cam.pan.y + (cam.vel.y * dt)
-	cam.vel *= _pow(0.0001, dt)
-
-	edge_sproing : f64 = 0.0001
-	if cam.pan.y < min_y_pan && !is_mouse_down {
-		cam.pan.y = min_y_pan + (cam.pan.y - min_y_pan) * _pow(edge_sproing, dt)
-		cam.vel.y *= _pow(0.0001, dt)
-	}
-	if cam.pan.y > max_y_pan && !is_mouse_down {
-		cam.pan.y = max_y_pan + (cam.pan.y - max_y_pan) * _pow(edge_sproing, dt)
-		cam.vel.y *= _pow(0.0001, dt)
-	}
-
-	if cam.target_pan_x < min_x_pan && !is_mouse_down {
-		cam.target_pan_x = min_x_pan + (cam.target_pan_x - min_x_pan) * _pow(edge_sproing, dt)
-		cam.vel.x *= _pow(0.0001, dt)
-	}
-	if cam.target_pan_x > max_x_pan && !is_mouse_down {
-		cam.target_pan_x = max_x_pan + (cam.target_pan_x - max_x_pan) * _pow(edge_sproing, dt)
-		cam.vel.x *= _pow(0.0001, dt)
-	}
-
-	cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
-
-	start_time, end_time := get_current_window(cam, display_width)
+	// Init GL / Text canvases
+	canvas_clear()
+	gl_init_frame(bg_color2)
+	gl_rects = make([dynamic]DrawRect, 0, int(width / 2), temp_allocator)
 
 	// Draw time subdivision lines
-	mus_range := f64(end_time - start_time)
-	v1 := math.log10(mus_range)
-	v2 := math.floor(v1)
-	rem := v1 - v2
+	division: f64
+	draw_tick_start: f64
+	ticks: int
+	{
+		mus_range := f64(end_time - start_time)
+		v1 := math.log10(mus_range)
+		v2 := math.floor(v1)
+		rem := v1 - v2
 
-	division := _pow(10, v2)
-	if rem < 0.3 {
-		division -= (division * 0.8)
-	} else if rem < 0.6 {
-		division -= (division / 2)
+		division = _pow(10, v2)
+		if rem < 0.3 {
+			division -= (division * 0.8)
+		} else if rem < 0.6 {
+			division -= (division / 2)
+		}
+
+		display_range_start := -cam.pan.x / cam.current_scale
+		display_range_end := (display_width - cam.pan.x) / cam.current_scale
+
+		draw_tick_start = f_round_down(display_range_start, division)
+		draw_tick_end := f_round_down(display_range_end, division)
+		tick_range := draw_tick_end - draw_tick_start
+
+		ticks = int(tick_range / division) + 3
+
+		subdivisions := 5
+		line_x_start := -4
+		line_x_end   := ticks * subdivisions
+
+		line_start := disp_rect.pos.y + graph_header_height - top_line_gap
+		line_height := graph_rect.size.y
+		for i := line_x_start; i < line_x_end; i += 1 {
+			tick_time := draw_tick_start + (f64(i) * (division / f64(subdivisions)))
+			x_off := (tick_time * cam.current_scale) + cam.pan.x
+
+			color := (i % subdivisions) != 0 ? subdivision_color : division_color
+
+			draw_rect := DrawRect{f32(start_x + x_off), f32(1.5), {u8(color.x), u8(color.y), u8(color.z), u8(color.w)}}
+			append(&gl_rects, draw_rect)
+		}
+
+		gl_push_rects(gl_rects[:], line_start, line_height)
+		resize(&gl_rects, 0)
 	}
-
-	display_range_start := -cam.pan.x / cam.current_scale
-	display_range_end := (display_width - cam.pan.x) / cam.current_scale
-
-	draw_tick_start := f_round_down(display_range_start, division)
-	draw_tick_end := f_round_down(display_range_end, division)
-	tick_range := draw_tick_end - draw_tick_start
-
-	ticks := int(tick_range / division) + 3
-
-	subdivisions := 5
-	line_x_start := -4
-	line_x_end   := ticks * subdivisions
-
-	line_start := disp_rect.pos.y + graph_header_height - top_line_gap
-	line_height := graph_rect.size.y
-	for i := line_x_start; i < line_x_end; i += 1 {
-		tick_time := draw_tick_start + (f64(i) * (division / f64(subdivisions)))
-		x_off := (tick_time * cam.current_scale) + cam.pan.x
-
-		color := (i % subdivisions) != 0 ? subdivision_color : division_color
-
-		draw_rect := DrawRect{f32(start_x + x_off), f32(1.5), {u8(color.x), u8(color.y), u8(color.z), u8(color.w)}}
-		append(&gl_rects, draw_rect)
-	}
-
-	gl_push_rects(gl_rects[:], line_start, line_height)
-	resize(&gl_rects, 0)
 
 
 	// Render flamegraphs
-	clicked_on_rect = false
-	rect_count = 0
-	bucket_count = 0
-	cur_y := padded_graph_rect.pos.y - cam.pan.y
-	proc_loop: for proc_v, p_idx in &processes {
-		h1_size : f64 = 0
-		if len(processes) > 1 {
-			if cur_y > disp_rect.pos.y {
-				row_text := fmt.tprintf("PID: %d", proc_v.process_id)
-				draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
+	{
+		clicked_on_rect = false
+		rect_count = 0
+		bucket_count = 0
+		cur_y := padded_graph_rect.pos.y - cam.pan.y
+		proc_loop: for proc_v, p_idx in &processes {
+			h1_size : f64 = 0
+			if len(processes) > 1 {
+				if cur_y > disp_rect.pos.y {
+					row_text := fmt.tprintf("PID: %d", proc_v.process_id)
+					draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
+				}
+
+				h1_size = h1_height + (h1_height / 3)
+				cur_y += h1_size
 			}
 
-			h1_size = h1_height + (h1_height / 3)
-			cur_y += h1_size
-		}
+			thread_loop: for tm, t_idx in &proc_v.threads {
+				last_cur_y := cur_y
+				h2_size := h2_height + (h2_height / 3)
+				cur_y += h2_size
 
-		thread_loop: for tm, t_idx in &proc_v.threads {
-			last_cur_y := cur_y
-			h2_size := h2_height + (h2_height / 3)
-			cur_y += h2_size
+				thread_advance := ((f64(len(tm.depths)) * rect_height) + thread_gap)
 
-			thread_advance := ((f64(len(tm.depths)) * rect_height) + thread_gap)
+				if cur_y > info_pane_y {
+					break proc_loop
+				}
+				if cur_y + thread_advance < 0 {
+					cur_y += thread_advance
+					continue
+				}
 
-			if cur_y > info_pane_y {
-				break proc_loop
-			}
-			if cur_y + thread_advance < 0 {
+				if last_cur_y > disp_rect.pos.y {
+					row_text := fmt.tprintf("TID: %d", tm.thread_id)
+					draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
+				}
+
+				cur_depth_off := 0
+				for depth, d_idx in &tm.depths {
+					render_tree(p_idx, t_idx, &tm, d_idx, cur_y, start_time, end_time)
+					gl_push_rects(gl_rects[:], (cur_y + (rect_height * f64(d_idx))), rect_height)
+
+					resize(&gl_rects, 0)
+				}
 				cur_y += thread_advance
-				continue
 			}
-
-			if last_cur_y > disp_rect.pos.y {
-				row_text := fmt.tprintf("TID: %d", tm.thread_id)
-				draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
-			}
-
-			cur_depth_off := 0
-			for depth, d_idx in &tm.depths {
-				render_tree(p_idx, t_idx, &tm, d_idx, cur_y, start_time, end_time)
-				gl_push_rects(gl_rects[:], (cur_y + (rect_height * f64(d_idx))), rect_height)
-
-				resize(&gl_rects, 0)
-			}
-			cur_y += thread_advance
 		}
 	}
 
-	// Chop sides of screen
+	// Chop screen sides, and draw solid overlays to cover text/rect canvas overlay gaps
 	draw_rect(rect(0, disp_rect.pos.y, width - mini_graph_padded_width, graph_header_text_height), bg_color) // top
 	draw_rect(rect(0, toolbar_height, start_x, height), bg_color) // left
 
@@ -857,71 +943,75 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 
 	// Draw top wide-graph
-	wide_scale_x := rescale(1.0, 0, total_max_time - total_min_time, 0, display_width)
-	layer_count := 1
-	for proc_v, _ in processes {
-		layer_count += len(proc_v.threads)
-	}
-
-	append(&gl_rects, DrawRect{f32(start_x), f32(display_width), {u8(wide_bg_color.x), u8(wide_bg_color.y), u8(wide_bg_color.z), u8(wide_bg_color.w)}})
-	gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
-	resize(&gl_rects, 0)
-
-	for proc_v, p_idx in &processes {
-		for tm, t_idx in &proc_v.threads {
-			if len(tm.depths) == 0 {
-				continue
-			}
-
-			render_widetree(&tm, start_x, wide_scale_x, layer_count)
-			gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
-			resize(&gl_rects, 0)
+	{
+		wide_scale_x := rescale(1.0, 0, total_max_time - total_min_time, 0, display_width)
+		layer_count := 1
+		for proc_v, _ in processes {
+			layer_count += len(proc_v.threads)
 		}
-	}
 
-	highlight_start_x := rescale(start_time, 0, total_max_time - total_min_time, 0, display_width)
-	highlight_end_x := rescale(end_time, 0, total_max_time - total_min_time, 0, display_width)
+		append(&gl_rects, DrawRect{f32(start_x), f32(display_width), {u8(wide_bg_color.x), u8(wide_bg_color.y), u8(wide_bg_color.z), u8(wide_bg_color.w)}})
+		gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
+		resize(&gl_rects, 0)
 
-	highlight_width := highlight_end_x - highlight_start_x
-	min_highlight := 5.0
-	if highlight_width < min_highlight {
-		high_center := (highlight_start_x + highlight_end_x) / 2
-		highlight_start_x = high_center - (min_highlight / 2)
-		highlight_end_x = high_center + (min_highlight / 2)
-	}
+		for proc_v, p_idx in &processes {
+			for tm, t_idx in &proc_v.threads {
+				if len(tm.depths) == 0 {
+					continue
+				}
 
-	highlight_box_l := rect(start_x, wide_graph_y, highlight_start_x, wide_graph_height)
-	draw_rect(highlight_box_l, FVec4{0, 0, 0, 150})
-
-	highlight_box_r := rect(start_x + highlight_end_x, wide_graph_y, display_width - highlight_end_x, wide_graph_height)
-	draw_rect(highlight_box_r, FVec4{0, 0, 0, 150})
-
-	draw_line(Vec2{start_x + highlight_start_x, wide_graph_y}, Vec2{start_x + highlight_start_x, wide_graph_y + wide_graph_height}, 3, bg_color2)
-	draw_line(Vec2{start_x + highlight_end_x, wide_graph_y}, Vec2{start_x + highlight_end_x, wide_graph_y + wide_graph_height}, 3, bg_color2)
-
-	// Draw mini-graph
-	mini_rect_height := (em / 2)
-	mini_thread_gap := 8.0
-	x_scale := rescale(1.0, 0, total_max_time - total_min_time, 0, mini_graph_width)
-	y_scale := mini_rect_height / rect_height
-
-	tree_y : f64 = padded_graph_rect.pos.y - (cam.pan.y * y_scale)
-	for proc_v, p_idx in &processes {
-		for tm, t_idx in &proc_v.threads {
-			for depth, d_idx in &tm.depths {
-				render_minitree(&tm, d_idx, mini_start_x + mini_graph_pad, x_scale)
-				gl_push_rects(gl_rects[:], (tree_y + (mini_rect_height * f64(d_idx))), mini_rect_height)
+				render_widetree(&tm, start_x, wide_scale_x, layer_count)
+				gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
 				resize(&gl_rects, 0)
 			}
-
-			tree_y += ((f64(len(tm.depths)) * mini_rect_height) + mini_thread_gap)
 		}
+
+		highlight_start_x := rescale(start_time, 0, total_max_time - total_min_time, 0, display_width)
+		highlight_end_x := rescale(end_time, 0, total_max_time - total_min_time, 0, display_width)
+
+		highlight_width := highlight_end_x - highlight_start_x
+		min_highlight := 5.0
+		if highlight_width < min_highlight {
+			high_center := (highlight_start_x + highlight_end_x) / 2
+			highlight_start_x = high_center - (min_highlight / 2)
+			highlight_end_x = high_center + (min_highlight / 2)
+		}
+
+		highlight_box_l := rect(start_x, wide_graph_y, highlight_start_x, wide_graph_height)
+		draw_rect(highlight_box_l, FVec4{0, 0, 0, 150})
+
+		highlight_box_r := rect(start_x + highlight_end_x, wide_graph_y, display_width - highlight_end_x, wide_graph_height)
+		draw_rect(highlight_box_r, FVec4{0, 0, 0, 150})
+
+		draw_line(Vec2{start_x + highlight_start_x, wide_graph_y}, Vec2{start_x + highlight_start_x, wide_graph_y + wide_graph_height}, 3, bg_color2)
+		draw_line(Vec2{start_x + highlight_end_x, wide_graph_y}, Vec2{start_x + highlight_end_x, wide_graph_y + wide_graph_height}, 3, bg_color2)
 	}
 
-	preview_height := display_height * y_scale
+	// Draw mini-graph
+	{
+		mini_rect_height := (em / 2)
+		mini_thread_gap := 8.0
+		x_scale := rescale(1.0, 0, total_max_time - total_min_time, 0, mini_graph_width)
+		y_scale := mini_rect_height / rect_height
 
-	draw_rect(rect(mini_start_x, disp_rect.pos.y, mini_graph_padded_width, preview_height), highlight_color)
-	draw_rect(rect(mini_start_x, disp_rect.pos.y + preview_height, mini_graph_padded_width, display_height - preview_height), shadow_color)
+		tree_y : f64 = padded_graph_rect.pos.y - (cam.pan.y * y_scale)
+		for proc_v, p_idx in &processes {
+			for tm, t_idx in &proc_v.threads {
+				for depth, d_idx in &tm.depths {
+					render_minitree(&tm, d_idx, mini_start_x + mini_graph_pad, x_scale)
+					gl_push_rects(gl_rects[:], (tree_y + (mini_rect_height * f64(d_idx))), mini_rect_height)
+					resize(&gl_rects, 0)
+				}
+
+				tree_y += ((f64(len(tm.depths)) * mini_rect_height) + mini_thread_gap)
+			}
+		}
+
+		preview_height := display_height * y_scale
+
+		draw_rect(rect(mini_start_x, disp_rect.pos.y, mini_graph_padded_width, preview_height), highlight_color)
+		draw_rect(rect(mini_start_x, disp_rect.pos.y + preview_height, mini_graph_padded_width, display_height - preview_height), shadow_color)
+	}
 
 	// Draw timestamps on subdivision lines
 	for i := 0; i < ticks; i += 1 {
@@ -941,383 +1031,388 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
 	draw_rect(rect(0, info_pane_y, width, height), bg_color) // bottom
 
-
-	// Handle select events
-	if clicked && !clicked_on_rect && !shift_down {
-		selected_event = {-1, -1, -1, -1}
-		did_multiselect = false
-		stats_state = .NoStats
-	}
-
-	// user wants to multi-select
-	if is_mouse_down && shift_down {
-		// set multiselect flags
-		stats_state = .Started
-		did_multiselect = true
-		total_tracked_time = 0.0
-		cur_stat_offset = StatOffset{}
-		selected_event = {-1, -1, -1, -1}
-
-		// try to fake a reduced frame of latency by extrapolating the position by the delta
-		mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
-
-		// cap multi-select box at graph edges
-		delta := mouse_pos_extrapolated - clicked_pos
-		c_x := min(clicked_pos.x, graph_rect.pos.x + graph_rect.size.x)
-		c_x = max(c_x, graph_rect.pos.x)
-
-		c_y := min(clicked_pos.y, graph_rect.pos.y + graph_rect.size.y)
-		c_y = max(c_y, graph_rect.pos.y)
-
-		m_x := min(c_x + delta.x, graph_rect.pos.x + graph_rect.size.x)
-		m_x = max(m_x, graph_rect.pos.x)
-		m_y := min(c_y + delta.y, graph_rect.pos.y + graph_rect.size.y)
-		m_y = max(m_y, graph_rect.pos.y)
-
-		d_x := m_x - c_x
-		d_y := m_y - c_y
-
-		// draw multiselect box
-		selected_rect := rect(c_x, c_y, d_x, d_y)
-		draw_rect_outline(selected_rect, 1, FVec4{0, 0, 255, 255})
-		draw_rect(selected_rect, FVec4{0, 0, 255, 100})
-
-		// transform multiselect rect to screen position
-		flopped_rect := Rect{}
-		flopped_rect.pos.x = min(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
-		x2 := max(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
-		flopped_rect.size.x = x2 - flopped_rect.pos.x
-
-		flopped_rect.pos.y = min(selected_rect.pos.y, selected_rect.pos.y + selected_rect.size.y)
-		y2 := max(selected_rect.pos.y, selected_rect.pos.y + selected_rect.size.y)
-		flopped_rect.size.y = y2 - flopped_rect.pos.y
-
-		selected_start_time := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x)
-		selected_end_time   := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x + flopped_rect.size.x)
-
-		// draw multiselect timerange
-		width_text := fmt.tprintf("%s", time_fmt(selected_end_time - selected_start_time))
-		width_text_width := measure_text(width_text, p_font_size, monospace_font)
-		if flopped_rect.size.x > width_text_width {
-			draw_text(
-				width_text, 
-				Vec2{
-					flopped_rect.pos.x + (flopped_rect.size.x / 2) - (width_text_width / 2), 
-					flopped_rect.pos.y + flopped_rect.size.y - (em * 1.5)
-				}, 
-				p_font_size,
-				monospace_font,
-				text_color
-			)
+	// Handle inputs
+	{
+		// Handle select events
+		if clicked && !clicked_on_rect && !shift_down {
+			selected_event = {-1, -1, -1, -1}
+			did_multiselect = false
+			stats_state = .NoStats
 		}
 
-		// push it into screen-space
-		flopped_rect.pos.x -= disp_rect.pos.x
+		// user wants to multi-select
+		if is_mouse_down && shift_down {
+			// set multiselect flags
+			stats_state = .Started
+			did_multiselect = true
+			total_tracked_time = 0.0
+			cur_stat_offset = StatOffset{}
+			selected_event = {-1, -1, -1, -1}
 
-		big_global_arena.offset = current_alloc_offset
-		stats = make(map[string]Stats, 0, big_global_allocator)
-		selected_ranges = make([dynamic]Range, 0, big_global_allocator)
+			// try to fake a reduced frame of latency by extrapolating the position by the delta
+			mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
 
-		// build out ranges
-		cur_y := padded_graph_rect.pos.y - cam.pan.y
-		proc_loop2: for proc_v, p_idx in processes {
-			h1_size : f64 = 0
-			if len(processes) > 1 {
-				h1_size = h1_height + (h1_height / 3)
-				cur_y += h1_size
+			// cap multi-select box at graph edges
+			delta := mouse_pos_extrapolated - clicked_pos
+			c_x := min(clicked_pos.x, graph_rect.pos.x + graph_rect.size.x)
+			c_x = max(c_x, graph_rect.pos.x)
+
+			c_y := min(clicked_pos.y, graph_rect.pos.y + graph_rect.size.y)
+			c_y = max(c_y, graph_rect.pos.y)
+
+			m_x := min(c_x + delta.x, graph_rect.pos.x + graph_rect.size.x)
+			m_x = max(m_x, graph_rect.pos.x)
+			m_y := min(c_y + delta.y, graph_rect.pos.y + graph_rect.size.y)
+			m_y = max(m_y, graph_rect.pos.y)
+
+			d_x := m_x - c_x
+			d_y := m_y - c_y
+
+			// draw multiselect box
+			selected_rect := rect(c_x, c_y, d_x, d_y)
+			draw_rect_outline(selected_rect, 1, FVec4{0, 0, 255, 255})
+			draw_rect(selected_rect, FVec4{0, 0, 255, 100})
+
+			// transform multiselect rect to screen position
+			flopped_rect := Rect{}
+			flopped_rect.pos.x = min(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
+			x2 := max(selected_rect.pos.x, selected_rect.pos.x + selected_rect.size.x)
+			flopped_rect.size.x = x2 - flopped_rect.pos.x
+
+			flopped_rect.pos.y = min(selected_rect.pos.y, selected_rect.pos.y + selected_rect.size.y)
+			y2 := max(selected_rect.pos.y, selected_rect.pos.y + selected_rect.size.y)
+			flopped_rect.size.y = y2 - flopped_rect.pos.y
+
+			selected_start_time := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x)
+			selected_end_time   := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x + flopped_rect.size.x)
+
+			// draw multiselect timerange
+			width_text := fmt.tprintf("%s", time_fmt(selected_end_time - selected_start_time))
+			width_text_width := measure_text(width_text, p_font_size, monospace_font)
+			if flopped_rect.size.x > width_text_width {
+				draw_text(
+					width_text, 
+					Vec2{
+						flopped_rect.pos.x + (flopped_rect.size.x / 2) - (width_text_width / 2), 
+						flopped_rect.pos.y + flopped_rect.size.y - (em * 1.5)
+					}, 
+					p_font_size,
+					monospace_font,
+					text_color
+				)
 			}
 
-			for tm, t_idx in proc_v.threads {
-				h2_size := h2_height + (h2_height / 3)
-				cur_y += h2_size
-				if cur_y > info_pane_y {
-					break proc_loop2
+			// push it into screen-space
+			flopped_rect.pos.x -= disp_rect.pos.x
+
+			big_global_arena.offset = current_alloc_offset
+			stats = make(map[string]Stats, 0, big_global_allocator)
+			selected_ranges = make([dynamic]Range, 0, big_global_allocator)
+
+			// build out ranges
+			cur_y := padded_graph_rect.pos.y - cam.pan.y
+			proc_loop2: for proc_v, p_idx in processes {
+				h1_size : f64 = 0
+				if len(processes) > 1 {
+					h1_size = h1_height + (h1_height / 3)
+					cur_y += h1_size
 				}
 
-				thread_advance := ((f64(len(tm.depths)) * rect_height) + thread_gap)
-				if cur_y + thread_advance < 0 {
-					cur_y += thread_advance
-					continue
-				}
+				for tm, t_idx in proc_v.threads {
+					h2_size := h2_height + (h2_height / 3)
+					cur_y += h2_size
+					if cur_y > info_pane_y {
+						break proc_loop2
+					}
 
-				for depth, d_idx in tm.depths {
-					y := rect_height * f64(d_idx)
-					h := rect_height
-
-					dy := cur_y + y
-					dy2 := cur_y + y + h
-					if dy > (flopped_rect.pos.y + flopped_rect.size.y) || dy2 < flopped_rect.pos.y {
+					thread_advance := ((f64(len(tm.depths)) * rect_height) + thread_gap)
+					if cur_y + thread_advance < 0 {
+						cur_y += thread_advance
 						continue
 					}
 
-					start_idx := find_idx(depth.events, selected_start_time)
-					end_idx := find_idx(depth.events, selected_end_time)
-					if start_idx == -1 {
-						start_idx = 0
-					}
-					if end_idx == -1 {
-						end_idx = len(depth.events) - 1
-					}
-					scan_arr := depth.events[start_idx:end_idx+1]
+					for depth, d_idx in tm.depths {
+						y := rect_height * f64(d_idx)
+						h := rect_height
 
-					real_start := -1
-					fwd_scan_loop: for i := 0; i < len(scan_arr); i += 1 {
-						ev := scan_arr[i]
-						x := ev.timestamp - total_min_time
-
-						duration := bound_duration(ev, tm.max_time)
-						w := duration * cam.current_scale
-
-						r := Rect{Vec2{x, y}, Vec2{w, h}}
-						r_x := (r.pos.x * cam.current_scale) + cam.pan.x
-						r_y := cur_y + r.pos.y
-						dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
-
-						if !rect_in_rect(flopped_rect, dr) {
-							continue fwd_scan_loop
+						dy := cur_y + y
+						dy2 := cur_y + y + h
+						if dy > (flopped_rect.pos.y + flopped_rect.size.y) || dy2 < flopped_rect.pos.y {
+							continue
 						}
 
-						real_start = start_idx + i
-						break fwd_scan_loop
-					}
+						start_idx := find_idx(depth.events, selected_start_time)
+						end_idx := find_idx(depth.events, selected_end_time)
+						if start_idx == -1 {
+							start_idx = 0
+						}
+						if end_idx == -1 {
+							end_idx = len(depth.events) - 1
+						}
+						scan_arr := depth.events[start_idx:end_idx+1]
 
-					real_end := -1
-					rev_scan_loop: for i := len(scan_arr) - 1; i >= 0; i -= 1 {
-						ev := scan_arr[i]
-						x := ev.timestamp - total_min_time
+						real_start := -1
+						fwd_scan_loop: for i := 0; i < len(scan_arr); i += 1 {
+							ev := scan_arr[i]
+							x := ev.timestamp - total_min_time
 
-						duration := bound_duration(ev, tm.max_time)
-						w := duration * cam.current_scale
+							duration := bound_duration(ev, tm.max_time)
+							w := duration * cam.current_scale
 
-						r := Rect{Vec2{x, y}, Vec2{w, h}}
-						r_x := (r.pos.x * cam.current_scale) + cam.pan.x
-						r_y := cur_y + r.pos.y
-						dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
+							r := Rect{Vec2{x, y}, Vec2{w, h}}
+							r_x := (r.pos.x * cam.current_scale) + cam.pan.x
+							r_y := cur_y + r.pos.y
+							dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
 
-						if !rect_in_rect(flopped_rect, dr) {
-							continue rev_scan_loop
+							if !rect_in_rect(flopped_rect, dr) {
+								continue fwd_scan_loop
+							}
+
+							real_start = start_idx + i
+							break fwd_scan_loop
 						}
 
-						real_end = start_idx + i + 1
-						break rev_scan_loop
+						real_end := -1
+						rev_scan_loop: for i := len(scan_arr) - 1; i >= 0; i -= 1 {
+							ev := scan_arr[i]
+							x := ev.timestamp - total_min_time
+
+							duration := bound_duration(ev, tm.max_time)
+							w := duration * cam.current_scale
+
+							r := Rect{Vec2{x, y}, Vec2{w, h}}
+							r_x := (r.pos.x * cam.current_scale) + cam.pan.x
+							r_y := cur_y + r.pos.y
+							dr := Rect{Vec2{r_x, r_y}, Vec2{r.size.x, r.size.y}}
+
+							if !rect_in_rect(flopped_rect, dr) {
+								continue rev_scan_loop
+							}
+
+							real_end = start_idx + i + 1
+							break rev_scan_loop
+						}
+
+						if real_start != -1 && real_end != -1 {
+							append(&selected_ranges, Range{p_idx, t_idx, d_idx, real_start, real_end})
+						}
+					}
+					cur_y += thread_advance
+				}
+			}
+		}
+
+		INITIAL_ITER :: 25_000
+		FULL_ITER    :: 1_000_000
+		if stats_state == .Started && did_multiselect {
+			event_count := 0
+			just_started := cur_stat_offset.range_idx == 0 && cur_stat_offset.event_idx == 0
+			iter_max := just_started ? INITIAL_ITER : FULL_ITER
+
+			broke_early := false
+			range_loop: for range, r_idx in selected_ranges {
+				start_idx := range.start
+				if cur_stat_offset.range_idx > r_idx {
+					continue
+				} else if cur_stat_offset.range_idx == r_idx {
+					start_idx = max(start_idx, cur_stat_offset.event_idx)
+				}
+
+				thread := processes[range.pid].threads[range.tid]
+				events := thread.depths[range.did].events[start_idx:range.end]
+
+				for ev, e_idx in events {
+					if event_count > iter_max {
+						cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
+						broke_early = true
+						break range_loop
 					}
 
-					if real_start != -1 && real_end != -1 {
-						append(&selected_ranges, Range{p_idx, t_idx, d_idx, real_start, real_end})
+					duration := bound_duration(ev, thread.max_time)
+
+					name := in_getstr(ev.name)
+					s, ok := &stats[name]
+					if !ok {
+						stats[name] = Stats{min_time = 1e308}
+						s = &stats[name]
+
+						//append(&self_workqueue, StatOffset{r_idx, start_idx + e_idx})
 					}
+					s.count += 1
+					s.total_time += duration
+					s.min_time = min(s.min_time, f32(duration))
+					s.max_time = max(s.max_time, f32(duration))
+					total_tracked_time += duration
+
+					event_count += 1
 				}
-				cur_y += thread_advance
-			}
-		}
-	}
-
-	INITIAL_ITER :: 25_000
-	FULL_ITER    :: 1_000_000
-	if stats_state == .Started && did_multiselect {
-		event_count := 0
-		just_started := cur_stat_offset.range_idx == 0 && cur_stat_offset.event_idx == 0
-		iter_max := just_started ? INITIAL_ITER : FULL_ITER
-
-		broke_early := false
-		range_loop: for range, r_idx in selected_ranges {
-			start_idx := range.start
-			if cur_stat_offset.range_idx > r_idx {
-				continue
-			} else if cur_stat_offset.range_idx == r_idx {
-				start_idx = max(start_idx, cur_stat_offset.event_idx)
 			}
 
-			thread := processes[range.pid].threads[range.tid]
-			events := thread.depths[range.did].events[start_idx:range.end]
+			if !broke_early {
+				sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
+					Entry :: struct {
+						hash:  uintptr,
+						next:  int,
+						key:   K,
+						value: V,
+					}
 
-			for ev, e_idx in events {
-				if event_count > iter_max {
-					cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
-					broke_early = true
-					break range_loop
+					map_sort :: proc(a: Entry, b: Entry) -> bool {
+						return a.value.total_time > b.value.total_time
+					}
+
+					header := runtime.__get_map_header(m)
+					entries := (^[dynamic]Entry)(&header.m.entries)
+					slice.sort_by(entries[:], map_sort)
+					runtime.__dynamic_map_reset_entries(header, loc)
 				}
 
-				duration := bound_duration(ev, thread.max_time)
+				sort_map_entries_by_time(&stats)
+				stats_state = .Finished
+			}
+		}
 
-				name := in_getstr(ev.name)
-				s, ok := &stats[name]
-				if !ok {
-					stats[name] = Stats{min_time = 1e308}
-					s = &stats[name]
+		// If the user selected a single rectangle
+		if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.did != -1 && selected_event.eid != -1 {
+			p_idx := int(selected_event.pid)
+			t_idx := int(selected_event.tid)
+			d_idx := int(selected_event.did)
+			e_idx := int(selected_event.eid)
 
-					//append(&self_workqueue, StatOffset{r_idx, start_idx + e_idx})
+			y := info_pane_y + top_line_gap
+
+			thread := processes[p_idx].threads[t_idx]
+			event := thread.depths[d_idx].events[e_idx]
+			draw_text(fmt.tprintf("Event: \"%s\"", in_getstr(event.name)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text(fmt.tprintf("start time:%s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text(fmt.tprintf("end time:%s", time_fmt((event.timestamp - total_min_time) + bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text(fmt.tprintf("duration:%s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text(fmt.tprintf("start timestamp:%s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+
+		// If we've got stats cooking already
+		} else if stats_state == .Started {
+			y := info_pane_y + top_line_gap
+
+			draw_text("Stats loading...", Vec2{x_subpad, y}, p_font_size, monospace_font, text_color)
+
+			total_count := 0
+			cur_count := 0
+			for range, r_idx in selected_ranges {
+				thread := processes[range.pid].threads[range.tid]
+				events := thread.depths[range.did].events
+
+				total_count += len(events)
+				if cur_stat_offset.range_idx > r_idx {
+					cur_count += len(events)
+				} else if cur_stat_offset.range_idx == r_idx {
+					cur_count += cur_stat_offset.event_idx - range.start
 				}
-				s.count += 1
-				s.total_time += duration
-				s.min_time = min(s.min_time, f32(duration))
-				s.max_time = max(s.max_time, f32(duration))
-				total_tracked_time += duration
-
-				event_count += 1
-			}
-		}
-
-		if !broke_early {
-			sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
-				Entry :: struct {
-					hash:  uintptr,
-					next:  int,
-					key:   K,
-					value: V,
-				}
-
-				map_sort :: proc(a: Entry, b: Entry) -> bool {
-					return a.value.total_time > b.value.total_time
-				}
-
-				header := runtime.__get_map_header(m)
-				entries := (^[dynamic]Entry)(&header.m.entries)
-				slice.sort_by(entries[:], map_sort)
-				runtime.__dynamic_map_reset_entries(header, loc)
 			}
 
-			sort_map_entries_by_time(&stats)
-			stats_state = .Finished
-		}
-	}
+			progress_count := fmt.tprintf("%d of %d", cur_count, total_count)
+			draw_text(progress_count, Vec2{x_subpad, y + em}, p_font_size, monospace_font, text_color)
 
-	if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.did != -1 && selected_event.eid != -1 {
-		p_idx := int(selected_event.pid)
-		t_idx := int(selected_event.tid)
-		d_idx := int(selected_event.did)
-		e_idx := int(selected_event.eid)
+		// If stats are ready to display
+		} else if stats_state == .Finished && did_multiselect {
+			y := info_pane_y + top_line_gap
 
-		y := info_pane_y + top_line_gap
+			column_gap := 1.5 * em
+			total_header_text    := fmt.tprintf("%-17s", "      total")
+			min_header_text      := fmt.tprintf("%-10s", "   min.")
+			avg_header_text      := fmt.tprintf("%-10s", "   avg.")
+			_99p_header_text     := fmt.tprintf("%-10s", "   99p.")
+			max_header_text      := fmt.tprintf("%-10s", "   max.")
+			name_header_text     := fmt.tprintf("%-10s", "   name")
 
-		thread := processes[p_idx].threads[t_idx]
-		event := thread.depths[d_idx].events[e_idx]
-		draw_text(fmt.tprintf("Event: \"%s\"", in_getstr(event.name)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("start time:%s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("end time:%s", time_fmt((event.timestamp - total_min_time) + bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("duration:%s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-		draw_text(fmt.tprintf("start timestamp:%s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			cursor := x_subpad
 
-	// If we've already got stats
-	} else if stats_state == .Started {
-		y := info_pane_y + top_line_gap
-
-		draw_text("Stats loading...", Vec2{x_subpad, y}, p_font_size, monospace_font, text_color)
-
-		total_count := 0
-		cur_count := 0
-		for range, r_idx in selected_ranges {
-			thread := processes[range.pid].threads[range.tid]
-			events := thread.depths[range.did].events
-
-			total_count += len(events)
-			if cur_stat_offset.range_idx > r_idx {
-				cur_count += len(events)
-			} else if cur_stat_offset.range_idx == r_idx {
-				cur_count += cur_stat_offset.event_idx - range.start
+			text_outf :: proc(cursor: ^f64, y: f64, str: string, color := text_color) {
+				width := measure_text(str, p_font_size, monospace_font)
+				draw_text(str, Vec2{cursor^, y}, p_font_size, monospace_font, color)
+				cursor^ += width
 			}
-		}
-
-		progress_count := fmt.tprintf("%d of %d", cur_count, total_count)
-		draw_text(progress_count, Vec2{x_subpad, y + em}, p_font_size, monospace_font, text_color)
-	} else if stats_state == .Finished && did_multiselect {
-		y := info_pane_y + top_line_gap
-
-		column_gap := 1.5 * em
-		total_header_text    := fmt.tprintf("%-17s", "      total")
-		min_header_text      := fmt.tprintf("%-10s", "   min.")
-		avg_header_text      := fmt.tprintf("%-10s", "   avg.")
-		_99p_header_text     := fmt.tprintf("%-10s", "   99p.")
-		max_header_text      := fmt.tprintf("%-10s", "   max.")
-		name_header_text     := fmt.tprintf("%-10s", "   name")
-
-		cursor := x_subpad
-
-		text_outf :: proc(cursor: ^f64, y: f64, str: string, color := text_color) {
-			width := measure_text(str, p_font_size, monospace_font)
-			draw_text(str, Vec2{cursor^, y}, p_font_size, monospace_font, color)
-			cursor^ += width
-		}
-		vs_outf :: proc(cursor: ^f64, column_gap, info_pane_y, info_pane_height: f64) {
-			cursor^ += column_gap / 2
-			draw_line(Vec2{cursor^, info_pane_y}, Vec2{cursor^, info_pane_y + info_pane_height}, 0.5, text_color2)
-			cursor^ += column_gap / 2
-		}
-
-		text_outf(&cursor, y, total_header_text)
-		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-		text_outf(&cursor, y, min_header_text)
-		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-		text_outf(&cursor, y, avg_header_text)
-		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-/*
-		text_outf(&cursor, y, _99p_header_text)
-		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-*/
-
-		text_outf(&cursor, y, max_header_text)
-		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-		text_outf(&cursor, y, name_header_text)
-		next_line(&y, em)
-
-		i := 0
-		for name, stat in stats {
-			if i > (info_line_count - 2) {
-				break
+			vs_outf :: proc(cursor: ^f64, column_gap, info_pane_y, info_pane_height: f64) {
+				cursor^ += column_gap / 2
+				draw_line(Vec2{cursor^, info_pane_y}, Vec2{cursor^, info_pane_y + info_pane_height}, 0.5, text_color2)
+				cursor^ += column_gap / 2
 			}
 
-			cursor = x_subpad
+			text_outf(&cursor, y, total_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
 
-			perc := (stat.total_time / total_tracked_time) * 100
+			text_outf(&cursor, y, min_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
 
-			total_text := fmt.tprintf("%10s", stat_fmt(stat.total_time))
-			perc_text := fmt.tprintf("%.1f%%", perc)
+			text_outf(&cursor, y, avg_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
 
-			min := stat.min_time
-			min_text := fmt.tprintf("%10s", stat_fmt(f64(min)))
+	/*
+			text_outf(&cursor, y, _99p_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+	*/
 
-			avg := stat.total_time / f64(stat.count)
-			avg_text := fmt.tprintf("%10s", stat_fmt(avg))
+			text_outf(&cursor, y, max_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
 
-/*
-			num_standard_deviations := 2.326348 // ninety-ninth percentile is 2.326348 standard deviations greater than the mean
-			_99p := math.lerp(stat.min_time, stat.max_time, f32((2 + num_standard_deviations) / 4))
-			_99p_text := fmt.tprintf("%10s", stat_fmt(f64(_99p)))
-*/
-
-			max := stat.max_time
-			max_text := fmt.tprintf("%10s", stat_fmt(f64(max)))
-
-			full_perc_width := measure_text(perc_text, p_font_size, monospace_font)
-			perc_width := (ch_width * 6) - full_perc_width
-
-			text_outf(&cursor, y, total_text, text_color2); cursor += ch_width
-			cursor += perc_width
-			draw_text(perc_text, Vec2{cursor, y}, p_font_size, monospace_font, text_color2); cursor += column_gap + full_perc_width
-
-			text_outf(&cursor, y, min_text, text_color2);   cursor += column_gap
-			text_outf(&cursor, y, avg_text, text_color2);   cursor += column_gap
-//			text_outf(&cursor, y, _99p_text, text_color2);  cursor += column_gap
-			text_outf(&cursor, y, max_text, text_color2);   cursor += column_gap
-
-			y_before   := y - (em / 2)
-			y_after    := y_before
-			next_line(&y_after, em)
-
-
-			dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
-			cursor += column_gap / 2
-
-			//name_width := measure_text(name, p_font_size, monospace_font)
-			tmp_color := color_choices[name_color_idx(name)]
-			draw_rect(dr, FVec4{tmp_color.x, tmp_color.y, tmp_color.z, 255})
-			draw_text(name, Vec2{cursor, y_before + (em / 3)}, p_font_size, monospace_font, text_color)
-
+			text_outf(&cursor, y, name_header_text)
 			next_line(&y, em)
-			i += 1
+
+			i := 0
+			for name, stat in stats {
+				if i > (info_line_count - 2) {
+					break
+				}
+
+				cursor = x_subpad
+
+				perc := (stat.total_time / total_tracked_time) * 100
+
+				total_text := fmt.tprintf("%10s", stat_fmt(stat.total_time))
+				perc_text := fmt.tprintf("%.1f%%", perc)
+
+				min := stat.min_time
+				min_text := fmt.tprintf("%10s", stat_fmt(f64(min)))
+
+				avg := stat.total_time / f64(stat.count)
+				avg_text := fmt.tprintf("%10s", stat_fmt(avg))
+
+	/*
+				num_standard_deviations := 2.326348 // ninety-ninth percentile is 2.326348 standard deviations greater than the mean
+				_99p := math.lerp(stat.min_time, stat.max_time, f32((2 + num_standard_deviations) / 4))
+				_99p_text := fmt.tprintf("%10s", stat_fmt(f64(_99p)))
+	*/
+
+				max := stat.max_time
+				max_text := fmt.tprintf("%10s", stat_fmt(f64(max)))
+
+				full_perc_width := measure_text(perc_text, p_font_size, monospace_font)
+				perc_width := (ch_width * 6) - full_perc_width
+
+				text_outf(&cursor, y, total_text, text_color2); cursor += ch_width
+				cursor += perc_width
+				draw_text(perc_text, Vec2{cursor, y}, p_font_size, monospace_font, text_color2); cursor += column_gap + full_perc_width
+
+				text_outf(&cursor, y, min_text, text_color2);   cursor += column_gap
+				text_outf(&cursor, y, avg_text, text_color2);   cursor += column_gap
+	//			text_outf(&cursor, y, _99p_text, text_color2);  cursor += column_gap
+				text_outf(&cursor, y, max_text, text_color2);   cursor += column_gap
+
+				y_before   := y - (em / 2)
+				y_after    := y_before
+				next_line(&y_after, em)
+
+
+				dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
+				cursor += column_gap / 2
+
+				//name_width := measure_text(name, p_font_size, monospace_font)
+				tmp_color := color_choices[name_color_idx(name)]
+				draw_rect(dr, FVec4{tmp_color.x, tmp_color.y, tmp_color.z, 255})
+				draw_text(name, Vec2{cursor, y_before + (em / 3)}, p_font_size, monospace_font, text_color)
+
+				next_line(&y, em)
+				i += 1
+			}
 		}
 	}
 
@@ -1325,82 +1420,83 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	draw_rect(rect(0, 0, width, toolbar_height), toolbar_color)
 
 	// draw toolbar
-	edge_pad := 1 * em
-	button_height := 2 * em
-	button_width  := 2 * em
-	button_pad    := 0.5 * em
+	{
+		edge_pad := 1 * em
+		button_height := 2 * em
+		button_width  := 2 * em
+		button_pad    := 0.5 * em
 
-	// colormode button nonsense
-	color_text : string
-	switch colormode {
-	case .Auto:
-		color_text = "\uf042"
-	case .Dark:
-		color_text = "\uf10c"
-	case .Light:
-		color_text = "\uf111"
-	}
+		logo_text := "spall"
+		logo_width := measure_text(logo_text, h1_font_size, default_font)
+		draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
 
-	logo_text := "spall"
-	logo_pad := edge_pad
-	logo_width := measure_text(logo_text, h1_font_size, default_font)
-	draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+		file_name_width := measure_text(file_name, h1_font_size, default_font)
+		draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
 
-	file_name_width := measure_text(file_name, h1_font_size, default_font)
-	draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+		if button(rect(edge_pad + logo_width + edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
+			open_file_dialog()
+		}
+		if button(rect(edge_pad + logo_width + edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
+			reset_camera(display_width)
+		}
 
-	if button(rect(edge_pad + logo_width + logo_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
-		open_file_dialog()
-	}
-	if button(rect(edge_pad + logo_width + logo_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
-		reset_camera(display_width)
-	}
-
-	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
-		new_colormode: ColorMode
-
-		// rotate between auto, dark, and light
+		// colormode button nonsense
+		color_text : string
 		switch colormode {
 		case .Auto:
-			new_colormode = .Dark
+			color_text = "\uf042"
 		case .Dark:
-			new_colormode = .Light
+			color_text = "\uf10c"
 		case .Light:
-			new_colormode = .Auto
+			color_text = "\uf111"
 		}
 
-		switch new_colormode {
-		case .Auto:
-			is_dark := get_system_color()
-			set_color_mode(true, is_dark)
-			set_session_storage("colormode", "auto")
-		case .Dark:
-			set_color_mode(false, true)
-			set_session_storage("colormode", "dark")
-		case .Light:
-			set_color_mode(false, false)
-			set_session_storage("colormode", "light")
+		if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
+			new_colormode: ColorMode
+
+			// rotate between auto, dark, and light
+			switch colormode {
+			case .Auto:
+				new_colormode = .Dark
+			case .Dark:
+				new_colormode = .Light
+			case .Light:
+				new_colormode = .Auto
+			}
+
+			switch new_colormode {
+			case .Auto:
+				is_dark := get_system_color()
+				set_color_mode(true, is_dark)
+				set_session_storage("colormode", "auto")
+			case .Dark:
+				set_color_mode(false, true)
+				set_session_storage("colormode", "dark")
+			case .Light:
+				set_color_mode(false, false)
+				set_session_storage("colormode", "light")
+			}
+			colormode = new_colormode
 		}
-		colormode = new_colormode
-	}
-	if button(rect(width - edge_pad - ((button_width * 2) + (button_pad)), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", icon_font) {
-		enable_debug = !enable_debug
+		if button(rect(width - edge_pad - ((button_width * 2) + (button_pad)), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", icon_font) {
+			enable_debug = !enable_debug
+		}
 	}
 
+	// reset the cursor if we're not over a selectable thing
 	if !is_hovering {
 		reset_cursor()
 	}
 
-	prev_line := proc(y: ^f64, h: f64) -> f64 {
-		res := y^
-		y^ -= h + (h / 3)
-		return res
-	}
-
-
+	// Render debug info
 	if enable_debug {
-		// Render debug info
 		y := height - em - top_line_gap
+
+		prev_line := proc(y: ^f64, h: f64) -> f64 {
+			res := y^
+			y^ -= h + (h / 3)
+			return res
+		}
 
 		if queue.len(fps_history) > 100 { queue.pop_front(&fps_history) }
 		queue.push_back(&fps_history, u32(1 / _dt))
@@ -1446,100 +1542,3 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	return true
 }
 
-button :: proc(in_rect: Rect, text: string, font: string) -> bool {
-	draw_rectc(in_rect, 3, button_color)
-	text_width := measure_text(text, p_font_size, font)
-	text_height := get_text_height(p_font_size, font)
-	draw_text(text, 
-		Vec2{
-			in_rect.pos.x + (in_rect.size.x / 2) - (text_width / 2), 
-			in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)
-		}, p_font_size, font, text_color)
-
-	if pt_in_rect(mouse_pos, in_rect) {
-		set_cursor("pointer")
-		if clicked {
-			return true
-		}
-	}
-	return false
-}
-
-draw_graph :: proc(header: string, history: ^queue.Queue(u32), pos: Vec2) {
-	line_width : f64 = 1
-	graph_edge_pad : f64 = 2 * em
-	line_gap := (em / 1.5)
-
-	max_val : u32 = 0
-	min_val : u32 = 100
-	sum_val : u32 = 0
-	for i := 0; i < queue.len(history^); i += 1 {
-		entry := queue.get(history, i)
-		max_val = max(max_val, entry)
-		min_val = min(min_val, entry)
-		sum_val += entry
-	}
-	max_range := max_val - min_val
-	avg_val := sum_val / 100
-
-	text_width := measure_text(header, p_font_size, default_font)
-	center_offset := (graph_size / 2) - (text_width / 2)
-	draw_text(header, Vec2{pos.x + center_offset, pos.y}, p_font_size, default_font, text_color)
-
-	graph_top := pos.y + em + line_gap
-	draw_rect(rect(pos.x, graph_top, graph_size, graph_size), bg_color2)
-	draw_rect_outline(rect(pos.x, graph_top, graph_size, graph_size), 2, outline_color)
-
-	draw_line(Vec2{pos.x - 5, graph_top + graph_size - graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_size - graph_edge_pad}, 1, graph_color)
-	draw_line(Vec2{pos.x - 5, graph_top + graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_edge_pad}, 1, graph_color)
-
-	if queue.len(history^) > 1 {
-		high_height := graph_top + graph_edge_pad - (em / 2)
-		low_height := graph_top + graph_size - graph_edge_pad - (em / 2)
-		avg_height := rescale(f64(avg_val), f64(min_val), f64(max_val), low_height, high_height)
-
-		high_str := fmt.tprintf("%d", max_val)
-		high_width := measure_text(high_str, p_font_size, default_font) + line_gap
-		draw_text(high_str, Vec2{(pos.x - 5) - high_width, high_height}, p_font_size, default_font, text_color)
-
-		if queue.len(history^) > 90 {
-			draw_line(Vec2{pos.x - 5, avg_height + (em / 2)}, Vec2{pos.x + 5, avg_height + (em / 2)}, 1, graph_color)
-			avg_str := fmt.tprintf("%d", avg_val)
-			avg_width := measure_text(avg_str, p_font_size, default_font) + line_gap
-			draw_text(avg_str, Vec2{(pos.x - 5) - avg_width, avg_height}, p_font_size, default_font, text_color)
-		}
-
-		low_str := fmt.tprintf("%d", min_val)
-		low_width := measure_text(low_str, p_font_size, default_font) + line_gap
-		draw_text(low_str, Vec2{(pos.x - 5) - low_width, low_height}, p_font_size, default_font, text_color)
-	}
-
-	graph_y_bounds := graph_size - (graph_edge_pad * 2)
-	graph_x_bounds := graph_size - graph_edge_pad
-
-	last_x : f64 = 0
-	last_y : f64 = 0
-	for i := 0; i < queue.len(history^); i += 1 {
-		entry := queue.get(history, i)
-
-		point_x_offset : f64 = 0
-		if queue.len(history^) != 0 {
-			point_x_offset = f64(i) * (graph_x_bounds / f64(queue.len(history^)))
-		}
-
-		point_y_offset : f64 = 0
-		if max_range != 0 {
-			point_y_offset = f64(entry - min_val) * (graph_y_bounds / f64(max_range))
-		}
-
-		point_x := pos.x + point_x_offset + (graph_edge_pad / 2)
-		point_y := graph_top + graph_size - point_y_offset - graph_edge_pad
-
-		if queue.len(history^) > 1  && i > 0 {
-			draw_line(Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)
-		}
-
-		last_x = point_x
-		last_y = point_y
-	}
-}
