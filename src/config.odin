@@ -85,9 +85,7 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f64) {
 }
 
 build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> uint {
-	bucket_size :: 8
-
-	bucket_count := i_round_up(len(events), bucket_size) / bucket_size
+	bucket_count := i_round_up(len(events), BUCKET_SIZE) / BUCKET_SIZE
 	max_nodes := bucket_count
 	{
 		row_count := bucket_count
@@ -104,8 +102,8 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> uint {
 	tree := &tm.depths[depth_idx].tree
 
 	for i := 0; i < bucket_count; i += 1 {
-		start_idx := i * bucket_size
-		end_idx := start_idx + min(len(events) - start_idx, bucket_size)
+		start_idx := i * BUCKET_SIZE
+		end_idx := start_idx + min(len(events) - start_idx, BUCKET_SIZE)
 		scan_arr := events[start_idx:end_idx]
 
 		start_ev := scan_arr[0]
