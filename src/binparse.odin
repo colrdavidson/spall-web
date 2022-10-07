@@ -131,7 +131,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
 			return
 		case .Finished:
-			finish_loading(p)
+			finish_loading()
 			return
 		}
 

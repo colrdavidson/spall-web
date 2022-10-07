@@ -268,7 +268,7 @@ init_loading_state :: proc(size: u32, name: string) {
 }
 
 is_json := false
-finish_loading :: proc (p: ^Parser) {
+finish_loading :: proc () {
 	stop_bench("parse config")
 	fmt.printf("Got %d events, %d instants\n", event_count, instant_count)
 
@@ -325,6 +325,8 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 	if first_chunk {
 		header_sz := size_of(spall.Header)
 		if len(chunk) < header_sz {
+			fmt.printf("Uh, you passed me an empty file?\n")
+			finish_loading()
 			return
 		}
 		magic := (^u64)(raw_data(chunk))^

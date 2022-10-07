@@ -306,7 +306,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			trap()
 			return
 		case .Finished:
-			finish_loading(p)
+			finish_loading()
 			return
 		}
 

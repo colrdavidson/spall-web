@@ -65,10 +65,10 @@ selected_event := EventID{-1, -1, -1, -1}
 
 Stats :: struct {
 	total_time: f64,
+	self_time: f64,
 	count: u32,
 	min_time: f32,
 	max_time: f32,
-	histogram: [22]u32,
 }
 
 Range :: struct {
@@ -1244,6 +1244,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 
 			thread := processes[range.pid].threads[range.tid]
+
 			events := thread.depths[range.did].events[start_idx:range.end]
 
 			for ev, e_idx in events {
@@ -1366,8 +1367,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		text_outf(&cursor, y, avg_header_text)
 		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
 
+/*
 		text_outf(&cursor, y, _99p_header_text)
 		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+*/
 
 		text_outf(&cursor, y, max_header_text)
 		vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
@@ -1394,9 +1397,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			avg := stat.total_time / f64(stat.count)
 			avg_text := fmt.tprintf("%10s", stat_fmt(avg))
 
+/*
 			num_standard_deviations := 2.326348 // ninety-ninth percentile is 2.326348 standard deviations greater than the mean
 			_99p := math.lerp(stat.min_time, stat.max_time, f32((2 + num_standard_deviations) / 4))
 			_99p_text := fmt.tprintf("%10s", stat_fmt(f64(_99p)))
+*/
 
 			max := stat.max_time
 			max_text := fmt.tprintf("%10s", stat_fmt(f64(max)))
@@ -1410,17 +1415,18 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 			text_outf(&cursor, y, min_text, text_color2);   cursor += column_gap
 			text_outf(&cursor, y, avg_text, text_color2);   cursor += column_gap
-			text_outf(&cursor, y, _99p_text, text_color2);  cursor += column_gap
+//			text_outf(&cursor, y, _99p_text, text_color2);  cursor += column_gap
 			text_outf(&cursor, y, max_text, text_color2);   cursor += column_gap
 
 			y_before   := y - (em / 2)
 			y_after    := y_before
 			next_line(&y_after, em)
-			name_width := measure_text(name, p_font_size, monospace_font)
+
 
 			dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
 			cursor += column_gap / 2
 
+			//name_width := measure_text(name, p_font_size, monospace_font)
 			tmp_color := color_choices[name_color_idx(name)]
 			draw_rect(dr, FVec4{tmp_color.x, tmp_color.y, tmp_color.z, 255})
 			draw_text(name, Vec2{cursor, y_before + (em / 3)}, p_font_size, monospace_font, text_color)
