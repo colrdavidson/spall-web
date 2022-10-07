@@ -6,6 +6,7 @@ import "core:mem"
 import "core:math/rand"
 import "core:strconv"
 import "core:container/queue"
+import "core:runtime"
 import "formats:spall"
 
 find_idx :: proc(events: []Event, val: f64) -> int {
@@ -350,9 +351,9 @@ finish_loading :: proc () {
 	chunk_events()
 	stop_bench("chunk events")
 
-	start_bench("generate event stats")
+	start_bench("generate self-time")
 	generate_selftimes()
-	stop_bench("generate event stats")
+	stop_bench("generate self-time")
 
 	t = 0
 	frame_count = 0
@@ -410,6 +411,33 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 
 bound_duration :: proc(ev: Event, max_ts: f64) -> f64 {
 	return ev.duration == -1 ? (max_ts - ev.timestamp) : ev.duration
+}
+
+append_event :: proc(array: ^[dynamic]Event, arg: Event) {
+	if cap(array) < (len(array) + 1) {
+
+		capacity := 2 * cap(array)
+		a := (^runtime.Raw_Dynamic_Array)(array)
+
+		old_size  := a.cap * size_of(Event)
+		new_size  := capacity * size_of(Event)
+
+		allocator := a.allocator
+
+		new_data, err := allocator.procedure(
+			allocator.data, .Resize, new_size, align_of(Event),
+			a.data, old_size)
+
+		a.data = raw_data(new_data)
+		a.cap = capacity
+	}
+
+	if (cap(array) - len(array)) > 0 {
+		a := (^runtime.Raw_Dynamic_Array)(array)
+		data := ([^]Event)(a.data)
+		data[a.len] = arg
+		a.len += 1
+	}
 }
 
 /*

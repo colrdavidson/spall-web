@@ -554,7 +554,7 @@ json_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, 
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
-	append(&t.events, event)
+	append_event(&t.events, event)
 	return p_idx, t_idx, len(t.events)-1
 }
 

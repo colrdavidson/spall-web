@@ -216,7 +216,7 @@ bin_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, i
 
 	depth := &t.depths[t.current_depth]
 	t.current_depth += 1
-	append(&depth.bs_events, event)
+	append_event(&depth.bs_events, event)
 
 	return p_idx, t_idx, len(depth.bs_events)-1
 }
