@@ -672,7 +672,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		return res
 	}
 
-	info_line_count := 12
+	info_line_count := 10
 	for i := 0; i < info_line_count; i += 1 {
 		next_line(&pane_y, em)
 	}
@@ -683,9 +683,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	info_pane_height := pane_y + top_line_gap
 	info_pane_y := height - info_pane_height
 	
+/*
 	if abs(mouse_pos.y - info_pane_y) <= 5.0 {
-		// set_cursor("ns-resize")
+		set_cursor("ns-resize")
 	}
+*/
 
 	mini_graph_width := 15 * em
 	mini_graph_pad := (em)
