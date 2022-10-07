@@ -28,26 +28,6 @@ current_alloc_offset := 0
 wasmContext := runtime.default_context()
 
 
-// big bag-o-colors
-bg_color      := FVec4{}
-bg_color2     := FVec4{}
-text_color    := FVec4{}
-text_color2   := FVec4{}
-text_color3   := FVec4{}
-button_color  := FVec4{}
-button_color2 := FVec4{}
-line_color    := FVec4{}
-division_color    := FVec4{}
-subdivision_color := FVec4{}
-outline_color := FVec4{}
-toolbar_color := FVec4{}
-graph_color   := FVec4{}
-highlight_color := FVec4{}
-shadow_color := FVec4{}
-wide_rect_color := FVec4{}
-wide_bg_color := FVec4{}
-
-
 // input state
 is_mouse_down := false
 was_mouse_down := false
@@ -127,8 +107,6 @@ processes: [dynamic]Process
 process_map: ValHash
 
 global_instants: [dynamic]Instant
-choice_count :: 16
-color_choices: [choice_count]FVec3
 total_max_time: f64
 total_min_time: f64
 
@@ -136,78 +114,6 @@ file_name_store: [1024]u8
 file_name: string
 CHUNK_SIZE :: 10 * 1024 * 1024
 
-
-default_colors :: proc "contextless" (is_dark: bool) {
-	if is_dark {
-		bg_color         = FVec4{15,   15,  15, 255}
-		bg_color2        = FVec4{0,     0,   0, 255}
-		text_color       = FVec4{255, 255, 255, 255}
-		text_color2      = FVec4{180, 180, 180, 255}
-		text_color3      = FVec4{0,     0,   0, 255}
-		button_color     = FVec4{40,   40,  40, 255}
-		button_color2    = FVec4{20,   20,  20, 255}
-		line_color       = FVec4{100, 100, 100, 255}
-		outline_color    = FVec4{80,   80,  80, 255}
-		toolbar_color    = FVec4{120, 120, 120, 255}
-		graph_color      = FVec4{180, 180, 180, 255}
-		highlight_color  = FVec4{  0,   0, 255,  32}
-		wide_rect_color  = FVec4{  0, 255,   0,   0}
-		wide_bg_color    = FVec4{  0,   0,   0, 255}
-		shadow_color     = FVec4{  0,   0,   0, 120}
-
-		subdivision_color = FVec4{ 30,  30, 30, 255}
-		division_color    = FVec4{100, 100, 100, 255}
-	} else {
-		bg_color         = FVec4{254, 252, 248, 255}
-		bg_color2        = FVec4{255, 255, 255, 255}
-		text_color       = FVec4{0,     0,   0, 255}
-		text_color2      = FVec4{80,   80,  80, 255}
-		text_color3      = FVec4{0,     0,   0, 255}
-		button_color     = FVec4{141, 119, 104, 255}
-		button_color2    = FVec4{191, 169, 154, 255}
-		line_color       = FVec4{150, 150, 150, 255}
-		outline_color    = FVec4{219, 211, 205, 255}
-		toolbar_color    = FVec4{219, 211, 205, 255}
-		graph_color      = FVec4{69,   49,  34, 255}
-		highlight_color  = FVec4{255, 255,   0,  32}
-		wide_rect_color  = FVec4{  0, 255,   0,   0}
-		wide_bg_color    = FVec4{  0,  0,    0, 255}
-		shadow_color     = FVec4{  0,   0,   0,  15}
-
-		subdivision_color = FVec4{230, 230, 230, 255}
-		division_color    = FVec4{180, 180, 180, 255}
-	}
-}
-
-
-@export
-set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
-	default_colors(is_dark)
-
-	if auto {
-		colormode = ColorMode.Auto
-	} else {
-		colormode = is_dark ? ColorMode.Dark : ColorMode.Light
-	}
-}
-
-get_max_y_pan :: proc(processes: []Process) -> f64 {
-	cur_y : f64 = 0
-
-	for proc_v, _ in processes {
-		if len(processes) > 1 {
-			h1_size := h1_height + (h1_height / 3)
-			cur_y += h1_size
-		}
-
-		for tm, _ in proc_v.threads {
-			h2_size := h2_height + (h2_height / 3)
-			cur_y += h2_size + ((f64(len(tm.depths)) * rect_height) + thread_gap)
-		}
-	}
-
-	return cur_y
-}
 
 to_world_x :: proc(cam: Camera, x: f64) -> f64 {
 	return (x - cam.pan.x) / cam.current_scale
@@ -271,11 +177,6 @@ reset_camera :: proc(display_width: f64) {
 	end_time   := total_max_time - total_min_time
 	cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, display_width)
 	cam.target_scale = cam.current_scale
-}
-
-// color_choices must be power of 2
-name_color_idx :: proc(name: string) -> u32 {
-	return u32(uintptr(raw_data(name))) & u32(len(color_choices) - 1)
 }
 
 render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: int) {
@@ -765,6 +666,23 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	last_start_time, last_end_time := get_current_window(cam, display_width)
 
+	get_max_y_pan :: proc(processes: []Process) -> f64 {
+		cur_y : f64 = 0
+
+		for proc_v, _ in processes {
+			if len(processes) > 1 {
+				h1_size := h1_height + (h1_height / 3)
+				cur_y += h1_size
+			}
+
+			for tm, _ in proc_v.threads {
+				h2_size := h2_height + (h2_height / 3)
+				cur_y += h2_size + ((f64(len(tm.depths)) * rect_height) + thread_gap)
+			}
+		}
+
+		return cur_y
+	}
 	max_height := get_max_y_pan(processes[:])
 	max_y_pan := max(+20 * em + max_height - graph_rect.size.y, 0)
 	min_y_pan := min(-20 * em, max_y_pan)

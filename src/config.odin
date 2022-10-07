@@ -8,25 +8,6 @@ import "core:strconv"
 import "core:container/queue"
 import "formats:spall"
 
-start_time: u64
-start_mem: i64
-allocator: mem.Allocator
-start_bench :: proc(name: string, al := context.allocator) {
-	start_time = u64(get_time())
-	allocator = al
-	arena := cast(^Arena)al.data
-	start_mem = i64(u32(arena.offset))
-}
-stop_bench :: proc(name: string) {
-	end_time := u64(get_time())
-	arena := cast(^Arena)allocator.data
-	end_mem := i64(u32(arena.offset))
-
-	time_range := end_time - start_time
-	mem_range := end_mem - start_mem
-	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f64(mem_range) / 1024 / 1024)
-}
-
 find_idx :: proc(events: []Event, val: f64) -> int {
 	low := 0
 	max := len(events)
@@ -103,7 +84,6 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f32) {
 	return color, total_weight
 }
 
-CHUNK_NARY_WIDTH :: 8
 build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> uint {
 	bucket_size :: 8
 
@@ -286,19 +266,7 @@ finish_loading :: proc () {
 	free_all(temp_allocator)
 	free_all(scratch_allocator)
 
-	// reset render state
-	mem.zero_slice(color_choices[:])
-	for i := 0; i < choice_count; i += 1 {
-
-		h := rand.float32() * 0.5 + 0.5
-		h *= h
-		h *= h
-		h *= h
-		s := 0.5 + rand.float32() * 0.1
-		v : f32 = 0.85
-
-		color_choices[i] = hsv2rgb(FVec3{h, s, v}) * 255
-	}
+	generate_color_choices()
 
 	start_bench("chunk events")
 	chunk_events()

@@ -102,6 +102,7 @@ Event :: struct #packed {
 	duration: f64,
 }
 
+CHUNK_NARY_WIDTH :: 8
 ChunkNode :: struct #packed {
 	start_time: f64,
 	end_time: f64,

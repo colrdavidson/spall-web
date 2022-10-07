@@ -1,9 +1,9 @@
 package main
 
 import "core:intrinsics"
+import "core:mem"
 import "core:math/rand"
 import "core:math"
-import "core:math/linalg/glsl"
 import "core:fmt"
 import "core:c"
 
@@ -66,23 +66,6 @@ rect_in_rect :: proc(a, b: Rect) -> bool {
 	b_bottom := b.pos.y + b.size.y
 
 	return !(b_left > a_right || a_left > b_right || a_top > b_bottom || b_top > a_bottom)
-}
-
-hsv2rgb :: proc(c: FVec3) -> FVec3 {
-	K := glsl.vec3{1.0, 2.0 / 3.0, 1.0 / 3.0}
-	sum := glsl.vec3{c.x, c.x, c.x} + K.xyz
-	p := glsl.abs_vec3(glsl.fract(sum) * 6.0 - glsl.vec3{3,3,3})
-	result := glsl.vec3{c.z, c.z, c.z} * glsl.mix(K.xxx, glsl.clamp(p - K.xxx, 0.0, 1.0), glsl.vec3{c.y, c.y, c.y})
-	return FVec3{result.x, result.y, result.z}
-}
-
-hex_to_fvec :: proc "contextless" (v: u32) -> FVec4 {
-	a := f32(u8(v >> 24))
-	r := f32(u8(v >> 16))
-	g := f32(u8(v >> 8))
-	b := f32(u8(v >> 0))
-
-	return FVec4{r, g, b, a}
 }
 
 ONE_MINUTE :: 1000 * 1000 * 60
@@ -150,4 +133,23 @@ parse_u32 :: proc(str: string) -> (u32, bool) {
 		ret = (ret * 10) + u64(ch & 0xf)
 	}
 	return u32(ret), true
+}
+
+start_time: u64
+start_mem: i64
+allocator: mem.Allocator
+start_bench :: proc(name: string, al := context.allocator) {
+	start_time = u64(get_time())
+	allocator = al
+	arena := cast(^Arena)al.data
+	start_mem = i64(u32(arena.offset))
+}
+stop_bench :: proc(name: string) {
+	end_time := u64(get_time())
+	arena := cast(^Arena)allocator.data
+	end_mem := i64(u32(arena.offset))
+
+	time_range := end_time - start_time
+	mem_range := end_mem - start_mem
+	fmt.printf("%s -- ran in %fs (%dms), used %f MB\n", name, f32(time_range) / 1000, time_range, f64(mem_range) / 1024 / 1024)
 }
