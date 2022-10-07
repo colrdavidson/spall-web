@@ -4,10 +4,6 @@ import "core:mem"
 import "core:fmt"
 
 update_font_cache :: proc(width: f64) {
-	h1_height = h1_font_size
-	h2_height = h2_font_size
-	ch_width  = measure_text("a", p_font_size, monospace_font)
-
 	if (width / dpr) < 400 {
 		em = _p_font_size * dpr
 		p_font_size = _p_font_size * dpr
@@ -19,6 +15,10 @@ update_font_cache :: proc(width: f64) {
 		h1_font_size = _h1_font_size
 		h2_font_size = _h2_font_size
 	}
+
+	h1_height = h1_font_size
+	h2_height = h2_font_size
+	ch_width  = measure_text("a", p_font_size, monospace_font)
 }
 
 @export

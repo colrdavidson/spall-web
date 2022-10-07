@@ -100,6 +100,7 @@ Event :: struct #packed {
 	depth: u16,
 	timestamp: f64,
 	duration: f64,
+	self_time: f64,
 }
 
 CHUNK_NARY_WIDTH :: 8
@@ -108,7 +109,7 @@ ChunkNode :: struct #packed {
 	end_time: f64,
 
 	avg_color: FVec3,
-	weight: f32,
+	weight: f64,
 
 	start_idx: uint,
 	children: [CHUNK_NARY_WIDTH]uint,

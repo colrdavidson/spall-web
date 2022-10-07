@@ -61,7 +61,7 @@ monospace_font := `'Fira Code', monospace`
 icon_font      := `FontAwesome`
 colormode      := ColorMode.Dark
 
-dpr: f64
+dpr := 1.0
 rect_height: f64
 disp_rect: Rect
 graph_rect: Rect
@@ -113,6 +113,7 @@ total_min_time: f64
 file_name_store: [1024]u8
 file_name: string
 CHUNK_SIZE :: 10 * 1024 * 1024
+
 
 // Most of the action happens in frame(), this is just to set up for the JS/WASM platform layer
 main :: proc() {
@@ -461,12 +462,13 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 
 		tree_idx := tree_stack[stack_len]
 		cur_node := tree[tree_idx]
-		range := cur_node.end_time - cur_node.start_time
-		range_width := range * cam.current_scale
 
 		if cur_node.end_time < f64(start_time) || cur_node.start_time > f64(end_time) {
 			continue
 		}
+
+		range := cur_node.end_time - cur_node.start_time
+		range_width := range * cam.current_scale
 
 		// draw summary faketangle
 		min_width := 2.0
@@ -670,7 +672,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		return res
 	}
 
-	info_line_count := 8
+	info_line_count := 12
 	for i := 0; i < info_line_count; i += 1 {
 		next_line(&pane_y, em)
 	}
@@ -1235,11 +1237,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 					if !ok {
 						stats[name] = Stats{min_time = 1e308}
 						s = &stats[name]
-
-						//append(&self_workqueue, StatOffset{r_idx, start_idx + e_idx})
 					}
 					s.count += 1
 					s.total_time += duration
+					s.self_time += ev.self_time
 					s.min_time = min(s.min_time, f32(duration))
 					s.max_time = max(s.max_time, f32(duration))
 					total_tracked_time += duration
@@ -1258,7 +1259,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 					}
 
 					map_sort :: proc(a: Entry, b: Entry) -> bool {
-						return a.value.total_time > b.value.total_time
+						return a.value.self_time > b.value.self_time
 					}
 
 					header := runtime.__get_map_header(m)
@@ -1287,6 +1288,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			draw_text(fmt.tprintf("start time:%s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 			draw_text(fmt.tprintf("end time:%s", time_fmt((event.timestamp - total_min_time) + bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 			draw_text(fmt.tprintf("duration:%s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text(fmt.tprintf("self time:%s", time_fmt(event.self_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 			draw_text(fmt.tprintf("start timestamp:%s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 
 		// If we've got stats cooking already
@@ -1317,12 +1319,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			y := info_pane_y + top_line_gap
 
 			column_gap := 1.5 * em
-			total_header_text    := fmt.tprintf("%-17s", "      total")
-			min_header_text      := fmt.tprintf("%-10s", "   min.")
-			avg_header_text      := fmt.tprintf("%-10s", "   avg.")
-			_99p_header_text     := fmt.tprintf("%-10s", "   99p.")
-			max_header_text      := fmt.tprintf("%-10s", "   max.")
-			name_header_text     := fmt.tprintf("%-10s", "   name")
+			self_header_text   := fmt.tprintf("%-10s", "   self")
+			total_header_text  := fmt.tprintf("%-17s", "      total")
+			min_header_text    := fmt.tprintf("%-10s", "   min.")
+			avg_header_text    := fmt.tprintf("%-10s", "   avg.")
+			max_header_text    := fmt.tprintf("%-10s", "   max.")
+			name_header_text   := fmt.tprintf("%-10s", "   name")
 
 			cursor := x_subpad
 
@@ -1337,6 +1339,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				cursor^ += column_gap / 2
 			}
 
+			text_outf(&cursor, y, self_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
 			text_outf(&cursor, y, total_header_text)
 			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
 
@@ -1345,11 +1350,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 			text_outf(&cursor, y, avg_header_text)
 			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-	/*
-			text_outf(&cursor, y, _99p_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-	*/
 
 			text_outf(&cursor, y, max_header_text)
 			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
@@ -1365,10 +1365,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 				cursor = x_subpad
 
-				perc := (stat.total_time / total_tracked_time) * 100
+				total_perc := (stat.total_time / total_tracked_time) * 100
 
 				total_text := fmt.tprintf("%10s", stat_fmt(stat.total_time))
-				perc_text := fmt.tprintf("%.1f%%", perc)
+				total_perc_text := fmt.tprintf("%.1f%%", total_perc)
+
+				self_text := fmt.tprintf("%10s", stat_fmt(stat.self_time))
 
 				min := stat.min_time
 				min_text := fmt.tprintf("%10s", stat_fmt(f64(min)))
@@ -1376,25 +1378,22 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				avg := stat.total_time / f64(stat.count)
 				avg_text := fmt.tprintf("%10s", stat_fmt(avg))
 
-	/*
-				num_standard_deviations := 2.326348 // ninety-ninth percentile is 2.326348 standard deviations greater than the mean
-				_99p := math.lerp(stat.min_time, stat.max_time, f32((2 + num_standard_deviations) / 4))
-				_99p_text := fmt.tprintf("%10s", stat_fmt(f64(_99p)))
-	*/
-
 				max := stat.max_time
 				max_text := fmt.tprintf("%10s", stat_fmt(f64(max)))
 
-				full_perc_width := measure_text(perc_text, p_font_size, monospace_font)
-				perc_width := (ch_width * 6) - full_perc_width
+				text_outf(&cursor, y, self_text, text_color2);   cursor += column_gap
+				{
+					full_perc_width := measure_text(total_perc_text, p_font_size, monospace_font)
+					perc_width := (ch_width * 6) - full_perc_width
 
-				text_outf(&cursor, y, total_text, text_color2); cursor += ch_width
-				cursor += perc_width
-				draw_text(perc_text, Vec2{cursor, y}, p_font_size, monospace_font, text_color2); cursor += column_gap + full_perc_width
+					text_outf(&cursor, y, total_text, text_color2); cursor += ch_width
+					cursor += perc_width
+					draw_text(total_perc_text, Vec2{cursor, y}, p_font_size, monospace_font, text_color2); cursor += column_gap + full_perc_width
+				}
+
 
 				text_outf(&cursor, y, min_text, text_color2);   cursor += column_gap
 				text_outf(&cursor, y, avg_text, text_color2);   cursor += column_gap
-	//			text_outf(&cursor, y, _99p_text, text_color2);  cursor += column_gap
 				text_outf(&cursor, y, max_text, text_color2);   cursor += column_gap
 
 				y_before   := y - (em / 2)

@@ -53,15 +53,15 @@ set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
 	p.full_chunk = chunk
 }
 
-gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f32) {
-	total_weight : f32 = 0
+gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f64) {
+	total_weight : f64 = 0
 
 	color := FVec3{}
-	color_weights := [choice_count]f32{}
+	color_weights := [choice_count]f64{}
 	for ev in events {
 		idx := name_color_idx(in_getstr(ev.name))
 
-		duration := f32(bound_duration(ev, thread_max))
+		duration := f64(bound_duration(ev, thread_max))
 		if duration <= 0 {
 			//fmt.printf("weird duration: %d, %#v\n", duration, ev)
 			duration = 0.1
@@ -70,16 +70,16 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f32) {
 		total_weight += duration
 	}
 
-	weights_sum : f32 = 0
+	weights_sum : f64 = 0
 	for weight, idx in color_weights {
-		color += color_choices[idx] * weight
+		color += color_choices[idx] * f32(weight)
 		weights_sum += weight
 	}
 	if weights_sum <= 0 {
 		fmt.printf("Invalid weights sum! events: %d, %f, %f\n", len(events), weights_sum, total_weight)
 		trap()
 	}
-	color /= weights_sum
+	color /= f32(weights_sum)
 
 	return color, total_weight
 }
@@ -147,11 +147,11 @@ build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> uint {
 			avg_color := FVec3{}
 			for j := 0; j < len(children); j += 1 {
 				node.children[j] = uint(start_idx + j)
-				avg_color += children[j].avg_color * children[j].weight
+				avg_color += children[j].avg_color * f32(children[j].weight)
 				node.weight += children[j].weight
 			}
 			node.child_count = i8(len(children))
-			node.avg_color = avg_color / node.weight
+			node.avg_color = avg_color / f32(node.weight)
 
 			append(tree, node)
 		}
@@ -201,8 +201,88 @@ chunk_events :: proc() {
 		for tm in &proc_v.threads {
 			for depth, d_idx in &tm.depths {
 				depth.head = build_tree(&tm, d_idx, depth.events)
+			}
+		}
+	}
+}
 
-				//print_tree(depth.tree[:], depth.head)
+calc_selftime :: proc(ev: ^Event, threads: ^[dynamic]Thread, thread_idx, depth_idx: int) -> f64 {
+	thread := threads[thread_idx]
+	depth := thread.depths[depth_idx]
+	tree := depth.tree
+
+	tree_stack := [128]uint{}
+	stack_len := 0
+
+	start_time := ev.timestamp - total_min_time
+	end_time := ev.timestamp + bound_duration(ev^, thread.max_time) - total_min_time
+
+	child_time := 0.0
+	tree_stack[0] = depth.head; stack_len += 1
+	for stack_len > 0 {
+		stack_len -= 1
+
+		tree_idx := tree_stack[stack_len]
+		cur_node := tree[tree_idx]
+
+		if end_time < cur_node.start_time || start_time > cur_node.end_time {
+			continue
+		}
+
+		if cur_node.start_time >= start_time && cur_node.end_time <= end_time {
+			child_time += cur_node.weight
+			continue
+		}
+
+		if cur_node.child_count == 0 {
+			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
+			weight := 0.0
+			scan_loop: for ev in scan_arr {
+
+				ev_start_time := ev.timestamp - total_min_time
+				if ev_start_time < start_time {
+					continue
+				}
+
+				ev_end_time := ev.timestamp + bound_duration(ev, thread.max_time) - total_min_time
+				if ev_end_time > end_time {
+					break scan_loop
+				}
+
+				weight += bound_duration(ev, thread.max_time)
+			}
+			child_time += weight
+			continue
+		}
+
+		for i := cur_node.child_count - 1; i >= 0; i -= 1 {
+			tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
+		}
+	}
+
+	self_time := bound_duration(ev^, thread.max_time) - child_time
+	return self_time
+}
+
+generate_selftimes :: proc() {
+	for proc_v, p_idx in &processes {
+		for tm, t_idx in &proc_v.threads {
+
+			// skip the bottom rank, it's already set up correctly
+			if len(tm.depths) == 1 {
+				continue
+			}
+
+			for depth, d_idx in &tm.depths {
+				// skip the last depth
+				if d_idx == (len(tm.depths) - 1) {
+					continue
+				}
+
+				for ev, e_idx in &depth.events {
+					self_time := calc_selftime(&ev, &proc_v.threads, t_idx, d_idx+1)
+					ev.self_time = self_time
+				}
 			}
 		}
 	}
@@ -271,6 +351,10 @@ finish_loading :: proc () {
 	start_bench("chunk events")
 	chunk_events()
 	stop_bench("chunk events")
+
+	start_bench("generate event stats")
+	generate_selftimes()
+	stop_bench("generate event stats")
 
 	t = 0
 	frame_count = 0
@@ -348,6 +432,20 @@ default_config := `[
 	{"cat":"function", "name":"1", "ph":"B", "pid":0, "tid": 0, "ts": 1},
 	{"cat":"function", "name":"2", "ph":"B", "pid":0, "tid": 0, "ts": 2},
 	{"cat":"function",             "ph":"E", "pid":0, "tid": 0, "ts": 4},
+]`
+*/
+
+/*
+default_config := `[
+	{"name":"call", "ph":"X", "pid":0, "tid": 0, "ts":    0, "dur": 9000},
+
+	{"name":"foo",  "ph":"X", "pid":0, "tid": 0, "ts": 1000, "dur": 3000},
+	{"name":"A", "ph":"X", "pid":0, "tid": 0, "ts": 1000, "dur": 1000},
+	{"name":"A", "ph":"X", "pid":0, "tid": 0, "ts": 3000, "dur": 1000},
+
+	{"name":"foo",  "ph":"X", "pid":0, "tid": 0, "ts": 5000, "dur": 3000},
+	{"name":"A", "ph":"X", "pid":0, "tid": 0, "ts": 5000, "dur": 1000},
+	{"name":"A", "ph":"X", "pid":0, "tid": 0, "ts": 7000, "dur": 1000},
 ]`
 */
 

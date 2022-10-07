@@ -437,6 +437,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 					new_event := Event{
 						name = jp.cur_event.name,
 						duration = jp.cur_event.duration,
+						self_time = jp.cur_event.duration,
 						timestamp = jp.cur_event.timestamp,
 					}
 					json_push_event(u32(jp.cur_event.process_id), u32(jp.cur_event.thread_id), new_event)
@@ -470,6 +471,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 					je_idx := queue.pop_back(&thread.bande_q)
 					jev := &thread.events[je_idx]
 					jev.duration = (jp.cur_event.timestamp - jev.timestamp) * stamp_scale
+					jev.self_time = jev.duration
 					thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 					total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 				}

@@ -140,6 +140,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 			new_event := Event{
 				name = event.name,
 				duration = -1,
+				self_time = -1,
 				timestamp = (event.timestamp) * stamp_scale,
 			}
 
@@ -168,6 +169,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 				depth := &thread.depths[thread.current_depth]
 				jev := &depth.bs_events[e_idx]
 				jev.duration = (event.timestamp * stamp_scale) - jev.timestamp
+				jev.self_time = jev.duration
 				thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 				total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 			} else {
