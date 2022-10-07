@@ -12,6 +12,7 @@ import "core:intrinsics"
 import "core:slice"
 import "core:container/queue"
 
+// allocator state
 big_global_arena := Arena{}
 small_global_arena := Arena{}
 temp_arena := Arena{}
@@ -26,12 +27,8 @@ current_alloc_offset := 0
 
 wasmContext := runtime.default_context()
 
-t           : f64
-frame_count : int
-rect_count : int
-bucket_count : int
-was_sleeping : bool
 
+// big bag-o-colors
 bg_color      := FVec4{}
 bg_color2     := FVec4{}
 text_color    := FVec4{}
@@ -50,46 +47,23 @@ shadow_color := FVec4{}
 wide_rect_color := FVec4{}
 wide_bg_color := FVec4{}
 
-default_font   := `'Montserrat',-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
-monospace_font := `'Fira Code', monospace`
-icon_font      := `FontAwesome`
+
+// input state
+is_mouse_down := false
+was_mouse_down := false
+clicked       := false
+is_hovering   := false
+
+last_mouse_pos := Vec2{}
+mouse_pos      := Vec2{}
+clicked_pos    := Vec2{}
+scroll_val_y: f64 = 0
+
+cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
 
 
-EventID :: struct {
-	pid: i64,
-	tid: i64,
-	did: i64,
-	eid: i64,
-}
+// selection state
 selected_event := EventID{-1, -1, -1, -1}
-
-Stats :: struct {
-	total_time: f64,
-	self_time: f64,
-	count: u32,
-	min_time: f32,
-	max_time: f32,
-}
-
-Range :: struct {
-	pid: int,
-	tid: int,
-	did: int,
-
-	start: int,
-	end: int,
-}
-
-StatState :: enum {
-	NoStats,
-	Started,
-	Finished,
-}
-
-StatOffset :: struct {
-	range_idx: int,
-	event_idx: int,
-}
 
 did_multiselect := false
 clicked_on_rect := false
@@ -100,6 +74,12 @@ selected_ranges: [dynamic]Range
 cur_stat_offset := StatOffset{}
 total_tracked_time := 0.0
 
+
+// drawing state
+default_font   := `'Montserrat',-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
+monospace_font := `'Fira Code', monospace`
+icon_font      := `FontAwesome`
+colormode      := ColorMode.Dark
 
 dpr: f64
 rect_height: f64
@@ -116,36 +96,6 @@ p_font_size: f64
 h1_font_size: f64
 h2_font_size: f64
 
-last_mouse_pos := Vec2{}
-mouse_pos      := Vec2{}
-clicked_pos    := Vec2{}
-scroll_val_y: f64 = 0
-
-cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
-division: f64 = 0
-
-is_mouse_down := false
-was_mouse_down := false
-clicked       := false
-is_hovering   := false
-
-
-build_hash := 0
-enable_debug := false
-fps_history: queue.Queue(u32)
-
-loading_config := true
-post_loading := false
-update_fonts := true
-start_profiling := false
-colormode := ColorMode.Dark
-
-ColorMode :: enum {
-	Dark,
-	Light,
-	Auto
-}
-
 em             : f64 = 0
 h1_height      : f64 = 0
 h2_height      : f64 = 0
@@ -153,19 +103,39 @@ ch_width       : f64 = 0
 thread_gap     : f64 = 8
 graph_size: f64 = 150
 
-string_block: [dynamic]u8
+build_hash := 0
+enable_debug := false
+fps_history: queue.Queue(u32)
 
+t           : f64
+frame_count : int
+rect_count : int
+bucket_count : int
+was_sleeping : bool
+first_frame := true
+random_seed: u64
+
+
+// loading / trace state
+loading_config := true
+post_loading := false
+update_fonts := true
+event_count: i64
+
+string_block: [dynamic]u8
 processes: [dynamic]Process
 process_map: ValHash
 
 global_instants: [dynamic]Instant
+choice_count :: 16
 color_choices: [choice_count]FVec3
-event_count: i64
 total_max_time: f64
 total_min_time: f64
 
 file_name_store: [1024]u8
 file_name: string
+CHUNK_SIZE :: 10 * 1024 * 1024
+
 
 default_colors :: proc "contextless" (is_dark: bool) {
 	if is_dark {
@@ -209,7 +179,6 @@ default_colors :: proc "contextless" (is_dark: bool) {
 	}
 }
 
-choice_count :: 16
 
 @export
 set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
@@ -250,8 +219,6 @@ to_world_pos :: proc(cam: Camera, pos: Vec2) -> Vec2 {
 	return Vec2{to_world_x(cam, pos.x), to_world_y(cam, pos.y)}
 }
 
-first_frame := true
-CHUNK_SIZE :: 10 * 1024 * 1024
 main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
@@ -288,7 +255,6 @@ main :: proc() {
 	fmt.printf("Seed is 0x%X\n", random_seed)
 }
 
-random_seed: u64
 
 get_current_window :: proc(cam: Camera, display_width: f64) -> (f64, f64) {
 	display_range_start := to_world_x(cam, 0)
@@ -875,7 +841,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	v2 := math.floor(v1)
 	rem := v1 - v2
 
-	division = _pow(10, v2)
+	division := _pow(10, v2)
 	if rem < 0.3 {
 		division -= (division * 0.8)
 	} else if rem < 0.6 {
@@ -1244,7 +1210,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 
 			thread := processes[range.pid].threads[range.tid]
-
 			events := thread.depths[range.did].events[start_idx:range.end]
 
 			for ev, e_idx in events {
@@ -1261,6 +1226,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				if !ok {
 					stats[name] = Stats{min_time = 1e308}
 					s = &stats[name]
+
+					//append(&self_workqueue, StatOffset{r_idx, start_idx + e_idx})
 				}
 				s.count += 1
 				s.total_time += duration

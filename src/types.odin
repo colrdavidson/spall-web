@@ -24,6 +24,12 @@ DrawRect :: struct #packed {
 	color: [4]u8,
 }
 
+ColorMode :: enum {
+	Dark,
+	Light,
+	Auto
+}
+
 Camera :: struct {
 	pan: Vec2,
 	vel: Vec2,
@@ -31,6 +37,37 @@ Camera :: struct {
 
 	current_scale: f64,
 	target_scale: f64,
+}
+
+EventID :: struct {
+	pid: i64,
+	tid: i64,
+	did: i64,
+	eid: i64,
+}
+Stats :: struct {
+	total_time: f64,
+	self_time: f64,
+	count: u32,
+	min_time: f32,
+	max_time: f32,
+}
+Range :: struct {
+	pid: int,
+	tid: int,
+	did: int,
+
+	start: int,
+	end: int,
+}
+StatState :: enum {
+	NoStats,
+	Started,
+	Finished,
+}
+StatOffset :: struct {
+	range_idx: int,
+	event_idx: int,
 }
 
 EventType :: enum u8 {
