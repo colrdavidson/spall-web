@@ -1434,11 +1434,35 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		file_name_width := measure_text(file_name, h1_font_size, default_font)
 		draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
 
+		// Open File
 		if button(rect(edge_pad + logo_width + edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 			open_file_dialog()
 		}
+
+		// Reset Camera
 		if button(rect(edge_pad + logo_width + edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
 			reset_camera(display_width)
+		}
+
+		// Process All Events
+		if button(rect(edge_pad + logo_width + edge_pad + (button_width * 2) + (button_pad * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf1fe", icon_font) {
+			stats_state = .Started
+			did_multiselect = true
+			total_tracked_time = 0.0
+			cur_stat_offset = StatOffset{}
+			selected_event = {-1, -1, -1, -1}
+
+			big_global_arena.offset = current_alloc_offset
+			stats = make(map[string]Stats, 0, big_global_allocator)
+			selected_ranges = make([dynamic]Range, 0, big_global_allocator)
+
+			for proc_v, p_idx in processes {
+				for tm, t_idx in proc_v.threads {
+					for depth, d_idx in tm.depths {
+						append(&selected_ranges, Range{p_idx, t_idx, d_idx, 0, len(depth.events)})
+					}
+				}
+			}
 		}
 
 		// colormode button nonsense
