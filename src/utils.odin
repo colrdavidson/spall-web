@@ -75,15 +75,15 @@ ONE_NANO :: 0.001
 stat_fmt :: proc(time: f64) -> string {
 	if time > ONE_SECOND {
 		cur_time := time / ONE_SECOND
-		return fmt.tprintf("%.3f s%s", cur_time, " ")
+		return fmt.tprintf("%.1f s%s", cur_time, " ")
 	} else if time > ONE_MILLI {
 		cur_time := time / ONE_MILLI
-		return fmt.tprintf("%.3f ms", cur_time)
+		return fmt.tprintf("%.1f ms", cur_time)
 	} else if time >= ONE_NANO {
-		return fmt.tprintf("%.3f us", time) // μs
+		return fmt.tprintf("%.1f us", time) // μs
 	} else {
 		cur_time := time / ONE_NANO
-		return fmt.tprintf("%.3f ns", cur_time)
+		return fmt.tprintf("%.1f ns", cur_time)
 	}
 }
 

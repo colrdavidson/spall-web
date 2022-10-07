@@ -1357,6 +1357,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			text_outf(&cursor, y, name_header_text)
 			next_line(&y, em)
 
+			full_time := total_max_time - total_min_time
 			i := 0
 			for name, stat in stats {
 				if i > (info_line_count - 2) {
@@ -1401,7 +1402,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				next_line(&y_after, em)
 
 
-				dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / total_tracked_time, y_after - y_before)
+				dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / full_time, y_after - y_before)
 				cursor += column_gap / 2
 
 				//name_width := measure_text(name, p_font_size, monospace_font)
