@@ -1286,12 +1286,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 			thread := processes[p_idx].threads[t_idx]
 			event := thread.depths[d_idx].events[e_idx]
-			draw_text(fmt.tprintf("Event: \"%s\"", in_getstr(event.name)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text(fmt.tprintf("%s", in_getstr(event.name)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 			draw_text(fmt.tprintf("start time:%s", time_fmt(event.timestamp - total_min_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-			draw_text(fmt.tprintf("end time:%s", time_fmt((event.timestamp - total_min_time) + bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-			draw_text(fmt.tprintf("duration:%s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-			draw_text(fmt.tprintf("self time:%s", time_fmt(event.self_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
-			draw_text(fmt.tprintf("start timestamp:%s", time_fmt(event.timestamp)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text(fmt.tprintf("  duration:%s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text(fmt.tprintf(" self time:%s", time_fmt(event.self_time)), Vec2{x_subpad, next_line(&y, em)}, p_font_size, monospace_font, text_color)
 
 		// If we've got stats cooking already
 		} else if stats_state == .Started {

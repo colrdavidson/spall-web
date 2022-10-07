@@ -85,88 +85,6 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f64) {
 	return color, total_weight
 }
 
-build_tree :: proc(tm: ^Thread, depth_idx: int, events: []Event) -> uint {
-	bucket_count := i_round_up(len(events), BUCKET_SIZE) / BUCKET_SIZE
-	max_nodes := bucket_count
-	{
-		row_count := bucket_count
-		parent_row_count := (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
-		for row_count > 1 {
-			tmp := (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
-			max_nodes += tmp
-			row_count = parent_row_count
-			parent_row_count = tmp
-		}
-	}
-
-	tm.depths[depth_idx].tree = make([dynamic]ChunkNode, 0, max_nodes, big_global_allocator)
-	tree := &tm.depths[depth_idx].tree
-
-	for i := 0; i < bucket_count; i += 1 {
-		start_idx := i * BUCKET_SIZE
-		end_idx := start_idx + min(len(events) - start_idx, BUCKET_SIZE)
-		scan_arr := events[start_idx:end_idx]
-
-		start_ev := scan_arr[0]
-		end_ev := scan_arr[len(scan_arr)-1]
-
-		node := ChunkNode{}
-		node.start_time = start_ev.timestamp - total_min_time
-		node.end_time   = end_ev.timestamp + bound_duration(end_ev, tm.max_time) - total_min_time
-		node.start_idx  = uint(start_idx)
-		node.arr_len = i8(len(scan_arr))
-
-		avg_color, weight := gen_event_color(scan_arr, tm.max_time)
-		node.avg_color = avg_color
-		node.weight = weight
-
-		append(tree, node)
-	}
-
-	tree_start_idx := 0
-	tree_end_idx := len(tree)
-
-	row_count := len(tree)
-	parent_row_count := (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
-	for row_count > 1 {
-		for i := 0; i < parent_row_count; i += 1 {
-			start_idx := tree_start_idx + (i * CHUNK_NARY_WIDTH)
-			end_idx := start_idx + min(tree_end_idx - start_idx, CHUNK_NARY_WIDTH)
-
-			children := tree[start_idx:end_idx]
-
-			start_node := children[0]
-			end_node := children[len(children)-1]
-
-			node := ChunkNode{}
-			node.start_time = start_node.start_time
-			node.end_time   = end_node.end_time
-			node.start_idx  = start_node.start_idx
-
-			avg_color := FVec3{}
-			for j := 0; j < len(children); j += 1 {
-				node.children[j] = uint(start_idx + j)
-				avg_color += children[j].avg_color * f32(children[j].weight)
-				node.weight += children[j].weight
-			}
-			node.child_count = i8(len(children))
-			node.avg_color = avg_color / f32(node.weight)
-
-			append(tree, node)
-		}
-
-		tree_start_idx = tree_end_idx
-		tree_end_idx = len(tree)
-		row_count = tree_end_idx - tree_start_idx
-		parent_row_count = (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
-	}
-
-	//fmt.printf("evs: %d, tree: %d, ratio: %f\n", len(events), len(tree), f64(len(tree)) / f64(len(events)))
-
-	//fmt.printf("tree len: %d, head: %d\n", len(tree), len(tree) - 1)
-	return len(tree) - 1
-}
-
 print_tree :: proc(tree: []ChunkNode, head: uint) {
 	fmt.printf("mah tree!\n")
 	// If we blow this, we're in space
@@ -199,68 +117,90 @@ chunk_events :: proc() {
 	for proc_v in &processes {
 		for tm in &proc_v.threads {
 			for depth, d_idx in &tm.depths {
-				depth.head = build_tree(&tm, d_idx, depth.events)
+				bucket_count := i_round_up(len(depth.events), BUCKET_SIZE) / BUCKET_SIZE
+
+				// precompute element count for tree
+				max_nodes := bucket_count
+				{
+					row_count := bucket_count
+					parent_row_count := (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
+					for row_count > 1 {
+						tmp := (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
+						max_nodes += tmp
+						row_count = parent_row_count
+						parent_row_count = tmp
+					}
+				}
+
+				tm.depths[d_idx].tree = make([dynamic]ChunkNode, 0, max_nodes, big_global_allocator)
+				tree := &tm.depths[d_idx].tree
+
+				for i := 0; i < bucket_count; i += 1 {
+					start_idx := i * BUCKET_SIZE
+					end_idx := start_idx + min(len(depth.events) - start_idx, BUCKET_SIZE)
+					scan_arr := depth.events[start_idx:end_idx]
+
+					start_ev := scan_arr[0]
+					end_ev := scan_arr[len(scan_arr)-1]
+
+					node := ChunkNode{}
+					node.start_time = start_ev.timestamp - total_min_time
+					node.end_time   = end_ev.timestamp + bound_duration(end_ev, tm.max_time) - total_min_time
+					node.start_idx  = uint(start_idx)
+					node.arr_len = i8(len(scan_arr))
+
+					avg_color, weight := gen_event_color(scan_arr, tm.max_time)
+					node.avg_color = avg_color
+					node.weight = weight
+
+					append(tree, node)
+				}
+
+				tree_start_idx := 0
+				tree_end_idx := len(tree)
+
+				row_count := len(tree)
+				parent_row_count := (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
+				for row_count > 1 {
+					for i := 0; i < parent_row_count; i += 1 {
+						start_idx := tree_start_idx + (i * CHUNK_NARY_WIDTH)
+						end_idx := start_idx + min(tree_end_idx - start_idx, CHUNK_NARY_WIDTH)
+
+						children := tree[start_idx:end_idx]
+
+						start_node := children[0]
+						end_node := children[len(children)-1]
+
+						node := ChunkNode{}
+						node.start_time = start_node.start_time
+						node.end_time   = end_node.end_time
+						node.start_idx  = start_node.start_idx
+
+						avg_color := FVec3{}
+						for j := 0; j < len(children); j += 1 {
+							node.children[j] = uint(start_idx + j)
+							avg_color += children[j].avg_color * f32(children[j].weight)
+							node.weight += children[j].weight
+						}
+						node.child_count = i8(len(children))
+						node.avg_color = avg_color / f32(node.weight)
+
+						append(tree, node)
+					}
+
+					tree_start_idx = tree_end_idx
+					tree_end_idx = len(tree)
+					row_count = tree_end_idx - tree_start_idx
+					parent_row_count = (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
+				}
+
+				//fmt.printf("evs: %d, tree: %d, ratio: %f\n", len(events), len(tree), f64(len(tree)) / f64(len(events)))
+
+				//fmt.printf("tree len: %d, head: %d\n", len(tree), len(tree) - 1)
+				depth.head = len(tree) - 1
 			}
 		}
 	}
-}
-
-calc_selftime :: proc(ev: ^Event, threads: ^[dynamic]Thread, thread_idx, depth_idx: int) -> f64 {
-	thread := threads[thread_idx]
-	depth := thread.depths[depth_idx]
-	tree := depth.tree
-
-	tree_stack := [128]uint{}
-	stack_len := 0
-
-	start_time := ev.timestamp - total_min_time
-	end_time := ev.timestamp + bound_duration(ev^, thread.max_time) - total_min_time
-
-	child_time := 0.0
-	tree_stack[0] = depth.head; stack_len += 1
-	for stack_len > 0 {
-		stack_len -= 1
-
-		tree_idx := tree_stack[stack_len]
-		cur_node := tree[tree_idx]
-
-		if end_time < cur_node.start_time || start_time > cur_node.end_time {
-			continue
-		}
-
-		if cur_node.start_time >= start_time && cur_node.end_time <= end_time {
-			child_time += cur_node.weight
-			continue
-		}
-
-		if cur_node.child_count == 0 {
-			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
-			weight := 0.0
-			scan_loop: for ev in scan_arr {
-
-				ev_start_time := ev.timestamp - total_min_time
-				if ev_start_time < start_time {
-					continue
-				}
-
-				ev_end_time := ev.timestamp + bound_duration(ev, thread.max_time) - total_min_time
-				if ev_end_time > end_time {
-					break scan_loop
-				}
-
-				weight += bound_duration(ev, thread.max_time)
-			}
-			child_time += weight
-			continue
-		}
-
-		for i := cur_node.child_count - 1; i >= 0; i -= 1 {
-			tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
-		}
-	}
-
-	self_time := bound_duration(ev^, thread.max_time) - child_time
-	return self_time
 }
 
 generate_selftimes :: proc() {
@@ -279,8 +219,58 @@ generate_selftimes :: proc() {
 				}
 
 				for ev, e_idx in &depth.events {
-					self_time := calc_selftime(&ev, &proc_v.threads, t_idx, d_idx+1)
-					ev.self_time = self_time
+					depth := tm.depths[d_idx+1]
+					tree := depth.tree
+
+					tree_stack := [128]uint{}
+					stack_len := 0
+
+					start_time := ev.timestamp - total_min_time
+					end_time := ev.timestamp + bound_duration(ev, tm.max_time) - total_min_time
+
+					child_time := 0.0
+					tree_stack[0] = depth.head; stack_len += 1
+					for stack_len > 0 {
+						stack_len -= 1
+
+						tree_idx := tree_stack[stack_len]
+						cur_node := tree[tree_idx]
+
+						if end_time < cur_node.start_time || start_time > cur_node.end_time {
+							continue
+						}
+
+						if cur_node.start_time >= start_time && cur_node.end_time <= end_time {
+							child_time += cur_node.weight
+							continue
+						}
+
+						if cur_node.child_count == 0 {
+							scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
+							weight := 0.0
+							scan_loop: for scan_ev in scan_arr {
+								scan_ev_start_time := scan_ev.timestamp - total_min_time
+								if scan_ev_start_time < start_time {
+									continue
+								}
+
+								scan_ev_end_time := scan_ev.timestamp + bound_duration(scan_ev, tm.max_time) - total_min_time
+								if scan_ev_end_time > end_time {
+									break scan_loop
+								}
+
+								weight += bound_duration(scan_ev, tm.max_time)
+							}
+							child_time += weight
+							continue
+						}
+
+						for i := cur_node.child_count - 1; i >= 0; i -= 1 {
+							tree_stack[stack_len] = cur_node.children[i]; stack_len += 1
+						}
+					}
+
+					ev.self_time = bound_duration(ev, tm.max_time) - child_time
 				}
 			}
 		}
