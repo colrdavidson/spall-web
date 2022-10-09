@@ -465,11 +465,11 @@ render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 		e_idx := int(start_idx) + de_id
 		if did_multiselect {
 			if found_rid == -1 {
-				rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+				rect_color = greyscale(rect_color)
 			} else {
 				range := selected_ranges[found_rid]	
 				if !val_in_range(e_idx, range.start, range.end - 1) {
-					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+					rect_color = greyscale(rect_color)
 				}
 			}
 		}
@@ -601,11 +601,11 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 		e_idx := int(start_idx) + de_id
 		if did_multiselect {
 			if found_rid == -1 {
-				rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+				rect_color = greyscale(rect_color)
 			} else {
 				range := selected_ranges[found_rid]	
 				if !val_in_range(e_idx, range.start, range.end - 1) {
-					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+					rect_color = greyscale(rect_color)
 				}
 			}
 		}

@@ -115,3 +115,7 @@ hex_to_fvec :: proc "contextless" (v: u32) -> FVec4 {
 
 	return FVec4{r, g, b, a}
 }
+
+greyscale :: proc "contextless" (c: FVec3) -> FVec3 {
+	return (c.x * 0.299) + (c.y * 0.587) + (c.z * 0.114)
+}
