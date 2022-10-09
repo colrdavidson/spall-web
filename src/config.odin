@@ -147,6 +147,7 @@ chunk_events :: proc() {
 					node.start_time = start_ev.timestamp - total_min_time
 					node.end_time   = end_ev.timestamp + bound_duration(end_ev, tm.max_time) - total_min_time
 					node.start_idx  = uint(start_idx)
+					node.end_idx    = uint(end_idx)
 					node.arr_len = i8(len(scan_arr))
 
 					avg_color, weight := gen_event_color(scan_arr, tm.max_time)
@@ -175,6 +176,7 @@ chunk_events :: proc() {
 						node.start_time = start_node.start_time
 						node.end_time   = end_node.end_time
 						node.start_idx  = start_node.start_idx
+						node.end_idx    = end_node.end_idx
 
 						avg_color := FVec3{}
 						for j := 0; j < len(children); j += 1 {
@@ -194,9 +196,6 @@ chunk_events :: proc() {
 					parent_row_count = (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
 				}
 
-				//fmt.printf("evs: %d, tree: %d, ratio: %f\n", len(events), len(tree), f64(len(tree)) / f64(len(events)))
-
-				//fmt.printf("tree len: %d, head: %d\n", len(tree), len(tree) - 1)
 				depth.head = len(tree) - 1
 			}
 		}

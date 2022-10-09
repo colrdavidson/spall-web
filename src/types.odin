@@ -113,6 +113,7 @@ ChunkNode :: struct #packed {
 	weight: f64,
 
 	start_idx: uint,
+	end_idx: uint,
 	children: [CHUNK_NARY_WIDTH]uint,
 
 	child_count: i8,

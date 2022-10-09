@@ -43,6 +43,13 @@ f_round_down :: proc(x, align: $T) -> T {
 	return x - math.remainder(x, align)
 }
 
+val_in_range :: proc(val, start, end: $T) -> bool {
+	return val >= start && val <= end
+}
+range_in_range :: proc(s1, e1, s2, e2: $T) -> bool {
+	return s1 <= e2 && e1 >= s2
+}
+
 pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 	x1 := box.pos.x
 	y1 := box.pos.y

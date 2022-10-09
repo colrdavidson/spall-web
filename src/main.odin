@@ -363,13 +363,22 @@ render_wideevents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 	}
 }
 
-render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f64) {
+render_minitree :: proc(pid, tid: int, depth_idx: int, start_x: f64, scale: f64) {
+	thread := processes[pid].threads[tid]
 	depth := thread.depths[depth_idx]
 	tree := depth.tree
 
 	if len(tree) == 0 {
 		fmt.printf("depth_idx: %d, depth count: %d, %v\n", depth_idx, len(thread.depths), thread.depths)
 		trap()
+	}
+
+	found_rid := -1
+	range_loop: for range, r_idx in selected_ranges {
+		if range.pid == pid && range.tid == tid && range.did == depth_idx {
+			found_rid = r_idx
+			break
+		}
 	}
 
 	// If we blow this, we're in space
@@ -402,6 +411,17 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 			r_w   := end_x - r_x
 
 			rect_color := cur_node.avg_color
+			if did_multiselect {
+				if found_rid == -1 {
+					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+				} else {
+					range := selected_ranges[found_rid]	
+					if !range_in_range(cur_node.start_idx, cur_node.end_idx, uint(range.start), uint(range.end)) {
+						rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+					}
+				}
+			}
+
 			draw_rect := DrawRect{f32(r_x), f32(r_w), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 			append(&gl_rects, draw_rect)
 			continue
@@ -410,7 +430,7 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
 			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
-			render_minievents(scan_arr, thread.max_time, start_x, scale)
+			render_minievents(scan_arr, thread.max_time, start_x, scale, int(cur_node.start_idx), found_rid)
 			continue
 		}
 
@@ -420,7 +440,7 @@ render_minitree :: proc(thread: ^Thread, depth_idx: int, start_x: f64, scale: f6
 	}
 }
 
-render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64, scale: f64) {
+render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64, scale: f64, start_idx, found_rid: int) {
 	for ev, de_id in scan_arr {
 		x := ev.timestamp - total_min_time
 		duration := bound_duration(ev, thread_max_time)
@@ -442,15 +462,35 @@ render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 
 		idx := name_color_idx(in_getstr(ev.name))
 		rect_color := color_choices[idx]
+		e_idx := int(start_idx) + de_id
+		if did_multiselect {
+			if found_rid == -1 {
+				rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+			} else {
+				range := selected_ranges[found_rid]	
+				if !val_in_range(e_idx, range.start, range.end) {
+					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+				}
+			}
+		}
 
 		draw_rect := DrawRect{f32(r_x), f32(r_w), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 		append(&gl_rects, draw_rect)
 	}
 }
 
-render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64, start_time, end_time: f64) {
+render_tree :: proc(pid, tid, depth_idx: int, y_start: f64, start_time, end_time: f64) {
+	thread := processes[pid].threads[tid]
 	depth := thread.depths[depth_idx]
 	tree := depth.tree
+
+	found_rid := -1
+	range_loop: for range, r_idx in selected_ranges {
+		if range.pid == pid && range.tid == tid && range.did == depth_idx {
+			found_rid = r_idx
+			break
+		}
+	}
 
 	// If we blow this, we're in space
 	tree_stack := [128]uint{}
@@ -492,6 +532,18 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 			dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
 
 			rect_color := cur_node.avg_color
+
+			if did_multiselect {
+				if found_rid == -1 {
+					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+				} else {
+					range := selected_ranges[found_rid]	
+					if !range_in_range(cur_node.start_idx, cur_node.end_idx, uint(range.start), uint(range.end)) {
+						rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+					}
+				}
+			}
+
 			draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 			append(&gl_rects, draw_rect)
 
@@ -502,7 +554,7 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
-			render_events(pid, tid, depth_idx, depth.events, cur_node.start_idx, cur_node.arr_len, thread.max_time, depth_idx, y_start)
+			render_events(pid, tid, depth_idx, depth.events, cur_node.start_idx, cur_node.arr_len, thread.max_time, depth_idx, y_start, found_rid)
 			continue
 		}
 
@@ -512,7 +564,7 @@ render_tree :: proc(pid, tid: int, thread: ^Thread, depth_idx: int, y_start: f64
 	}
 }
 
-render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint, arr_len: i8, thread_max_time: f64, y_depth: int, y_start: f64) {
+render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint, arr_len: i8, thread_max_time: f64, y_depth: int, y_start: f64, found_rid: int) {
 	scan_arr := events[start_idx:start_idx+uint(arr_len)]
 	y := rect_height * f64(y_depth)
 	h := rect_height
@@ -546,8 +598,18 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 		ev_name := in_getstr(ev.name)
 		idx := name_color_idx(ev_name)
 		rect_color := color_choices[idx]
-
 		e_idx := int(start_idx) + de_id
+		if did_multiselect {
+			if found_rid == -1 {
+				rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+			} else {
+				range := selected_ranges[found_rid]	
+				if !val_in_range(e_idx, range.start, range.end) {
+					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+				}
+			}
+		}
+
 		if int(selected_event.pid) == p_idx && int(selected_event.tid) == t_idx &&
 		   int(selected_event.did) == d_idx && int(selected_event.eid) == e_idx {
 			rect_color.x += 30
@@ -923,7 +985,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 				cur_depth_off := 0
 				for depth, d_idx in &tm.depths {
-					render_tree(p_idx, t_idx, &tm, d_idx, cur_y, start_time, end_time)
+					render_tree(p_idx, t_idx, d_idx, cur_y, start_time, end_time)
 					gl_push_rects(gl_rects[:], (cur_y + (rect_height * f64(d_idx))), rect_height)
 
 					resize(&gl_rects, 0)
@@ -1002,7 +1064,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		for proc_v, p_idx in &processes {
 			for tm, t_idx in &proc_v.threads {
 				for depth, d_idx in &tm.depths {
-					render_minitree(&tm, d_idx, mini_start_x + mini_graph_pad, x_scale)
+					render_minitree(p_idx, t_idx, d_idx, mini_start_x + mini_graph_pad, x_scale)
 					gl_push_rects(gl_rects[:], (tree_y + (mini_rect_height * f64(d_idx))), mini_rect_height)
 					resize(&gl_rects, 0)
 				}
@@ -1040,6 +1102,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		// Handle select events
 		if clicked && !clicked_on_rect && !shift_down {
 			selected_event = {-1, -1, -1, -1}
+			resize(&selected_ranges, 0)
 			did_multiselect = false
 			stats_state = .NoStats
 		}
@@ -1075,7 +1138,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			// draw multiselect box
 			selected_rect := rect(c_x, c_y, d_x, d_y)
 			draw_rect_outline(selected_rect, 1, FVec4{0, 0, 255, 255})
-			draw_rect(selected_rect, FVec4{0, 0, 255, 100})
+			draw_rect(selected_rect, FVec4{0, 0, 255, 20})
 
 			// transform multiselect rect to screen position
 			flopped_rect := Rect{}
