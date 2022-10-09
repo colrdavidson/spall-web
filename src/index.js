@@ -592,6 +592,10 @@ async function init() {
 		window.wasm.blur();
 		wakeUp();
 	});
+	window.addEventListener('focus', () => {
+		window.wasm.focus();
+		wakeUp();
+	});
 
 	let color_ret = sessionStorage.getItem("colormode");
 	if (color_ret === "") {

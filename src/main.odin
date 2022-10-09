@@ -87,14 +87,18 @@ build_hash := 0
 enable_debug := false
 fps_history: queue.Queue(u32)
 
-t           : f64
-frame_count : int
-last_frame_count := 0
-rect_count : int
-bucket_count : int
-was_sleeping : bool
+t               : f64
+multiselect_t   : f64
+greyanim_t      : f32
+greymotion      : f32
+anim_playing    : bool
+frame_count     : int
+last_frame_count: int
+rect_count      : int
+bucket_count    : int
+was_sleeping    : bool
+random_seed     : u64
 first_frame := true
-random_seed: u64
 
 
 // loading / trace state
@@ -411,14 +415,25 @@ render_minitree :: proc(pid, tid: int, depth_idx: int, start_x: f64, scale: f64)
 			r_w   := end_x - r_x
 
 			rect_color := cur_node.avg_color
+			grey := greyscale(cur_node.avg_color)
+			should_fade := false
 			if did_multiselect {
-				if found_rid == -1 {
-					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
-				} else {
+				if found_rid == -1 { should_fade = true } 
+				else {
 					range := selected_ranges[found_rid]	
-					if !range_in_range(cur_node.start_idx, cur_node.end_idx, uint(range.start), uint(range.end)) {
-						rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+					if !range_in_range(cur_node.start_idx, cur_node.end_idx, 
+									   uint(range.start), uint(range.end)) {
+						should_fade = true
 					}
+				}
+			}
+			if should_fade {
+				if multiselect_t != 0 && greyanim_t > 1 {
+					anim_playing = false
+					rect_color = grey
+				} else {
+					st := ease_in_out(greyanim_t)
+					rect_color = math.lerp(rect_color, grey, greymotion)
 				}
 			}
 
@@ -463,14 +478,24 @@ render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 		idx := name_color_idx(in_getstr(ev.name))
 		rect_color := color_choices[idx]
 		e_idx := int(start_idx) + de_id
+
+		grey := greyscale(color_choices[idx])
+		should_fade := false
 		if did_multiselect {
-			if found_rid == -1 {
-				rect_color = greyscale(rect_color)
-			} else {
+			if found_rid == -1 { should_fade = true } 
+			else {
 				range := selected_ranges[found_rid]	
-				if !val_in_range(e_idx, range.start, range.end - 1) {
-					rect_color = greyscale(rect_color)
-				}
+				if !val_in_range(e_idx, range.start, range.end - 1) { should_fade = true }
+			}
+		}
+
+		if should_fade {
+			if multiselect_t != 0 && greyanim_t > 1 {
+				anim_playing = false
+				rect_color = grey
+			} else {
+				st := ease_in_out(greyanim_t)
+				rect_color = math.lerp(rect_color, grey, greymotion)
 			}
 		}
 
@@ -533,14 +558,25 @@ render_tree :: proc(pid, tid, depth_idx: int, y_start: f64, start_time, end_time
 
 			rect_color := cur_node.avg_color
 
+			grey := greyscale(cur_node.avg_color)
+			should_fade := false
 			if did_multiselect {
-				if found_rid == -1 {
-					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
-				} else {
+				if found_rid == -1 { should_fade = true } 
+				else {
 					range := selected_ranges[found_rid]	
-					if !range_in_range(cur_node.start_idx, cur_node.end_idx, uint(range.start), uint(range.end)) {
-						rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
+					if !range_in_range(cur_node.start_idx, cur_node.end_idx, 
+									   uint(range.start), uint(range.end)) {
+						should_fade = true
 					}
+				}
+			}
+			if should_fade {
+				if multiselect_t != 0 && greyanim_t > 1 {
+					anim_playing = false
+					rect_color = grey
+				} else {
+					st := ease_in_out(greyanim_t)
+					rect_color = math.lerp(rect_color, grey, greymotion)
 				}
 			}
 
@@ -599,14 +635,24 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 		idx := name_color_idx(ev_name)
 		rect_color := color_choices[idx]
 		e_idx := int(start_idx) + de_id
+
+		grey := greyscale(color_choices[idx])
+
+		should_fade := false
 		if did_multiselect {
-			if found_rid == -1 {
-				rect_color = greyscale(rect_color)
-			} else {
+			if found_rid == -1 { should_fade = true } 
+			else {
 				range := selected_ranges[found_rid]	
-				if !val_in_range(e_idx, range.start, range.end - 1) {
-					rect_color = greyscale(rect_color)
-				}
+				if !val_in_range(e_idx, range.start, range.end - 1) { should_fade = true }
+			}
+		}
+
+		if should_fade {
+			if multiselect_t != 0 && greyanim_t > 1 {
+				anim_playing = false
+				rect_color = grey
+			} else {
+				rect_color = math.lerp(rect_color, grey, greymotion)
 			}
 		}
 
@@ -719,6 +765,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		was_sleeping = false
 	}
 	t += dt
+
+	// update animation timers
+	greyanim_t = f32((t - multiselect_t) * 5)
+	greymotion = ease_in_out(greyanim_t)
+
 
 	// Set up all the display state we need to render the screen
 	update_font_cache(width)
@@ -1103,18 +1154,26 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		if clicked && !clicked_on_rect && !shift_down {
 			selected_event = {-1, -1, -1, -1}
 			resize(&selected_ranges, 0)
+
+			multiselect_t = 0
 			did_multiselect = false
 			stats_state = .NoStats
 		}
 
 		// user wants to multi-select
 		if is_mouse_down && shift_down {
+			if !did_multiselect {
+				multiselect_t = t
+				anim_playing = true
+			}
+
 			// set multiselect flags
 			stats_state = .Started
 			did_multiselect = true
 			total_tracked_time = 0.0
 			cur_stat_offset = StatOffset{}
 			selected_event = {-1, -1, -1, -1}
+
 
 			// try to fake a reduced frame of latency by extrapolating the position by the delta
 			mouse_pos_extrapolated := mouse_pos + 1 * Vec2{pan_delta.x, pan_delta.y} / dt * min(dt, 0.016)
@@ -1617,7 +1676,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	if math.abs(cam.pan.x - cam.target_pan_x) < PAN_X_EPSILON && 
 	   math.abs(cam.vel.y - 0) < PAN_Y_EPSILON && 
 	   math.abs(cam.current_scale - cam.target_scale) < SCALE_EPSILON &&
-	   stats_state != .Started {
+	   stats_state != .Started && !anim_playing {
 		cam.pan.x = cam.target_pan_x
 		cam.vel.y = 0
 		cam.current_scale = cam.target_scale

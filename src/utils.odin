@@ -75,6 +75,13 @@ rect_in_rect :: proc(a, b: Rect) -> bool {
 	return !(b_left > a_right || a_left > b_right || a_top > b_bottom || b_top > a_bottom)
 }
 
+ease_in :: proc(t: f32) -> f32 {
+	return 1 - math.cos((t * math.PI) / 2)
+}
+ease_in_out :: proc(t: f32) -> f32 {
+    return -(math.cos(math.PI * t) - 1) / 2;
+}
+
 ONE_MINUTE :: 1000 * 1000 * 60
 ONE_SECOND :: 1000 * 1000
 ONE_MILLI :: 1000

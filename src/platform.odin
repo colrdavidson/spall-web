@@ -93,6 +93,15 @@ blur :: proc "contextless" () {
 }
 
 @export
+focus :: proc "contextless" () {
+	shift_down = false
+	is_mouse_down = false
+	was_mouse_down = false
+	clicked = false
+	clicked_pos = Vec2{}
+}
+
+@export
 temp_allocate :: proc(n: int) -> rawptr {
     context = wasmContext
     return mem.alloc(n, mem.DEFAULT_ALIGNMENT, context.temp_allocator)
