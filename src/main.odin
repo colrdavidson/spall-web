@@ -468,7 +468,7 @@ render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 				rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
 			} else {
 				range := selected_ranges[found_rid]	
-				if !val_in_range(e_idx, range.start, range.end) {
+				if !val_in_range(e_idx, range.start, range.end - 1) {
 					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
 				}
 			}
@@ -604,7 +604,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 				rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
 			} else {
 				range := selected_ranges[found_rid]	
-				if !val_in_range(e_idx, range.start, range.end) {
+				if !val_in_range(e_idx, range.start, range.end - 1) {
 					rect_color = (rect_color.x + rect_color.y + rect_color.z)/4
 				}
 			}
