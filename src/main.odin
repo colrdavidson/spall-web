@@ -301,7 +301,7 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 		stack_len -= 1
 
 		tree_idx := tree_stack[stack_len]
-		if tree_idx == len(tree) {
+		if tree_idx >= len(tree) {
 			fmt.printf("%d\n", depth.head)
 			fmt.printf("%d\n", stack_len)
 			fmt.printf("%v\n", tree_stack)

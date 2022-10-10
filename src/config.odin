@@ -323,22 +323,22 @@ finish_loading :: proc () {
 	free_all(temp_allocator)
 	free_all(scratch_allocator)
 
-	start_bench("process events")
+	start_bench("process and sort events")
 	if is_json {
 		json_process_events()
 	} else {
 		bin_process_events()
 	}
-	stop_bench("process events")
+	stop_bench("process and sort events")
 
 	free_all(temp_allocator)
 	free_all(scratch_allocator)
 
 	generate_color_choices()
 
-	start_bench("chunk events")
+	start_bench("generate spatial partitions")
 	chunk_events()
-	stop_bench("chunk events")
+	stop_bench("generate spatial partitions")
 
 	start_bench("generate self-time")
 	generate_selftimes()
