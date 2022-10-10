@@ -784,6 +784,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		y^ += h + (h / 1.5)
 		return res
 	}
+	prev_line := proc(y: ^f64, h: f64) -> f64 {
+		res := y^
+		y^ -= h + (h / 3)
+		return res
+	}
 
 	info_line_count := 10
 	for i := 0; i < info_line_count; i += 1 {
@@ -1535,6 +1540,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				next_line(&y, em)
 				i += 1
 			}
+		} else {
+			y := height - em - top_line_gap
+
+			draw_text("Shift-click and drag to get stats for multiple rectangles", Vec2{x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text("Click on a rectangle to inspect", Vec2{x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color)
 		}
 	}
 
@@ -1638,11 +1648,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	if enable_debug {
 		y := height - em - top_line_gap
 
-		prev_line := proc(y: ^f64, h: f64) -> f64 {
-			res := y^
-			y^ -= h + (h / 3)
-			return res
-		}
 
 		if queue.len(fps_history) > 100 { queue.pop_front(&fps_history) }
 		queue.push_back(&fps_history, u32(1 / _dt))
