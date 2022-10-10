@@ -274,11 +274,17 @@ reset_camera :: proc(display_width: f64) {
 	cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
 
 	if event_count == 0 { total_min_time = 0; total_max_time = 1000 }
-	fmt.printf("min %f μs, max %f μs, range %f μs\n", total_min_time, total_max_time, total_max_time - total_min_time)
+
 	start_time : f64 = 0
 	end_time   := total_max_time - total_min_time
-	cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, display_width)
+
+	side_pad := 2 * em
+
+	cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, display_width - (side_pad * 2))
 	cam.target_scale = cam.current_scale
+
+	cam.pan.x += side_pad
+	cam.target_pan_x = cam.pan.x
 }
 
 render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: int) {
@@ -1558,25 +1564,28 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		button_width  := 2 * em
 		button_pad    := 0.5 * em
 
+		cursor_x := edge_pad
+
+		// Draw Logo
 		logo_text := "spall"
 		logo_width := measure_text(logo_text, h1_font_size, default_font)
-		draw_text(logo_text, Vec2{edge_pad, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
-
-		file_name_width := measure_text(file_name, h1_font_size, default_font)
-		draw_text(file_name, Vec2{(display_width / 2) - (file_name_width / 2), (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+		draw_text(logo_text, Vec2{cursor_x, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+		cursor_x += logo_width + edge_pad
 
 		// Open File
-		if button(rect(edge_pad + logo_width + edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
+		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
 			open_file_dialog()
 		}
+		cursor_x += button_width + button_pad
 
 		// Reset Camera
-		if button(rect(edge_pad + logo_width + edge_pad + (button_width) + (button_pad), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
+		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
 			reset_camera(display_width)
 		}
+		cursor_x += button_width + button_pad
 
 		// Process All Events
-		if button(rect(edge_pad + logo_width + edge_pad + (button_width * 2) + (button_pad * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf1fe", icon_font) {
+		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf1fe", icon_font) {
 			stats_state = .Started
 			did_multiselect = true
 			total_tracked_time = 0.0
@@ -1595,6 +1604,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				}
 			}
 		}
+		cursor_x += button_width + button_pad
+
+		file_name_width := measure_text(file_name, h1_font_size, default_font)
+		name_x := max((display_width / 2) - (file_name_width / 2), cursor_x)
+		draw_text(file_name, Vec2{name_x, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
 
 		// colormode button nonsense
 		color_text : string
