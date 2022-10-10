@@ -46,7 +46,7 @@ subprocess.run([
     'build', 'src',
     '-collection:formats=formats',
     '-target:js_wasm32',
-    '-target-features:+bulk-memory,+atomics',
+    '-target-features:+bulk-memory',
     f"-extra-linker-flags:--import-memory --initial-memory={initial_size} --max-memory={max_size}",
     f"-out:{wasm_out}",
     *build_str,
