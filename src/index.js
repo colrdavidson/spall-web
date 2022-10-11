@@ -184,181 +184,207 @@ function get_system_colormode() {
 	return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+function set_error(code) {
+	let error_elem = document.getElementById("error-field");
+	switch (code) {
+		case 1: { // OutOfMemory
+			error_elem.innerHTML = 
+			`We're out of memory. WASM only supports up to 4 GB of memory *tops*, so files above 1-2 GB aren't always viable to load. If you need bigger file support, let me know! We've got a native version brewing that should run faster and let you use all the memory you can throw at it.`;
+		} break;
+		case 2: { // Bug
+			error_elem.innerHTML = "We hit a bug! Check the JS console for more details. In the meantime, you can try reloading the page and loading your file again.";
+		} break;
+	}
+}
+
 async function init() {
+	// set default error message to bug in case we get a module-level error
+	set_error(2);
+
 	const memory = new WebAssembly.Memory({ initial: 2000, maximum: 65536 });
-	window.wasm = await window.odin.runWasm(`spall.wasm`, null, memory, {
-		js: {
-			// Canvas
-			_canvas_clear() {
-				text_ctx.clearRect(0, 0, text_canvas.width, text_canvas.height);
-			},
-			_canvas_clip(x, y, w, h) {
-				text_ctx.restore();
-				text_ctx.save();
-				text_ctx.beginPath();
-				text_ctx.rect(x, y, w, h);
-				text_ctx.clip();
-			},
-			_canvas_rect(x, y, w, h, red, green, blue, alpha) {
-				text_ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
-				text_ctx.fillRect(x, y, w, h);
-			},
-			_canvas_rectc(x, y, w, h, r, red, green, blue, alpha) {
-				r = Math.min(r, w / 2, h / 2);
 
-				const diw = (w - (2 * r)); // device inner width
-				const dih = (h - (2 * r)); // device inner height
+	try {
+		window.wasm = await window.odin.runWasm(`spall.wasm`, null, memory, {
+			js: {
+				// Canvas
+				_canvas_clear() {
+					text_ctx.clearRect(0, 0, text_canvas.width, text_canvas.height);
+				},
+				_canvas_clip(x, y, w, h) {
+					text_ctx.restore();
+					text_ctx.save();
+					text_ctx.beginPath();
+					text_ctx.rect(x, y, w, h);
+					text_ctx.clip();
+				},
+				_canvas_rect(x, y, w, h, red, green, blue, alpha) {
+					text_ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
+					text_ctx.fillRect(x, y, w, h);
+				},
+				_canvas_rectc(x, y, w, h, r, red, green, blue, alpha) {
+					r = Math.min(r, w / 2, h / 2);
 
-				text_ctx.beginPath();
-				text_ctx.moveTo(x + r, y);
-				text_ctx.lineTo(x + r + diw, y);
-				text_ctx.arc(x + r + diw, y + r, r, -Math.PI/2, 0);
-				text_ctx.lineTo(x + r + diw + r, y + r + dih);
-				text_ctx.arc(x + r + diw, y + r + dih, r, 0, Math.PI/2);
-				text_ctx.lineTo(x + r, y + r + dih + r);
-				text_ctx.arc(x + r, y + r + dih, r, Math.PI/2, Math.PI);
-				text_ctx.lineTo(x, y + r);
-				text_ctx.arc(x + r, y + r, r, Math.PI, (3*Math.PI)/2);
+					const diw = (w - (2 * r)); // device inner width
+					const dih = (h - (2 * r)); // device inner height
 
-				text_ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
-				text_ctx.fill();
-			},
-			_canvas_circle(x, y, radius, red, green, blue, alpha) {
-				text_ctx.beginPath();
-				text_ctx.arc(x, y, radius, 0, 2*Math.PI, true);
+					text_ctx.beginPath();
+					text_ctx.moveTo(x + r, y);
+					text_ctx.lineTo(x + r + diw, y);
+					text_ctx.arc(x + r + diw, y + r, r, -Math.PI/2, 0);
+					text_ctx.lineTo(x + r + diw + r, y + r + dih);
+					text_ctx.arc(x + r + diw, y + r + dih, r, 0, Math.PI/2);
+					text_ctx.lineTo(x + r, y + r + dih + r);
+					text_ctx.arc(x + r, y + r + dih, r, Math.PI/2, Math.PI);
+					text_ctx.lineTo(x, y + r);
+					text_ctx.arc(x + r, y + r, r, Math.PI, (3*Math.PI)/2);
 
-				text_ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
-				text_ctx.fill();
-			},
-			_canvas_text(strP, strLen, x, y, r, g, b, a, size, f, flen) {
-				const str = window.wasm.odinMem.loadString(strP, strLen);
-				const font = window.wasm.odinMem.loadString(f, flen);
-				updateFont(size, font);
+					text_ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
+					text_ctx.fill();
+				},
+				_canvas_circle(x, y, radius, red, green, blue, alpha) {
+					text_ctx.beginPath();
+					text_ctx.arc(x, y, radius, 0, 2*Math.PI, true);
 
-				text_ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
-				text_ctx.fillText(str, x * dpr, y * dpr);
-			},
-			_canvas_line(x1, y1, x2, y2, r, g, b, a, strokeWidth) {
-				text_ctx.beginPath();
-				text_ctx.moveTo(x1, y1);
-				text_ctx.lineTo(x2, y2);
+					text_ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
+					text_ctx.fill();
+				},
+				_canvas_text(strP, strLen, x, y, r, g, b, a, size, f, flen) {
+					const str = window.wasm.odinMem.loadString(strP, strLen);
+					const font = window.wasm.odinMem.loadString(f, flen);
+					updateFont(size, font);
 
-				text_ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${a/255})`;
-				text_ctx.lineWidth = strokeWidth;
-				text_ctx.stroke();
-			},
-			_canvas_arc(x, y, radius, angleStart, angleEnd, r, g, b, a, strokeWidth) {
-				text_ctx.beginPath();
-				text_ctx.arc(x, y, radius, -angleStart, -angleEnd - 0.001, true);
-				/*
-				The 0.001 is because Firefox has some dumb bug where
-				it doesn't draw all the way to the end of the arc and
-				leaves some empty pixels. Lines don't join up with arcs
-				nicely because of it. It sucks but a little bias seems
-				to "fix" it.
+					text_ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
+					text_ctx.fillText(str, x * dpr, y * dpr);
+				},
+				_canvas_line(x1, y1, x2, y2, r, g, b, a, strokeWidth) {
+					text_ctx.beginPath();
+					text_ctx.moveTo(x1, y1);
+					text_ctx.lineTo(x2, y2);
 
-				Bug report: https://bugzilla.mozilla.org/show_bug.cgi?id=1664959
-				*/
+					text_ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${a/255})`;
+					text_ctx.lineWidth = strokeWidth;
+					text_ctx.stroke();
+				},
+				_canvas_arc(x, y, radius, angleStart, angleEnd, r, g, b, a, strokeWidth) {
+					text_ctx.beginPath();
+					text_ctx.arc(x, y, radius, -angleStart, -angleEnd - 0.001, true);
+					/*
+					The 0.001 is because Firefox has some dumb bug where
+					it doesn't draw all the way to the end of the arc and
+					leaves some empty pixels. Lines don't join up with arcs
+					nicely because of it. It sucks but a little bias seems
+					to "fix" it.
 
-				text_ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${a/255})`;
-				text_ctx.lineWidth = strokeWidth;
-				text_ctx.stroke();
-			},
-			_measure_text: (p, len, size, f, flen) => {
-				const str = window.wasm.odinMem.loadString(p, len);
-				const font = window.wasm.odinMem.loadString(f, flen);
-				updateFont(size, font);
-				const metrics = text_ctx.measureText(str);
+					Bug report: https://bugzilla.mozilla.org/show_bug.cgi?id=1664959
+					*/
 
-				return metrics.width / dpr;
-			},
-			_get_text_height: (size, f, flen) => {
-				const font = window.wasm.odinMem.loadString(f, flen);
-				updateFont(size, font);
-				return cached_height;
-			},
+					text_ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${a/255})`;
+					text_ctx.lineWidth = strokeWidth;
+					text_ctx.stroke();
+				},
+				_measure_text: (p, len, size, f, flen) => {
+					const str = window.wasm.odinMem.loadString(p, len);
+					const font = window.wasm.odinMem.loadString(f, flen);
+					updateFont(size, font);
+					const metrics = text_ctx.measureText(str);
 
-			_gl_init_frame: (r, g, b, a) => {
-				gl_ctx.viewport(0, 0, gl_ctx.canvas.width, gl_ctx.canvas.height);
+					return metrics.width / dpr;
+				},
+				_get_text_height: (size, f, flen) => {
+					const font = window.wasm.odinMem.loadString(f, flen);
+					updateFont(size, font);
+					return cached_height;
+				},
 
-				gl_ctx.clearColor(r / 255, g / 255, b / 255, a / 255);
-				gl_ctx.clear(gl_ctx.COLOR_BUFFER_BIT);
+				_gl_init_frame: (r, g, b, a) => {
+					gl_ctx.viewport(0, 0, gl_ctx.canvas.width, gl_ctx.canvas.height);
 
-				gl_ctx.uniform1f(dpr_uni, dpr);
-				gl_ctx.uniform2f(resolution_uni, gl_ctx.canvas.width, gl_ctx.canvas.height);
+					gl_ctx.clearColor(r / 255, g / 255, b / 255, a / 255);
+					gl_ctx.clear(gl_ctx.COLOR_BUFFER_BIT);
 
-				gl_ctx.bindBuffer(gl_ctx.ARRAY_BUFFER, rect_deets_buffer);
-				gl_ctx.bindVertexArray(vao);
-			},
-			_gl_push_rects: (ptr, len, size, y, height) => {
-				let _b = window.wasm.odinMem.loadBytes(ptr, len)
+					gl_ctx.uniform1f(dpr_uni, dpr);
+					gl_ctx.uniform2f(resolution_uni, gl_ctx.canvas.width, gl_ctx.canvas.height);
 
-				gl_ctx.bufferData(gl_ctx.ARRAY_BUFFER, _b, gl_ctx.DYNAMIC_DRAW);
+					gl_ctx.bindBuffer(gl_ctx.ARRAY_BUFFER, rect_deets_buffer);
+					gl_ctx.bindVertexArray(vao);
+				},
+				_gl_push_rects: (ptr, len, size, y, height) => {
+					let _b = window.wasm.odinMem.loadBytes(ptr, len)
 
-				gl_ctx.uniform1f(height_uni, height);
-				gl_ctx.uniform1f(y_uni, y);
+					gl_ctx.bufferData(gl_ctx.ARRAY_BUFFER, _b, gl_ctx.DYNAMIC_DRAW);
 
-				gl_ctx.drawElementsInstanced(gl_ctx.TRIANGLES, idx_arr.length, gl_ctx.UNSIGNED_SHORT, 0, size);
-			},
+					gl_ctx.uniform1f(height_uni, height);
+					gl_ctx.uniform1f(y_uni, y);
 
-			// Debugging
-			debugger() { debugger; },
-			log_string(p, len) {
-				console.log(window.wasm.odinMem.loadString(p, len));
-			},
-			log_error(p, len) {
-				console.error(window.wasm.odinMem.loadString(p, len));
-			},
+					gl_ctx.drawElementsInstanced(gl_ctx.TRIANGLES, idx_arr.length, gl_ctx.UNSIGNED_SHORT, 0, size);
+				},
 
-			// Utils
-			get_session_storage(k, klen) {
-				let key = window.wasm.odinMem.loadString(k, klen);
-				let data = sessionStorage.getItem(key);
-				window.wasm.loaded_session_result(k, klen, ...str(data));
-			},
-			set_session_storage(k, klen, v, vlen) {
-				let key = window.wasm.odinMem.loadString(k, klen);
-				let val = window.wasm.odinMem.loadString(v, vlen);
+				// Debugging
+				debugger() { debugger; },
+				log_string(p, len) {
+					console.log(window.wasm.odinMem.loadString(p, len));
+				},
+				log_error(p, len) {
+					console.error(window.wasm.odinMem.loadString(p, len));
+				},
+				_push_fatal(code) {
+					set_error(code);
+				},
 
-				sessionStorage.setItem(key, val);
-			},
-			get_time() { return Date.now(); },
-			get_system_color() { return get_system_colormode() },
-			_pow(x, power) { return Math.pow(x, power); },
-			change_cursor(p, len) {
-				let cursor_type = window.wasm.odinMem.loadString(p, len);
-				if (cursor_type !== cached_cursor) {
-					document.body.style.cursor = cursor_type;
-					cached_cursor = cursor_type;
+				// Utils
+				get_session_storage(k, klen) {
+					let key = window.wasm.odinMem.loadString(k, klen);
+					let data = sessionStorage.getItem(key);
+					window.wasm.loaded_session_result(k, klen, ...str(data));
+				},
+				set_session_storage(k, klen, v, vlen) {
+					let key = window.wasm.odinMem.loadString(k, klen);
+					let val = window.wasm.odinMem.loadString(v, vlen);
+
+					sessionStorage.setItem(key, val);
+				},
+				get_time() { return Date.now(); },
+				get_system_color() { return get_system_colormode() },
+				_pow(x, power) { return Math.pow(x, power); },
+				change_cursor(p, len) {
+					let cursor_type = window.wasm.odinMem.loadString(p, len);
+					if (cursor_type !== cached_cursor) {
+						document.body.style.cursor = cursor_type;
+						cached_cursor = cursor_type;
+					}
+				},
+
+				// Config Loading
+				get_chunk(offset, size) {
+					let blob = loading_file.slice(offset, offset + size);
+					loading_reader.onload = (e) => {
+						if (e.target.error != null) {
+							console.log("Failed to read file: " + e.target.error);
+							return;
+						}
+
+						try {
+							window.wasm.load_config_chunk(offset, loading_file.size, ...bytes(e.target.result));
+							wakeUp();
+						} catch (e) {
+							console.error(e);
+							implode();
+							return;
+						}
+					};
+					loading_reader.readAsArrayBuffer(blob);
+				},
+
+				open_file_dialog() {
+					document.getElementById('file-dialog').click();
 				}
 			},
-
-			// Config Loading
-			get_chunk(offset, size) {
-				let blob = loading_file.slice(offset, offset + size);
-				loading_reader.onload = (e) => {
-					if (e.target.error != null) {
-						console.log("Failed to read file: " + e.target.error);
-						return;
-					}
-
-					try {
-						window.wasm.load_config_chunk(offset, loading_file.size, ...bytes(e.target.result));
-						wakeUp();
-					} catch (e) {
-						console.error(e);
-						implode();
-						return;
-					}
-				};
-				loading_reader.readAsArrayBuffer(blob);
-			},
-
-			open_file_dialog() {
-				document.getElementById('file-dialog').click();
-			}
-		},
-	});
+		});
+	} catch (e) {
+		console.error(e);
+		implode();
+		return;
+	}
 
 	function load_file(file) {
 		loading_file = file;

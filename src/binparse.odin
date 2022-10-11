@@ -105,7 +105,7 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		return ev, .EventRead
 	case .StreamOver:
 		fmt.printf("Got what was formerly a Complete event. Delete the file you tried to load!!!\n@Todo: Remove this message when all the files are deleted, and start utilizing StreamOver.\n", type)
-		trap()
+		push_fatal(SpallError.Bug)
 	case .Custom_Data:         fallthrough; // @Todo
 	case .Instant:             fallthrough; // @Todo
 	case .Overwrite_Timestamp: fallthrough; // @Todo
@@ -114,7 +114,7 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 	case .Invalid: fallthrough;
 	case:
 		fmt.printf("Unknown/invalid chunk (%v)\n", type)
-		trap() // @Todo: Handle invalid chunks
+		push_fatal(SpallError.Bug) // @Todo: Handle invalid chunks
 	}
 
 	return TempEvent{}, .PartialRead

@@ -62,7 +62,6 @@ scroll :: proc "contextless" (x, y: f64) { scroll_val_y += y }
 @export
 zoom :: proc "contextless" (x, y: f64) { scroll_val_y += y }
 
-shift_down := false
 @export
 key_down :: proc "contextless" (key: int) { 
 	switch key {
@@ -132,6 +131,7 @@ foreign js {
     debugger :: proc() ---
     log_string :: proc(str: string) ---
     log_error :: proc(str: string) ---
+	_push_fatal :: proc(code: int) ---
 
 	_gl_init_frame :: proc(r, g, b, a: f32) ---
 	_gl_push_rects :: proc(ptr: rawptr, byte_size, real_size: int, y, height: f64) ---
@@ -208,3 +208,8 @@ reset_cursor :: proc "contextless" () { change_cursor("auto") }
 
 @export
 set_dpr :: proc "contextless" (_dpr: f64) { dpr = _dpr }
+
+push_fatal :: proc(code: SpallError) {
+	_push_fatal(int(code))
+	trap()
+}

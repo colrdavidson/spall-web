@@ -96,7 +96,7 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 		}
 	}
 
-	trap()
+	push_fatal(SpallError.Bug)
 }
 
 INMAP_LOAD_FACTOR :: 0.75
@@ -182,7 +182,7 @@ in_get :: proc(v: ^INMap, key: string) -> INStr {
 		}
 	}
 
-	trap()
+	push_fatal(SpallError.Bug)
 	return INStr{}
 }
 
@@ -255,7 +255,7 @@ km_insert :: proc(v: ^KeyMap, key: string) {
 		}
 	}
 
-	trap()
+	push_fatal(SpallError.Bug)
 }
 
 km_find :: proc (v: ^KeyMap, key: string, loc := #caller_location) -> (string, bool) {

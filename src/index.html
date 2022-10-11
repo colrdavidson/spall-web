@@ -79,7 +79,7 @@
 				flex-direction: column;
 				align-items: center;
 				background-color: #FF0033;
-				padding: 2em;
+				padding: 1em;
 
 				border-radius: 10px;
 				border: black 2px solid;
@@ -92,6 +92,23 @@
 				margin-top: 0;
 				margin-bottom: 0;
 			}
+			.more-centery > h2 {
+				margin-top: 0;
+				margin-bottom: 0.5em;
+			}
+
+			#error-field {
+				max-width: 72ch;
+				padding: 1em;
+
+				background-color: #FF9FB3;
+
+				border-radius: 10px;
+				border: 2px solid black;
+
+				color: black;
+				font-size: 18px;
+			}
 		</style>
 	</head>
 	<body>
@@ -103,8 +120,8 @@
 		<div id="error" class="error-box hide">
 			<div class="sub-box">
 				<div class="more-centery">
-					<p>🤣 Lol, we're dead. 🤣</p>
-					<p id="error-field">Error Code: 0xNOPE</p>
+					<h2>Oof. We're dead!</h2>
+					<p id="error-field"></p>
 				</div>
 			</div>
 		</div>

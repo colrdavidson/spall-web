@@ -29,10 +29,11 @@ wasmContext := runtime.default_context()
 
 
 // input state
-is_mouse_down := false
+is_mouse_down  := false
 was_mouse_down := false
-clicked       := false
-is_hovering   := false
+clicked        := false
+is_hovering    := false
+shift_down     := false
 
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
@@ -307,7 +308,7 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 			fmt.printf("%v\n", tree_stack)
 			fmt.printf("%v\n", tree)
 			fmt.printf("hmm????\n")
-			trap()
+			push_fatal(SpallError.Bug)
 		}
 
 		cur_node := tree[tree_idx]
@@ -380,7 +381,7 @@ render_minitree :: proc(pid, tid: int, depth_idx: int, start_x: f64, scale: f64)
 
 	if len(tree) == 0 {
 		fmt.printf("depth_idx: %d, depth count: %d, %v\n", depth_idx, len(thread.depths), thread.depths)
-		trap()
+		push_fatal(SpallError.Bug)
 	}
 
 	found_rid := -1

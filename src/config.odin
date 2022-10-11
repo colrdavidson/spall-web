@@ -78,7 +78,7 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f64) {
 	}
 	if weights_sum <= 0 {
 		fmt.printf("Invalid weights sum! events: %d, %f, %f\n", len(events), weights_sum, total_weight)
-		trap()
+		push_fatal(SpallError.Bug)
 	}
 	color /= f32(weights_sum)
 

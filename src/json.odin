@@ -303,7 +303,8 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
 			return
 		case .InvalidToken:
-			trap()
+			fmt.printf("Your JSON file contains an invalid token!\n")
+			push_fatal(SpallError.Bug) // @Todo: Better reporting about invalid tokens
 			return
 		case .Finished:
 			finish_loading()

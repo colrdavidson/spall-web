@@ -30,6 +30,12 @@ ColorMode :: enum {
 	Auto
 }
 
+SpallError :: enum int {
+	NoError = 0,
+	OutOfMemory = 1,
+	Bug = 2,
+}
+
 Camera :: struct {
 	pan: Vec2,
 	vel: Vec2,

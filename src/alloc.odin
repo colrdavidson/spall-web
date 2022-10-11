@@ -63,7 +63,7 @@ arena_allocator_proc :: proc(
 
 		if arena.offset + total_size > len(arena.data) {
 			fmt.printf("Out of memory @ %s\n", location)
-			intrinsics.trap()
+			push_fatal(SpallError.OutOfMemory)
 		}
 
 		arena.offset += total_size
@@ -99,7 +99,7 @@ growing_arena_init :: proc(a: ^Arena, loc := #caller_location) {
 	chunk, err := page_alloc(10)
 	if err != nil {
 		fmt.printf("OOM'd @ init | %s %s\n", err, loc)
-		trap()
+		push_fatal(SpallError.OutOfMemory)
 	}
 
 	a.data       = chunk
@@ -146,7 +146,8 @@ growing_arena_allocator_proc :: proc(
 			if err != nil {
 				fmt.printf("tried to get %f MB\n", f64(u32(total_size)) / 1024 / 1024)
 				fmt.printf("OOM'd @ %f MB | %s\n", f64(u32(len(arena.data))) / 1024 / 1024, location)
-				trap()
+
+				push_fatal(SpallError.OutOfMemory)
 			}
 
 			head_ptr := raw_data(arena.data)
