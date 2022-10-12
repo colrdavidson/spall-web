@@ -38,6 +38,8 @@ TODO: Optional Helper APIs:
 #include <string.h>
 #include <stdbool.h>
 
+#define SPALL_MIN(a, b) (((a) < (b)) ? (a) : (b))
+
 #pragma pack(push, 1)
 
 typedef struct SpallHeader {
@@ -89,7 +91,6 @@ typedef struct SpallBeginEventMax {
 
 typedef struct SpallProfile {
     double timestamp_unit;
-    uint64_t is_json;
     bool (*write)(struct SpallProfile *self, void *data, size_t length);
     bool (*flush)(struct SpallProfile *self);
     union {
@@ -122,7 +123,6 @@ extern "C" {
 
 // Profile context
 SpallProfile SpallInit    (const char *filename, double timestamp_unit);
-SpallProfile SpallInitJson(const char *filename, double timestamp_unit);
 void         SpallQuit    (SpallProfile *ctx);
 
 bool SpallFlush(SpallProfile *ctx);
@@ -136,17 +136,14 @@ bool SpallBufferQuit (SpallProfile *ctx, SpallBuffer *wb);
 bool SpallBufferFlush(SpallProfile *ctx, SpallBuffer *wb);
 
 // Begin events
-bool SpallTraceBegin         (SpallProfile *ctx, SpallBuffer *wb, double when, const char *name);
-bool SpallTraceBeginTid      (SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, uint32_t tid);
-bool SpallTraceBeginLen      (SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, signed long name_len);
-bool SpallTraceBeginLenTid   (SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid);
-bool SpallTraceBeginTidPid   (SpallProfile *ctx, SpallBuffer *wb, double when, const char *name,                       uint32_t tid, uint32_t pid);
-bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid);
+bool SpallTraceBeginLen      (SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len);
+bool SpallTraceBeginLenTid   (SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid);
+bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, uint32_t pid);
 
 // End events
-bool SpallTraceEnd      (SpallProfile *ctx, SpallBuffer *wb, double when);
-bool SpallTraceEndTid   (SpallProfile *ctx, SpallBuffer *wb, double when, uint32_t tid);
-bool SpallTraceEndTidPid(SpallProfile *ctx, SpallBuffer *wb, double when, uint32_t tid, uint32_t pid);
+bool SpallTraceEnd      (SpallProfile *ctx, SpallBuffer *wb);
+bool SpallTraceEndTid   (SpallProfile *ctx, SpallBuffer *wb, uint32_t tid);
+bool SpallTraceEndTidPid(SpallProfile *ctx, SpallBuffer *wb, uint32_t tid, uint32_t pid);
 
 #ifdef __cplusplus
 }
@@ -173,8 +170,8 @@ extern "C" {
         double spall_time_end = (SPALL_BUFFER_PROFILING_GET_TIME()); \
         char temp_buffer_data[sizeof(SpallBeginEvent) + sizeof("" name "") - 2 + sizeof(SpallEndEvent)]; \
         SpallBuffer temp_buffer = {temp_buffer_data, sizeof(temp_buffer_data)}; \
-        if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, spall_time_begin, name, sizeof(name) - 1, (uint32_t)(uintptr_t)wb->data, 4222222222)) return false; \
-        if (!SpallTraceEndTidPid(ctx, &temp_buffer, spall_time_end, (uint32_t)(uintptr_t)wb->data, 4222222222)) return false; \
+        if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, name, sizeof(name) - 1, (uint32_t)(uintptr_t)wb->data, 4222222222)) return false; \
+        if (!SpallTraceEndTidPid(ctx, &temp_buffer, (uint32_t)(uintptr_t)wb->data, 4222222222)) return false; \
         Spall__FileWrite(ctx, temp_buffer_data, sizeof(temp_buffer_data)); \
     } while (0)
 #else
@@ -290,7 +287,7 @@ bool SpallBufferAbort(SpallBuffer *wb) {
     return true;
 }
 
-static SpallProfile Spall__Init(const char *filename, double timestamp_unit, bool is_json) {
+static SpallProfile Spall__Init(const char *filename, double timestamp_unit) {
     SpallProfile ctx;
     memset(&ctx, 0, sizeof(ctx));
     if (timestamp_unit < 0) return ctx;
@@ -300,33 +297,35 @@ static SpallProfile Spall__Init(const char *filename, double timestamp_unit, boo
     ctx.flush = Spall__FileFlush;
     if (!ctx.file) { SpallQuit(&ctx); return ctx; }
     ctx.timestamp_unit = timestamp_unit;
-    ctx.is_json = is_json;
-    if (ctx.is_json) {
-        if (fprintf(ctx.file, "{\"traceEvents\":[\n") <= 0) { SpallQuit(&ctx); return ctx; }
-    } else {
-        SpallHeader header;
-        header.magic_header = 0x0BADF00D;
-        header.version = 0;
-        header.timestamp_unit = timestamp_unit;
-        header.must_be_0 = 0;
-        if (!ctx.write(&ctx, &header, sizeof(header))) { SpallQuit(&ctx); return ctx; }
-    }
+
+#ifdef SPALL_JSON
+    if (fprintf(ctx.file, "{\"traceEvents\":[\n") <= 0) { SpallQuit(&ctx); return ctx; }
+#else
+    SpallHeader header;
+    header.magic_header = 0x0BADF00D;
+    header.version = 0;
+    header.timestamp_unit = timestamp_unit;
+    header.must_be_0 = 0;
+    if (!ctx.write(&ctx, &header, sizeof(header))) { SpallQuit(&ctx); return ctx; }
+#endif
+
     return ctx;
 }
 
-SpallProfile SpallInit    (const char *filename, double timestamp_unit) { return Spall__Init(filename, timestamp_unit, false); }
-SpallProfile SpallInitJson(const char *filename, double timestamp_unit) { return Spall__Init(filename, timestamp_unit,  true); }
+SpallProfile SpallInit    (const char *filename, double timestamp_unit) { return Spall__Init(filename, timestamp_unit); }
 
 void SpallQuit(SpallProfile *ctx) {
     if (!ctx) return;
     if (ctx->file) {
-        if (ctx->is_json) {
-            fseek(ctx->file, -2, SEEK_CUR); // seek back to overwrite trailing comma
-            fprintf(ctx->file, "\n]}\n");
-        }
+#ifdef SPALL_JSON
+        fseek(ctx->file, -2, SEEK_CUR); // seek back to overwrite trailing comma
+        fprintf(ctx->file, "\n]}\n");
+#else
         fflush(ctx->file);
         fclose(ctx->file);
+#endif
     }
+
     memset(ctx, 0, sizeof(*ctx));
 }
 
@@ -337,69 +336,74 @@ bool SpallFlush(SpallProfile *ctx) {
     return true;
 }
 
-bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
+bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, uint32_t pid) {
     SpallBeginEventMax ev;
+
+#ifdef SPALL_DEBUG
     if (!ctx) return false;
     if (!name) return false;
     if (!ctx->file) return false;
     // if (ctx->times_are_u64) return false;
     if (name_len <= 0) return false;
-    if (name_len > 255) name_len = 255; // will be interpreted as truncated in the app (?)
+#endif
+
+    name_len = SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
+
     ev.event.type = SpallEventType_Begin;
     ev.event.pid = pid;
     ev.event.tid = tid;
-    ev.event.when = when;
+    ev.event.when = __rdtsc();
     ev.event.name.length = (uint8_t)name_len;
     memcpy(ev.event.name.bytes, name, (uint8_t)name_len);
-    if (ctx->is_json) {
-        if (fprintf(ctx->file,
-                    "{\"name\":\"%.*s\",\"ph\":\"B\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
-                    (int)ev.event.name.length, ev.event.name.bytes,
-                    ev.event.pid,
-                    ev.event.tid,
-                    ev.event.when * ctx->timestamp_unit)
-            <= 0) return false;
-    } else {
-        if (!Spall__BufferWrite(ctx, wb, &ev, sizeof(SpallBeginEvent) + (uint8_t)name_len - 1)) return false;
-    }
+
+#ifdef SPALL_JSON
+    if (fprintf(ctx->file,
+                "{\"name\":\"%.*s\",\"ph\":\"B\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
+                (int)ev.event.name.length, ev.event.name.bytes,
+                ev.event.pid,
+                ev.event.tid,
+                ev.event.when * ctx->timestamp_unit)
+        <= 0) return false;
+#else
+    if (!Spall__BufferWrite(ctx, wb, &ev, sizeof(SpallBeginEvent) + (uint8_t)name_len - 1)) return false;
+#endif
+
     return true;
 }
-bool SpallTraceBeginTidPid(SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, uint32_t tid, uint32_t pid) {
-    unsigned long name_len;
-    if (!name) return false;
-    name_len = strlen(name);
-    if (!name_len) return false;
-    return SpallTraceBeginLenTidPid(ctx, wb, when, name, (signed long)name_len, tid, pid);
-}
-bool SpallTraceBeginLenTid(SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, signed long name_len, uint32_t tid) { return SpallTraceBeginLenTidPid(ctx, wb, when, name, name_len, tid, 0); }
-bool SpallTraceBeginLen   (SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, signed long name_len)               { return SpallTraceBeginLenTidPid(ctx, wb, when, name, name_len,   0, 0); }
-bool SpallTraceBeginTid   (SpallProfile *ctx, SpallBuffer *wb, double when, const char *name, uint32_t tid)                       { return SpallTraceBeginTidPid   (ctx, wb, when, name,           tid, 0); }
-bool SpallTraceBegin      (SpallProfile *ctx, SpallBuffer *wb, double when, const char *name)                                     { return SpallTraceBeginTidPid   (ctx, wb, when, name,             0, 0); }
 
-bool SpallTraceEndTidPid(SpallProfile *ctx, SpallBuffer *wb, double when, uint32_t tid, uint32_t pid) {
+bool SpallTraceBeginLenTid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid) { return SpallTraceBeginLenTidPid(ctx, wb, name, name_len, tid, 0); }
+bool SpallTraceBeginLen   (SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len)               { return SpallTraceBeginLenTidPid(ctx, wb, name, name_len,   0, 0); }
+
+bool SpallTraceEndTidPid(SpallProfile *ctx, SpallBuffer *wb, uint32_t tid, uint32_t pid) {
     SpallEndEvent ev;
+
+#ifdef SPALL_DEBUG
     if (!ctx) return false;
     if (!ctx->file) return false;
+#endif
+
     // if (ctx->times_are_u64) return false;
     ev.type = SpallEventType_End;
     ev.pid = pid;
     ev.tid = tid;
-    ev.when = when;
-    if (ctx->is_json) {
-        if (fprintf(ctx->file,
-                    "{\"ph\":\"E\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
-                    ev.pid,
-                    ev.tid,
-                    ev.when * ctx->timestamp_unit)
-            <= 0) return false;
-    } else {
-        if (!Spall__BufferWrite(ctx, wb, &ev, sizeof(ev))) return false;
-    }
+    ev.when = __rdtsc();
+
+#ifdef SPALL_JSON
+    if (fprintf(ctx->file,
+                "{\"ph\":\"E\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
+                ev.pid,
+                ev.tid,
+                ev.when * ctx->timestamp_unit)
+        <= 0) return false;
+#else
+    if (!Spall__BufferWrite(ctx, wb, &ev, sizeof(ev))) return false;
+#endif
+
     return true;
 }
 
-bool SpallTraceEndTid(SpallProfile *ctx, SpallBuffer *wb, double when, uint32_t tid) { return SpallTraceEndTidPid(ctx, wb, when, tid, 0); }
-bool SpallTraceEnd   (SpallProfile *ctx, SpallBuffer *wb, double when)               { return SpallTraceEndTidPid(ctx, wb, when,   0, 0); }
+bool SpallTraceEndTid(SpallProfile *ctx, SpallBuffer *wb, uint32_t tid) { return SpallTraceEndTidPid(ctx, wb, tid, 0); }
+bool SpallTraceEnd   (SpallProfile *ctx, SpallBuffer *wb)               { return SpallTraceEndTidPid(ctx, wb,   0, 0); }
 
 #ifdef __cplusplus
 }
