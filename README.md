@@ -23,11 +23,12 @@ spall currently supports 2 different file formats:
 
 You can either instrument your code with our header, or use your existing `chrome://tracing` compatible JSON dumping code.
 
+## Heads Up!
 If you're starting from scratch, you probably want to use the spall header to generate events. The binary format has much lower
 profiling overhead (so your traces should be more accurate), and ingests around 10x faster than the JSON format.
 
 
-## JSON Traces 
+## JSON Trace Format Overview
 If you want to use JSON, spall expects events following [Google's JSON trace format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview)
 They look like this:
 ```
