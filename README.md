@@ -4,6 +4,15 @@ spall is a profiler library and a web-frontend for exploring your code and diggi
 
 ![spall use](media/spall.png)
 
+## Features
+- Zippy! spall can load 500 MB of .spall data into your browser in a second or two, and you can scroll and pan it at a glorious 165+ FPS
+- Easy to Use! Single-header C library for instrumenting your code
+- Numbers Galore! spall can collect a handful of very useful stats about your program without even breaking a sweat
+- Light and Dark Modes! You can blow your eyes out in light mode, relish the sweet neon colors in dark mode, auto-switch with your system
+- Velociraptors Included! Uhh, wait, sorry, we're all out. No velociraptors here. You can pretend though.
+
+## Usage
+
 spall includes a small single-header C library, `spall.h`.
 
 spall currently supports 2 different file formats:
