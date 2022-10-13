@@ -4,6 +4,8 @@ spall is a profiler library and a web-frontend for exploring your code and diggi
 
 ![spall use](media/spall.gif)
 
+^ this is a 500 MB, 5 minute trace from Happenlance, courtesy of @pmttavara!
+
 ## Features
 - Zippy! spall can load 500 MB of .spall data into your browser in a second or two, and you can scroll and pan it at a glorious 165+ FPS
 - Easy to Use! Single-header C library for instrumenting your code
