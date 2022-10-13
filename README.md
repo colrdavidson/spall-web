@@ -1,15 +1,23 @@
 # spall
 
-spall ingests trace data and renders it as a navigatable flamegraph
+spall is a profiler library and a web-frontend for exploring your code and digging into potential performance problems.
 
 ![spall use](media/spall.png)
 
+spall includes a small single-header C library, `spall.h`.
+
 spall currently supports 2 different file formats:
-- JSON-ish, in Google's trace format 
-- .spall, a custom format described below
+- .json, in Google's trace format used by `perfetto`, `chrome://tracing`, and `speedscope`, described below
+- .spall, our custom binary format
+
+You can either instrument your code with our header, or use your existing `chrome://tracing` compatible JSON dumping code.
+
+If you're starting from scratch, you probably want to use the spall header to generate events. The binary format has much lower
+profiling overhead (so your traces should be more accurate), and ingests around 10x faster than the JSON format.
+
 
 ## JSON Traces 
-Spall takes events formatted with [Google's JSON trace format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview)
+If you want to use JSON, spall expects events following [Google's JSON trace format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview)
 They look like this:
 ```
 [
@@ -64,67 +72,9 @@ Complete events require a duration field, because they track a function's start/
 ```
 End events automatically close the most recent begin event with the same pid and tid, so they don't need names
 
-
-## Spall Traces
-```Odin
-BinEventType :: enum u8 {
-	Invalid     = 0,
-	Custom_Data = 1,
-	StreamOver  = 2,
-	Begin       = 3,
-	End         = 4,
-	Instant     = 5,
-	Overwrite_Timestamp  = 6,
-	Update_Checksum      = 7,
-}
-
-BinHeader :: struct #packed {
-	magic:          u64, // Expected to be 0x0BADF00D
-	version:        u64, // Currently version 0
-	timestamp_unit: f64, // 1 is 1 microsecond
-	must_be_0:      u64,
-}
-
-BeginEvent :: struct #packed {
-	type: BinEventType,
-	pid: u32,
-	tid: u32,
-	time: f64,
-	name_len: u8,       // if the name is a 0-terminated string, the len must include the 0
-
-	// The name of the event must follow immediately after the begin event struct
-}
-
-EndEvent :: struct #packed {
-	type: BinEventType,
-	pid: u32,
-	tid: u32,
-	time: f64,
-}
-```
-
-The binary format is *fairly* close to the JSON format. A spall file contains a small header, and events.
-All values should be in little endian.
-
-A valid file is structured roughly like this:
-```
-BinHeader
-[
-    BeginEvent
-    event_name
-    EndEvent
-,
-    BeginEvent
-    event_name
-    EndEvent
-,
-    ...
-]
-```
-
 ## Important Notes
 
-Regardless of ingest format, all begin and end events within a thread (tid) are expected to be in earliest timestamp first, sorted order
+Regardless of ingest format, all begin and end events within a process/thread (pid/tid) are expected to be in earliest timestamp first, sorted order
 ex:
 ```
 [
@@ -134,4 +84,3 @@ ex:
 	{"cat":"function", "ph": "E", "pid": 0, "tid": 0, "ts": 3}
 ]
 ```
-Complete events can be unsorted
