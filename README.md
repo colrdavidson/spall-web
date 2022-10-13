@@ -2,7 +2,7 @@
 
 spall is a profiler library and a web-frontend for exploring your code and digging into potential performance problems.
 
-![spall use](media/spall.png)
+![spall use](media/spall.gif)
 
 ## Features
 - Zippy! spall can load 500 MB of .spall data into your browser in a second or two, and you can scroll and pan it at a glorious 165+ FPS

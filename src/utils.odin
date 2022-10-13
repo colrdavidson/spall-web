@@ -85,6 +85,7 @@ ease_in_out :: proc(t: f32) -> f32 {
 ONE_MINUTE :: 1000 * 1000 * 60
 ONE_SECOND :: 1000 * 1000
 ONE_MILLI :: 1000
+ONE_MICRO :: 1
 ONE_NANO :: 0.001
 stat_fmt :: proc(time: f64) -> string {
 	if time > ONE_SECOND {
@@ -93,7 +94,7 @@ stat_fmt :: proc(time: f64) -> string {
 	} else if time > ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.1f ms", cur_time)
-	} else if time >= ONE_NANO {
+	} else if time >= ONE_MICRO {
 		return fmt.tprintf("%.1f us", time) // μs
 	} else {
 		cur_time := time / ONE_NANO
