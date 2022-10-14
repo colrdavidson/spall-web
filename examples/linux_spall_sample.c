@@ -68,8 +68,8 @@ int main() {
 
 	SpallBufferInit(&ctx, &buf);
 	for (int i = 0; i < 1000000; i++) {
-		SpallTraceBeginLenTidPid(&ctx, &buf, ev_str, sizeof(ev_str), 0, 0);
-		SpallTraceEndTidPid(&ctx, &buf, 0, 0);
+		SpallTraceBeginLenTidPid(&ctx, &buf, ev_str, sizeof(ev_str) - 1, 0, 0, __rdtsc());
+		SpallTraceEndTidPid(&ctx, &buf, 0, 0, __rdtsc());
 	}
 
 	SpallBufferQuit(&ctx, &buf);

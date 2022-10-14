@@ -19,24 +19,16 @@ Event_Type :: enum u8 {
 	Instant             = 5,
 
 	Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
-	Update_Checksum     = 7, // Verify rolling checksum. Basic readers/writers can ignore/omit this.
-}
-
-Complete_Event :: struct #packed {
-	type: Event_Type,
-	pid:      u32,
-	tid:      u32,
-	time:     f64,
-	duration: f64,
-	name_len: u8,
 }
 
 Begin_Event :: struct #packed {
-	type: Event_Type,
+	type:     Event_Type,
+	category: u8,
 	pid:      u32,
 	tid:      u32,
 	time:     f64,
 	name_len: u8,
+	args_len: u8,
 }
 
 End_Event :: struct #packed {

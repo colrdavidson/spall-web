@@ -377,7 +377,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			jp = init_json_parser(total_size)
 		} else {
 			hdr := cast(^spall.Header)raw_data(chunk)
-			if hdr.version != 0 {
+			if hdr.version != 1 {
 				return
 			}
 
