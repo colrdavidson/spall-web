@@ -552,6 +552,8 @@ json_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, 
 	t.min_time = min(t.min_time, event.timestamp)
 	t.max_time = max(t.max_time, event.timestamp + event.duration)
 
+
+
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
@@ -567,11 +569,11 @@ event_buildsort_proc :: proc(a, b: Event) -> bool {
 	}
 	return a.timestamp < b.timestamp
 }
-event_rendersort_step1_proc :: proc(a, b: Event) -> bool {
+event_rendersort_proc :: proc(a, b: Event) -> bool {
+	if a.depth == b.depth {
+		return a.timestamp < b.timestamp
+	}
 	return a.depth < b.depth
-}
-event_rendersort_step2_proc :: proc(a, b: Event) -> bool {
-	return a.timestamp < b.timestamp
 }
 instant_rendersort_proc :: proc(a, b: Instant) -> bool {
 	return a.timestamp < b.timestamp
@@ -580,6 +582,7 @@ instant_rendersort_proc :: proc(a, b: Instant) -> bool {
 json_process_events :: proc() {
 	ev_stack: queue.Queue(int)
 	queue.init(&ev_stack, 0, context.temp_allocator)
+
 
 	slice.sort_by(global_instants[:], instant_rendersort_proc)
 
@@ -591,7 +594,15 @@ json_process_events :: proc() {
 
 		// generate depth mapping
 		for tm in &process.threads {
+			if len(tm.events) == 0 {
+				fmt.printf("Thread contains no events? How did we even get here?\n")
+				push_fatal(SpallError.Bug)
+			}
+
 			slice.sort_by(tm.events[:], event_buildsort_proc)
+
+			free_all(scratch_allocator)
+			depth_counts := make([dynamic]uint, 0, 64, scratch_allocator)
 
 			queue.clear(&ev_stack)		
 			for event, e_idx in &tm.events {
@@ -619,7 +630,6 @@ json_process_events :: proc() {
 							prev_start = prev_ev.timestamp
 							prev_end   = prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
 
-
 							if cur_start >= prev_start && cur_end > prev_end {
 								queue.pop_back(&ev_stack)
 							} else {
@@ -630,38 +640,24 @@ json_process_events :: proc() {
 					}
 				}
 
-				event.depth = u16(queue.len(ev_stack))
-			}
-			slice.sort_by(tm.events[:], event_rendersort_step1_proc)
-
-			i := 0
-			ev_start := 0
-			cur_depth : u16 = 0
-			for ; i < len(tm.events) - 1; i += 1 {
-				ev := tm.events[i]
-				next_ev := tm.events[i+1]
-
-				if ev.depth != next_ev.depth {
-					depth := Depth{
-						events = tm.events[ev_start:i+1]
-					}
-
-					append(&tm.depths, depth)
-					ev_start = i + 1
-					cur_depth = next_ev.depth
+				cur_depth := queue.len(ev_stack)
+				if len(depth_counts) < cur_depth {
+					append(&depth_counts, 0)
 				}
+				depth_counts[cur_depth - 1] += 1
+				event.depth = u16(cur_depth)
 			}
+			slice.sort_by(tm.events[:], event_rendersort_proc)
 
-			if len(tm.events) > 0 {
+			ev_start : uint = 0
+			for i := 0; i < len(depth_counts); i+= 1 {
+				count := depth_counts[i]
 				depth := Depth{
-					events = tm.events[ev_start:i+1]
+					events = tm.events[ev_start:ev_start+count]
 				}
+				ev_start += count
 
 				append(&tm.depths, depth)
-			}
-
-			for depth in tm.depths {
-				slice.sort_by(depth.events, event_rendersort_step2_proc)
 			}
 		}
 	}
