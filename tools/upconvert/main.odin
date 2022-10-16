@@ -28,12 +28,10 @@ V0_Event_Type :: enum u8 {
 
 V0_Begin_Event :: struct #packed {
 	type:     V0_Event_Type,
-	category: u8,
 	pid:      u32,
 	tid:      u32,
 	time:     f64,
 	name_len: u8,
-	args_len: u8,
 }
 
 V0_End_Event :: struct #packed {
@@ -166,7 +164,7 @@ parse_v0_file :: proc(data: []u8) -> (f64, []Event, bool) {
 			}
 			event := (^V0_Begin_Event)(raw_data(data[offset:]))^
 
-			event_tail := int(event.name_len) + int(event.args_len)
+			event_tail := int(event.name_len)
 			if offset + event_sz + event_tail > len(data) {
 				return 0, nil, false
 			}
@@ -185,7 +183,8 @@ parse_v0_file :: proc(data: []u8) -> (f64, []Event, bool) {
 				name = str,
 			}
 
-			offset += event_sz + int(event.name_len) + int(event.args_len)
+			offset += event_sz + int(event.name_len)
+
 			append(&events, ev)
 			continue
 		case .End:
