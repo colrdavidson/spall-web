@@ -42,8 +42,6 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
 
-	b := p.data[chunk_pos(p):]
-
 	header_sz := i64(size_of(u64))
 	if real_pos(p) + header_sz > p.total_size {
 		return TempEvent{}, .Finished
@@ -104,9 +102,7 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		
 		p.pos += i64(event_sz)
 		return ev, .EventRead
-	case .StreamOver:
-		fmt.printf("Got what was formerly a Complete event. Delete the file you tried to load!!!\n@Todo: Remove this message when all the files are deleted, and start utilizing StreamOver.\n", type)
-		push_fatal(SpallError.Bug)
+	case .StreamOver:          fallthrough; // @Todo
 	case .Custom_Data:         fallthrough; // @Todo
 	case .Instant:             fallthrough; // @Todo
 	case .Overwrite_Timestamp: fallthrough; // @Todo
@@ -114,7 +110,7 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 	case .Invalid: fallthrough;
 	case:
 		fmt.printf("Unknown/invalid chunk (%v)\n", type)
-		push_fatal(SpallError.Bug) // @Todo: Handle invalid chunks
+		push_fatal(SpallError.InvalidFile)
 	}
 
 	return TempEvent{}, .PartialRead

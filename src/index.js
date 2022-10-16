@@ -194,6 +194,12 @@ function set_error(code) {
 		case 2: { // Bug
 			error_elem.innerHTML = "We hit a bug! Check the JS console for more details. In the meantime, you can try reloading the page and loading your file again.";
 		} break;
+		case 3: { // Invalid File
+			error_elem.innerHTML = "Invalid File! Check the JS console for more details";
+		} break;
+		case 4: { // Invalid File Version
+			error_elem.innerHTML = "Your spall trace is out of date! Check tools/upconvert if you want to upgrade your file, or update to the newest header for next time.";
+		} break;
 	}
 }
 

@@ -378,7 +378,8 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 		} else {
 			hdr := cast(^spall.Header)raw_data(chunk)
 			if hdr.version != 1 {
-				return
+				fmt.printf("Your file version (%d) is not supported!\n", hdr.version)
+				push_fatal(SpallError.InvalidFileVersion)
 			}
 
 			stamp_scale = hdr.timestamp_unit
