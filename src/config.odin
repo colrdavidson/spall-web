@@ -398,7 +398,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 	return
 }
 
-bound_duration :: proc(ev: Event, max_ts: f64) -> f64 {
+bound_duration :: proc(ev: $T, max_ts: f64) -> f64 {
 	return ev.duration == -1 ? (max_ts - ev.timestamp) : ev.duration
 }
 

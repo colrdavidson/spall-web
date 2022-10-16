@@ -5,6 +5,7 @@ import "core:strings"
 import "core:container/queue"
 import "core:strconv"
 import "core:slice"
+import "core:mem"
 import "core:c"
 
 JSONState :: enum {
@@ -435,7 +436,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				if jp.seen_dur {
 					event_count += 1
 
-					new_event := Event{
+					new_event := JSONEvent{
 						name = jp.cur_event.name,
 						duration = jp.cur_event.duration,
 						self_time = jp.cur_event.duration,
@@ -444,7 +445,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 					json_push_event(u32(jp.cur_event.process_id), u32(jp.cur_event.thread_id), new_event)
 				}
 			case .Begin:
-				new_event := Event{
+				new_event := JSONEvent{
 					name = jp.cur_event.name,
 					duration = -1,
 					timestamp = (jp.cur_event.timestamp) * stamp_scale,
@@ -470,7 +471,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				thread := &processes[p_idx].threads[t_idx]
 				if queue.len(thread.bande_q) > 0 {
 					je_idx := queue.pop_back(&thread.bande_q)
-					jev := &thread.events[je_idx]
+					jev := &thread.json_events[je_idx]
 					jev.duration = (jp.cur_event.timestamp - jev.timestamp) * stamp_scale
 					jev.self_time = jev.duration
 					thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
@@ -526,7 +527,7 @@ json_push_instant :: proc(event: TempEvent) {
 	}
 }
 
-json_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, int) {
+json_push_event :: proc(process_id, thread_id: u32, event: JSONEvent) -> (int, int, int) {
 	p_idx, ok1 := vh_find(&process_map, process_id)
 	if !ok1 {
 		append(&processes, init_process(process_id))
@@ -557,23 +558,17 @@ json_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, 
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
-	append_event(&t.events, event)
-	return p_idx, t_idx, len(t.events)-1
+	append(&t.json_events, event)
+	return p_idx, t_idx, len(t.json_events)-1
 }
 
 pid_sort_proc :: proc(a, b: Process) -> bool { return a.min_time < b.min_time }
 tid_sort_proc :: proc(a, b: Thread) -> bool  { return a.min_time < b.min_time }
-event_buildsort_proc :: proc(a, b: Event) -> bool {
+event_buildsort_proc :: proc(a, b: JSONEvent) -> bool {
 	if a.timestamp == b.timestamp {
 		return a.duration > b.duration
 	}
 	return a.timestamp < b.timestamp
-}
-event_rendersort_proc :: proc(a, b: Event) -> bool {
-	if a.depth == b.depth {
-		return a.timestamp < b.timestamp
-	}
-	return a.depth < b.depth
 }
 instant_rendersort_proc :: proc(a, b: Instant) -> bool {
 	return a.timestamp < b.timestamp
@@ -607,25 +602,25 @@ json_process_events :: proc() {
 
 		// generate depth mapping
 		for tm in &process.threads {
-			if len(tm.events) == 0 {
+			if len(tm.json_events) == 0 {
 				fmt.printf("Thread contains no events? How did we even get here?\n")
 				push_fatal(SpallError.Bug)
 			}
 
-			insertion_sort(tm.events[:], event_buildsort_proc)
+			insertion_sort(tm.json_events[:], event_buildsort_proc)
 
 			free_all(scratch_allocator)
 			depth_counts := make([dynamic]uint, 0, 64, scratch_allocator)
 
 			queue.clear(&ev_stack)		
-			for event, e_idx in &tm.events {
+			for event, e_idx in &tm.json_events {
 				cur_start := event.timestamp
 				cur_end   := event.timestamp + bound_duration(event, tm.max_time)
 				if queue.len(ev_stack) == 0 {
 					queue.push_back(&ev_stack, e_idx)
 				} else {
 					prev_e_idx := queue.peek_back(&ev_stack)^
-					prev_ev := tm.events[prev_e_idx]
+					prev_ev := tm.json_events[prev_e_idx]
 
 					prev_start := prev_ev.timestamp
 					prev_end   := prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
@@ -638,7 +633,7 @@ json_process_events :: proc() {
 						// while it doesn't overlap the parent
 						for queue.len(ev_stack) > 0 {
 							prev_e_idx = queue.peek_back(&ev_stack)^
-							prev_ev = tm.events[prev_e_idx]
+							prev_ev = tm.json_events[prev_e_idx]
 
 							prev_start = prev_ev.timestamp
 							prev_end   = prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
@@ -653,20 +648,45 @@ json_process_events :: proc() {
 					}
 				}
 
-				cur_depth := queue.len(ev_stack)
-				if len(depth_counts) < cur_depth {
+				cur_depth := queue.len(ev_stack) - 1
+				if len(depth_counts) <= cur_depth {
 					append(&depth_counts, 0)
 				}
-				depth_counts[cur_depth - 1] += 1
+				depth_counts[cur_depth] += 1
 				event.depth = u16(cur_depth)
 			}
-			slice.sort_by(tm.events[:], event_rendersort_proc)
+
+			depth_offsets := make([]uint, len(depth_counts), scratch_allocator)
+			cur_offset : uint = 0
+			for i := 0; i < len(depth_counts); i += 1 {
+				depth_offsets[i] = cur_offset
+				cur_offset += depth_counts[i]
+			}
+
+			depth_counters := make([]uint, len(depth_counts), scratch_allocator)
+			mem.zero_slice(depth_counters)
+
+			sorted_events := make([]Event, len(tm.json_events), big_global_allocator)
+			for event in tm.json_events {
+				depth := event.depth
+
+				sort_idx := depth_offsets[depth] + depth_counters[depth]
+
+				sorted_events[sort_idx] = Event{
+					name = event.name,
+					timestamp = event.timestamp,
+					duration = event.duration,
+					self_time = event.self_time,
+				}
+
+				depth_counters[depth] += 1
+			}
 
 			ev_start : uint = 0
-			for i := 0; i < len(depth_counts); i+= 1 {
+			for i := 0; i < len(depth_counts); i += 1 {
 				count := depth_counts[i]
 				depth := Depth{
-					events = tm.events[ev_start:ev_start+count]
+					events = sorted_events[ev_start:ev_start+count]
 				}
 				ev_start += count
 

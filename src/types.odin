@@ -101,9 +101,16 @@ Instant :: struct #packed {
 	name: INStr,
 	timestamp: f64,
 }
-Event :: struct #packed {
+
+JSONEvent :: struct #packed {
 	name: INStr,
 	depth: u16,
+	timestamp: f64,
+	duration: f64,
+	self_time: f64,
+}
+Event :: struct #packed {
+	name: INStr,
 	timestamp: f64,
 	duration: f64,
 	self_time: f64,
@@ -140,7 +147,10 @@ Thread :: struct {
 	current_depth: u16,
 
 	thread_id: u32,
+
 	events: [dynamic]Event,
+	json_events: [dynamic]JSONEvent,
+
 	depths: [dynamic]Depth,
 	instants: [dynamic]Instant,
 
