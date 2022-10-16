@@ -34,6 +34,8 @@ SpallError :: enum int {
 	NoError = 0,
 	OutOfMemory = 1,
 	Bug = 2,
+	InvalidFile = 3,
+	InvalidFileVersion = 4,
 }
 
 Camera :: struct {

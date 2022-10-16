@@ -42,8 +42,6 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
 
-	b := p.data[chunk_pos(p):]
-
 	header_sz := i64(size_of(u64))
 	if real_pos(p) + header_sz > p.total_size {
 		return TempEvent{}, .Finished
@@ -64,10 +62,11 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		}
 		event := (^spall.Begin_Event)(raw_data(p.data[chunk_pos(p):]))^
 
-		if (real_pos(p) + event_sz + i64(event.name_len)) > p.total_size {
+		event_tail := i64(event.name_len) + i64(event.args_len)
+		if (real_pos(p) + event_sz + event_tail) > p.total_size {
 			return TempEvent{}, .Finished
 		}
-		if i64(chunk_pos(p) + event_sz + i64(event.name_len)) > i64(len(p.data)) {
+		if i64(chunk_pos(p) + event_sz + event_tail) > i64(len(p.data)) {
 			return TempEvent{}, .PartialRead
 		}
 
@@ -82,7 +81,7 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 			name = str,
 		}
 
-		p.pos += i64(event_sz) + i64(event.name_len)
+		p.pos += i64(event_sz) + i64(event.name_len) + i64(event.args_len)
 		return ev, .EventRead
 	case .End:
 		event_sz := i64(size_of(spall.End_Event))
@@ -103,18 +102,15 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		
 		p.pos += i64(event_sz)
 		return ev, .EventRead
-	case .StreamOver:
-		fmt.printf("Got what was formerly a Complete event. Delete the file you tried to load!!!\n@Todo: Remove this message when all the files are deleted, and start utilizing StreamOver.\n", type)
-		push_fatal(SpallError.Bug)
+	case .StreamOver:          fallthrough; // @Todo
 	case .Custom_Data:         fallthrough; // @Todo
 	case .Instant:             fallthrough; // @Todo
 	case .Overwrite_Timestamp: fallthrough; // @Todo
-	case .Update_Checksum:     fallthrough; // @Todo
 
 	case .Invalid: fallthrough;
 	case:
 		fmt.printf("Unknown/invalid chunk (%v)\n", type)
-		push_fatal(SpallError.Bug) // @Todo: Handle invalid chunks
+		push_fatal(SpallError.InvalidFile)
 	}
 
 	return TempEvent{}, .PartialRead
