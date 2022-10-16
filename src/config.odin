@@ -431,6 +431,26 @@ append_event :: proc(array: ^[dynamic]Event, arg: Event) {
 
 /*
 default_config := `[
+	{"cat":"function", "name":"a", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"b", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"c", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"d", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"e", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"f", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"g", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"h", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"i", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"j", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"k", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"l", "ph":"X", "pid":0, "tid": 0, "ts": 2, "dur": 1},
+	{"cat":"function", "name":"m", "ph":"X", "pid":0, "tid": 0, "ts": 0, "dur": 1},
+	{"cat":"function", "name":"n", "ph":"X", "pid":0, "tid": 0, "ts": 1, "dur": 1},
+	{"cat":"function", "name":"o", "ph":"X", "pid":0, "tid": 0, "ts": 1, "dur": 1},
+]`
+*/
+
+/*
+default_config := `[
 	{"cat":"function", "name":"0", "ph":"X", "pid":0, "tid": 0, "ts": 0, "dur": 1},
 	{"cat":"function", "name":"1", "ph":"X", "pid":0, "tid": 0, "ts": 1, "dur": 1},
 	{"cat":"function", "name":"2", "ph":"X", "pid":0, "tid": 0, "ts": 3, "dur": 1},

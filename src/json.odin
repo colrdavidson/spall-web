@@ -579,10 +579,23 @@ instant_rendersort_proc :: proc(a, b: Instant) -> bool {
 	return a.timestamp < b.timestamp
 }
 
+insertion_sort :: proc(data: $T/[]$E, less: proc(i, j: E) -> bool) {
+	for i := 1; i < len(data); i += 1 {
+		j := i - 1
+
+		temp := data[i]
+		for ; j >= 0 && less(temp, data[j]); {
+			data[j+1] = data[j]
+			j -= 1
+		}
+
+		data[j+1] = temp
+	}
+}
+
 json_process_events :: proc() {
 	ev_stack: queue.Queue(int)
 	queue.init(&ev_stack, 0, context.temp_allocator)
-
 
 	slice.sort_by(global_instants[:], instant_rendersort_proc)
 
@@ -599,7 +612,7 @@ json_process_events :: proc() {
 				push_fatal(SpallError.Bug)
 			}
 
-			slice.sort_by(tm.events[:], event_buildsort_proc)
+			insertion_sort(tm.events[:], event_buildsort_proc)
 
 			free_all(scratch_allocator)
 			depth_counts := make([dynamic]uint, 0, 64, scratch_allocator)
