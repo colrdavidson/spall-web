@@ -18,7 +18,7 @@ JSONState :: enum {
 	TokenDone,
 }
 
-TokenType :: enum {
+TokenType :: enum u8 {
 	Nil       = 0,
 	Object    = 1,
 	Array     = 2,
@@ -44,6 +44,8 @@ JSONParser :: struct {
 	parent_stack: queue.Queue(Token),
 	tok_count: int,
 
+	state: PS,
+
 	// Event parsing state
 	events_id: int,
 	cur_event: TempEvent,
@@ -51,6 +53,8 @@ JSONParser :: struct {
 	obj_map: KeyMap,
 	seen_dur: bool,
 	current_parent: IdPair,
+
+	ts_total: f64,
 }
 
 fields := []string{ "dur", "name", "pid", "tid", "ts", "ph", "s" }
@@ -158,10 +162,39 @@ parse_string :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	return
 }
 
+
+CharType :: enum u8 {
+	Any = 0,
+	ArrOpen,
+	ArrClose,
+	Quote,
+	ObjOpen,
+	ObjClose,
+	Escape,
+	Colon,
+	Comma,
+	Primitive,
+}
+
+PS :: enum u8 {
+	Starting = 0,
+	String,
+	Escape,
+	Colon,
+	ObjOpen,
+	ObjClose,
+	ArrOpen,
+	ArrClose,
+	Comma,
+	Primitive,
+}
+
+char_class := [128]CharType{}
+
 init_json_parser :: proc(total_size: u32) -> JSONParser {
 	jp := JSONParser{}
 	jp.p = init_parser(total_size)
-	queue.init(&jp.parent_stack)
+	queue.init(&jp.parent_stack, 16, scratch_allocator)
 
 	jp.obj_map = km_init(scratch_allocator)
 	for field in fields {
@@ -174,8 +207,99 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 	jp.seen_dur = false
 	jp.current_parent = IdPair{}
 
+	// flesh out char classes
+	char_class[u8('{')] = .ObjOpen
+	char_class[u8('}')] = .ObjClose
+	char_class[u8('"')] = .Quote
+	char_class[u8('[')] = .ArrOpen
+	char_class[u8(']')] = .ArrClose
+	char_class[u8('\\')] = .Escape
+	char_class[u8(':')] = .Colon
+	char_class[u8(',')] = .Comma
+
+	char_class[u8('-')] = .Primitive
+	for i : u8 = 0; i < 10; i += 1 {
+		char_class[u8('0') + i] = .Primitive
+	}
+	char_class[u8('t')] = .Primitive
+	char_class[u8('f')] = .Primitive
+	char_class[u8('n')] = .Primitive
+
+	jp.state = .Starting
+
 	return jp
 }
+
+dfa := [][]u8{
+	// Any,    ArrOpen, ArrClose,     
+	// Quote,  ObjOpen, ObjClose,
+	// Escape, Colon,   Comma, Primitive
+
+	// starting
+	{
+		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
+		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
+		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	},
+
+	// string
+	{
+		u8(PS.String),   u8(PS.String), u8(PS.String), 
+		u8(PS.Starting), u8(PS.String), u8(PS.String), 
+		u8(PS.Escape),   u8(PS.String), u8(PS.String), u8(PS.String),
+	},
+
+	// escape
+	{
+		u8(PS.String), u8(PS.String), u8(PS.String), 
+		u8(PS.String), u8(PS.String), u8(PS.String), 
+		u8(PS.String), u8(PS.String), u8(PS.String), u8(PS.String),
+	},
+
+	// colon
+	{
+		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
+		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
+		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma),  u8(PS.Primitive),
+	},
+
+	// []{}
+	{
+		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
+		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
+		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	},
+	{
+		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
+		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
+		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	},
+	{
+		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
+		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
+		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	},
+	{
+		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
+		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
+		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	},
+
+	// ,
+	{
+		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
+		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
+		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	},
+
+	// -, 0-9, t, f, n
+	{
+		u8(PS.Primitive), u8(PS.ArrOpen),  u8(PS.ArrClose), 
+		u8(PS.Starting), u8(PS.ObjOpen),  u8(PS.ObjClose), 
+		u8(PS.Starting), u8(PS.Starting), u8(PS.Comma), u8(PS.Primitive),
+	},
+}
+
 
 get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	p := &jp.p
@@ -183,12 +307,42 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
 
+	count := 0
+
+	str_start : i64 = 0
+	primitive_start : i64 = 0
+	in_string := false
+	in_primitive := false
+
 	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
 		ch := p.data[chunk_pos(p)]
+		class := char_class[ch]
+		next_state := PS(dfa[jp.state][class])
+		jp.state = next_state
 
-		switch ch {
-		case '{': fallthrough
-		case '[':
+		if next_state != .String && in_string {
+			token = init_token(jp, .String, str_start+1, i64(real_pos(p)))
+
+			parent := queue.peek_back(&jp.parent_stack)
+			if parent.type == .Object {
+				push_wrap(jp, token)
+			}
+
+			//fmt.printf("string: %s\n", get_token_str(jp, token))
+			p.pos += 1
+			state = .TokenDone
+			return
+		} else if next_state != .Primitive && in_primitive {
+			token = init_token(jp, .Primitive, primitive_start, i64(real_pos(p)))
+
+			//fmt.printf("primitive: %s\n", get_token_str(jp, token))
+			state = .TokenDone
+			return
+		}
+
+		#partial switch next_state {
+		case .ObjOpen: fallthrough
+		case .ArrOpen:
 			type := (ch == '{') ? TokenType.Object : TokenType.Array
 			token = init_token(jp, type, i64(real_pos(p)), -1)
 			push_wrap(jp, token)
@@ -196,14 +350,14 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 			p.pos += 1
 			state = .ScopeEntered
 			return
-		case '}': fallthrough
-		case ']':
+		case .ObjClose: fallthrough
+		case .ArrClose:
 			type := (ch == '}') ? TokenType.Object : TokenType.Array
 
 			depth := queue.len(jp.parent_stack)
 			if depth == 0 {
 				fmt.printf("Expected first {{, got %c\n", ch)
-				return
+				push_fatal(SpallError.InvalidFile)
 			}
 
 			loop: for {
@@ -211,7 +365,7 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 				if token.start != -1 && token.end == -1 {
 					if token.type != type {
 						fmt.printf("Got an unexpected scope close? Got %s, expected %s\n", token.type, type)
-						return
+						push_fatal(SpallError.InvalidFile)
 					}
 
 					token.end = i64(real_pos(p) + 1)
@@ -223,58 +377,51 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 				depth = queue.len(jp.parent_stack)
 				if depth == 0 {
 					fmt.printf("unable to find closing %c\n", type)
-					return
+					push_fatal(SpallError.InvalidFile)
 				}
 			}
 
 			fmt.printf("how am I here?\n")
 			return
-		// spaces are nops
-		case '\t': fallthrough
-		case '\r': fallthrough
-		case '\n': fallthrough
-		case ' ':
-		case ':':
-		case ',':
+		case .Colon:
+		case .Comma:
 			depth := queue.len(jp.parent_stack)
 			if depth == 0 {
 				fmt.printf("Expected first {{, got %c\n", ch)
-				return
+				push_fatal(SpallError.InvalidFile)
 			}
+
 			parent := queue.peek_back(&jp.parent_stack)
 
 			if parent.type != .Array && parent.type != .Object {
 				pop_wrap(jp)
 			}
-		case '\"':
-			token, state = parse_string(jp)
-			if state != .TokenDone {
-				return
+		case .String:
+			if !in_string {
+				str_start = real_pos(p)
+				in_string = true
 			}
-
-			parent := queue.peek_back(&jp.parent_stack)
-			if parent.type == .Object {
-				push_wrap(jp, token)
+		case .Primitive:
+			if !in_primitive {
+				primitive_start = real_pos(p)
+				in_primitive = true
 			}
+		case .Starting:
+		case .Escape:
+		}
+	}
 
-			p.pos += 1
+	if p.pos != p.total_size {
+		if in_string {
+			jp.state = .Starting
+			p.pos = str_start
+			state = .PartialRead
 			return
-
-		case '-': fallthrough
-		case '0'..='9': fallthrough
-		case 't': fallthrough
-		case 'f': fallthrough
-		case 'n':
-			token, state = parse_primitive(jp)
-			if state != .TokenDone {
-				return
-			}
-
-			p.pos += 1
-			return
-		case:
-
-			fmt.printf("Oops, I did a bad? '%c':%d,%d\n", ch, chunk_pos(p), real_pos(p))
+		}
+		if in_primitive {
+			jp.state = .Starting
+			p.pos = primitive_start
+			state = .PartialRead
 			return
 		}
 	}
@@ -308,9 +455,12 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			push_fatal(SpallError.Bug) // @Todo: Better reporting about invalid tokens
 			return
 		case .Finished:
+			fmt.printf("total: %f ms\n", jp.ts_total)
 			finish_loading()
 			return
 		}
+
+/*
 
 		depth := queue.len(jp.parent_stack)
 
@@ -417,7 +567,6 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			continue
 		}
 
-
 		// got the whole event
 		if state == .ScopeExited && tok.id == jp.cur_event_id {
 			defer {
@@ -442,6 +591,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 						self_time = jp.cur_event.duration,
 						timestamp = jp.cur_event.timestamp,
 					}
+
 					json_push_event(u32(jp.cur_event.process_id), u32(jp.cur_event.thread_id), new_event)
 				}
 			case .Begin:
@@ -479,6 +629,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				}
 			}
 		}
+*/
 	}
 	return
 }
@@ -552,8 +703,6 @@ json_push_event :: proc(process_id, thread_id: u32, event: JSONEvent) -> (int, i
 	t := &p.threads[t_idx]
 	t.min_time = min(t.min_time, event.timestamp)
 	t.max_time = max(t.max_time, event.timestamp + event.duration)
-
-
 
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
