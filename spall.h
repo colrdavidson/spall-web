@@ -165,9 +165,9 @@ extern "C" {
         double spall_time_end = (SPALL_BUFFER_PROFILING_GET_TIME()); \
         char temp_buffer_data[sizeof(SpallBeginEvent) + sizeof("" name "") - 1 + sizeof(SpallEndEvent)]; \
         SpallBuffer temp_buffer = {temp_buffer_data, sizeof(temp_buffer_data)}; \
-        if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, name, sizeof(name), (uint32_t)(uintptr_t)wb->data, 4222222222)) return false; \
-        if (!SpallTraceEndTidPid(ctx, &temp_buffer, (uint32_t)(uintptr_t)wb->data, 4222222222)) return false; \
-        Spall__FileWrite(ctx, temp_buffer_data, sizeof(temp_buffer_data)); \
+        if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, name, sizeof(name) - 1, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_begin)) return false; \
+        if (!SpallTraceEndTidPid(ctx, &temp_buffer, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_end)) return false; \
+        if (!Spall__FileWrite(ctx, temp_buffer_data, sizeof(temp_buffer_data))) return false; \
     } while (0)
 #else
 #define SPALL_BUFFER_PROFILE_BEGIN()
