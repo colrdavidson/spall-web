@@ -33,6 +33,11 @@ Token :: struct {
 	id: int,
 }
 
+TmpKey :: struct {
+	start: i64,
+	end: i64,
+}
+
 IdPair :: struct {
 	key: string,
 	id: int,
@@ -47,14 +52,16 @@ JSONParser :: struct {
 	state: PS,
 
 	// Event parsing state
-	events_id: int,
 	cur_event: TempEvent,
 	cur_event_id: int,
 	obj_map: KeyMap,
 	seen_dur: bool,
 	current_parent: IdPair,
 
-	ts_total: f64,
+	// skippy state
+	got_first_char: bool,
+	skipper_objs: int,
+	event_start: bool,
 }
 
 fields := []string{ "dur", "name", "pid", "tid", "ts", "ph", "s" }
@@ -95,74 +102,6 @@ get_token_str :: proc(p: ^JSONParser, tok: Token) -> string {
 	return str
 }
 
-parse_primitive :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
-	p := &jp.p
-
-	start := real_pos(p)
-
-	found := false
-	top_loop: for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
-		ch := p.data[chunk_pos(p)]
-
-		switch ch {
-		case ':': fallthrough
-		case '\t': fallthrough
-		case '\r': fallthrough
-		case '\n': fallthrough
-		case ' ': fallthrough
-		case ',': fallthrough
-		case ']': fallthrough
-		case '}':
-			found = true
-			break top_loop
-		case ' '..='~':
-		case:
-			p.pos = start
-
-			fmt.printf("Failed to parse token! 1\n")
-			return
-		}
-	}
-
-	if !found {
-		p.pos = start
-		state = .PartialRead
-		return
-	}
-
-	token = init_token(jp, .Primitive, i64(start), i64(real_pos(p)))
-	p.pos -= 1
-
-	state = .TokenDone
-	return
-}
-
-parse_string :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
-	p := &jp.p
-
-	start := real_pos(p)
-	p.pos += 1
-
-	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
-		ch := p.data[chunk_pos(p)]
-
-		if ch == '\"' {
-			token = init_token(jp, .String, i64(start + 1), i64(real_pos(p)))
-			state = .TokenDone
-			return
-		}
-
-		if ch == '\\' && (chunk_pos(p) + 1) < i64(len(p.data)) {
-			p.pos += 1
-		}
-	}
-
-	p.pos = start
-	state = .PartialRead
-	return
-}
-
-
 CharType :: enum u8 {
 	Any = 0,
 	ArrOpen,
@@ -201,7 +140,6 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 		km_insert(&jp.obj_map, field)
 	}
 
-	jp.events_id    = -1
 	jp.cur_event_id = -1
 	jp.cur_event = TempEvent{}
 	jp.seen_dur = false
@@ -226,6 +164,9 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 	char_class[u8('n')] = .Primitive
 
 	jp.state = .Starting
+
+	jp.got_first_char = false
+	jp.skipper_objs = 0
 
 	return jp
 }
@@ -300,6 +241,116 @@ dfa := [][]u8{
 	},
 }
 
+eat_spaces :: proc(p: ^Parser) -> bool {
+	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
+		ch := p.data[chunk_pos(p)]
+		if ch != ' ' && ch != '\n' && ch != '\r' && ch != '\t' {
+			return true
+		}
+	}
+
+	return false
+}
+
+skip_string :: proc(jp: ^JSONParser) -> (key: TmpKey, state: JSONState) {
+	p := &jp.p
+
+	start := real_pos(p)
+	p.pos += 1
+
+	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
+		ch := p.data[chunk_pos(p)]
+
+		if ch == '\"' {
+			key = TmpKey{i64(start + 1), i64(real_pos(p))}
+			p.pos += 1
+			state = .TokenDone
+			return
+		}
+
+		if ch == '\\' && (chunk_pos(p) + 1) < i64(len(p.data)) {
+			p.pos += 1
+		}
+	}
+
+	state = .PartialRead
+	return
+}
+
+the_skipper :: proc(jp: ^JSONParser) -> JSONState {
+	p := &jp.p
+
+	p.data = p.full_chunk[chunk_pos(p):]
+	p.offset = p.chunk_start+chunk_pos(p)
+
+	// speed-skip until we have data we care about
+	if !jp.got_first_char {
+		ret := eat_spaces(p)
+		if !ret {
+			return .PartialRead
+		}
+
+		ch := p.data[chunk_pos(p)]
+		if ch != '{' && ch != '[' {
+			fmt.printf("Your JSON file is invalid! got %c, expected [ or {{\n", ch)
+			push_fatal(SpallError.InvalidFile)
+		}
+
+		if ch == '[' {
+			return .Finished
+		}
+	}
+
+	// scan until we've got the token for the first object in the traceEvents array
+	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
+		ch := p.data[chunk_pos(p)]
+
+		switch ch {
+		case '"': 
+			start := real_pos(p)
+
+			key, state := skip_string(jp)
+			if state == .PartialRead {
+				p.pos = start
+				return .PartialRead
+			}
+
+			key_str := string(p.full_chunk[key.start-p.chunk_start:key.end-p.chunk_start])
+			if jp.skipper_objs == 1 && key_str == "traceEvents" {
+				ret := eat_spaces(p)
+				if !ret {
+					p.pos = start
+					return .PartialRead
+				}
+
+				ch := p.data[chunk_pos(p)]
+				if ch != ':' {
+					fmt.printf("Your JSON file is invalid! got %c, expected :\n", ch)
+					push_fatal(SpallError.InvalidFile)
+				}
+				p.pos += 1
+
+				ret = eat_spaces(p)
+				if !ret {
+					p.pos = start
+					return .PartialRead
+				}
+
+				ch = p.data[chunk_pos(p)]
+				if ch != '[' {
+					fmt.printf("Your JSON file is invalid! got %c, expected [\n", ch)
+					push_fatal(SpallError.InvalidFile)
+				}
+
+				return .Finished
+			}
+		case '{': jp.skipper_objs += 1
+		case '}': jp.skipper_objs -= 1
+		}
+	}
+
+	return .PartialRead
+}
 
 get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 	p := &jp.p
@@ -356,25 +407,31 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 
 			depth := queue.len(jp.parent_stack)
 			if depth == 0 {
-				fmt.printf("Expected first {{, got %c\n", ch)
+				fmt.printf("1 Expected first {{, got %c\n", ch)
 				push_fatal(SpallError.InvalidFile)
 			}
 
 			loop: for {
 				token = pop_wrap(jp)
+				depth = queue.len(jp.parent_stack)
+
 				if token.start != -1 && token.end == -1 {
 					if token.type != type {
 						fmt.printf("Got an unexpected scope close? Got %s, expected %s\n", token.type, type)
 						push_fatal(SpallError.InvalidFile)
 					}
 
+
 					token.end = i64(real_pos(p) + 1)
 					p.pos += 1
 					state = .ScopeExited
+					if depth == 0 && token.type == .Array {
+						state = .Finished
+					}
+
 					return
 				}
 
-				depth = queue.len(jp.parent_stack)
 				if depth == 0 {
 					fmt.printf("unable to find closing %c\n", type)
 					push_fatal(SpallError.InvalidFile)
@@ -387,7 +444,7 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 		case .Comma:
 			depth := queue.len(jp.parent_stack)
 			if depth == 0 {
-				fmt.printf("Expected first {{, got %c\n", ch)
+				fmt.printf("2 Expected first {{, got %c\n", ch)
 				push_fatal(SpallError.InvalidFile)
 			}
 
@@ -443,8 +500,26 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 	p := &jp.p
 	set_next_chunk(p, start, chunk)
 	hot_loop: for {
-		tok, state := get_next_token(jp)
+		// skip until we hit the start of the traceEvents arr
+		if !jp.event_start {
+			state := the_skipper(jp)
+			if p.pos >= p.total_size {
+				finish_loading()
+				return
+			}
 
+			#partial switch state {
+			case .PartialRead:
+				p.offset = p.pos
+				get_chunk(f64(p.pos), f64(CHUNK_SIZE))
+				return
+			case .Finished:
+				jp.event_start = true
+			}
+		}
+
+		// start tokenizing normally now
+		tok, state := get_next_token(jp)
 		#partial switch state {
 		case .PartialRead:
 			p.offset = p.pos
@@ -455,40 +530,21 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			push_fatal(SpallError.Bug) // @Todo: Better reporting about invalid tokens
 			return
 		case .Finished:
-			fmt.printf("total: %f ms\n", jp.ts_total)
 			finish_loading()
 			return
 		}
 
-/*
-
-		depth := queue.len(jp.parent_stack)
-
-		// get start of traceEvents
-		if jp.events_id == -1 {
-			if state == .ScopeEntered && tok.type == .Array && depth == 1 {
-				jp.events_id = tok.id
-			} else if state == .ScopeEntered && tok.type == .Array && depth == 3 {
-				parent := queue.get_ptr(&jp.parent_stack, depth - 2)
-				if "traceEvents" == get_token_str(jp, parent^) {
-					jp.events_id = tok.id
-				}
-			}
-			continue
-		}
 
 		// get start of an event
 		if jp.cur_event_id == -1 {
-			if depth > 1 && state == .ScopeEntered && tok.type == .Object {
-				parent := queue.get_ptr(&jp.parent_stack, depth - 2)
-				if parent.id == jp.events_id {
-					jp.cur_event_id = tok.id
-				}
+			if state == .ScopeEntered && tok.type == .Object {
+				jp.cur_event_id = tok.id
 			}
 			continue
 		}
 
 		// eww.
+		depth := queue.len(jp.parent_stack)
 		parent := queue.get_ptr(&jp.parent_stack, depth - 1)
 		if parent.id == tok.id {
 			parent = queue.get_ptr(&jp.parent_stack, depth - 2)
@@ -629,7 +685,6 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 				}
 			}
 		}
-*/
 	}
 	return
 }
