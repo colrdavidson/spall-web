@@ -179,9 +179,9 @@ char SpallSingleThreadedBufferData[1 << 16];
 SpallBuffer SpallSingleThreadedBuffer = {SpallSingleThreadedBufferData, sizeof(SpallSingleThreadedBufferData)};
 
 static bool Spall__FileWrite(SpallProfile *ctx, void *p, size_t n) {
-#ifdef SPALL_DEBUG
     if (!ctx->file) return false;
-    // if (feof(ctx->file)) return false;
+#ifdef SPALL_DEBUG
+    if (feof(ctx->file)) return false;
     if (ferror(ctx->file)) return false;
 #endif
 
@@ -198,9 +198,11 @@ static bool Spall__BufferFlush(SpallProfile *ctx, SpallBuffer *wb) {
     // precon: wb
     // precon: wb->data
     // precon: wb->head <= wb->length
+#ifdef SPALL_DEBUG
     if (wb->ctx != ctx) return false; // Buffer must be bound to this context (or to NULL)
+#endif
+
     if (wb->head && ctx) {
-        if (!ctx->file) return false;
         SPALL_BUFFER_PROFILE_BEGIN();
         if (!ctx->write(ctx, wb->data, wb->head)) return false;
         SPALL_BUFFER_PROFILE_END("Buffer Flush");
@@ -313,7 +315,6 @@ bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *na
     if (!ctx) return false;
     if (!name) return false;
     if (!ctx->file) return false;
-    // if (ctx->times_are_u64) return false;
     if (name_len <= 0) return false;
 #endif
     name_len = SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
@@ -354,7 +355,6 @@ bool SpallTraceEndTidPid(SpallProfile *ctx, SpallBuffer *wb, uint32_t tid, uint3
     if (!ctx->file) return false;
 #endif
 
-    // if (ctx->times_are_u64) return false;
     ev.type = SpallEventType_End;
     ev.pid = pid;
     ev.tid = tid;
