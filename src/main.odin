@@ -288,7 +288,8 @@ reset_camera :: proc(display_width: f64) {
 	cam.target_pan_x = cam.pan.x
 }
 
-render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: int) {
+render_widetree :: proc(p_idx, t_idx: int, start_x: f64, scale: f64, layer_count: int) {
+	thread := &processes[p_idx].threads[t_idx]
 	depth := thread.depths[0]
 	tree := depth.tree
 
@@ -303,6 +304,7 @@ render_widetree :: proc(thread: ^Thread, start_x: f64, scale: f64, layer_count: 
 
 		tree_idx := tree_stack[stack_len]
 		if tree_idx >= len(tree) {
+			fmt.printf("%d, %d\n", p_idx, t_idx)
 			fmt.printf("%d\n", depth.head)
 			fmt.printf("%d\n", stack_len)
 			fmt.printf("%v\n", tree_stack)
@@ -1089,7 +1091,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 					continue
 				}
 
-				render_widetree(&tm, start_x, wide_scale_x, layer_count)
+				render_widetree(p_idx, t_idx, start_x, wide_scale_x, layer_count)
 				gl_push_rects(gl_rects[:], wide_graph_y, wide_graph_height)
 				resize(&gl_rects, 0)
 			}

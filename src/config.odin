@@ -114,8 +114,8 @@ print_tree :: proc(tree: []ChunkNode, head: uint) {
 }
 
 chunk_events :: proc() {
-	for proc_v in &processes {
-		for tm in &proc_v.threads {
+	for proc_v, p_idx in &processes {
+		for tm, t_idx in &proc_v.threads {
 			for depth, d_idx in &tm.depths {
 				bucket_count := i_round_up(len(depth.events), BUCKET_SIZE) / BUCKET_SIZE
 
