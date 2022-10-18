@@ -12,10 +12,7 @@ JSONState :: enum {
 	InvalidToken,
 	PartialRead,
 	Finished,
-
-	ScopeEntered,
-	ScopeExited,
-	TokenDone,
+	EventDone,
 }
 
 TokenType :: enum u8 {
@@ -38,68 +35,15 @@ TmpKey :: struct {
 	end: i64,
 }
 
-IdPair :: struct {
-	key: string,
-	id: int,
-}
-
 JSONParser :: struct {
 	p: Parser,
 
-	parent_stack: queue.Queue(Token),
-	tok_count: int,
-
 	state: PS,
-
-	// Event parsing state
-	cur_event: TempEvent,
-	cur_event_id: int,
-	obj_map: KeyMap,
-	seen_dur: bool,
-	current_parent: IdPair,
 
 	// skippy state
 	got_first_char: bool,
 	skipper_objs: int,
 	event_start: bool,
-}
-
-fields := []string{ "dur", "name", "pid", "tid", "ts", "ph", "s" }
-
-init_token :: proc(p: ^JSONParser, type: TokenType, start, end: i64) -> Token {
-	tok := Token{}
-	tok.type = type
-	tok.start = start
-	tok.end = end
-	tok.id = p.tok_count
-	p.tok_count += 1
-
-	return tok
-}
-
-pop_wrap :: #force_inline proc(p: ^JSONParser, loc := #caller_location) -> Token {
-	tok := queue.pop_back(&p.parent_stack)
-/*
-	fmt.printf("Popped: %#v || %s ----------\n", tok, loc)
-	print_queue(&p.parent_stack)
-	fmt.printf("-----------\n")
-*/
-	return tok
-}
-
-push_wrap :: #force_inline proc(p: ^JSONParser, tok: Token, loc := #caller_location) {
-	queue.push_back(&p.parent_stack, tok)
-
-/*
-	fmt.printf("Pushed: %#v || %s -----------\n", tok, loc)
-	print_queue(&p.parent_stack)
-	fmt.printf("-----------\n")
-*/
-}
-
-get_token_str :: proc(p: ^JSONParser, tok: Token) -> string {
-	str := string(p.p.full_chunk[tok.start-p.p.chunk_start:tok.end-p.p.chunk_start])
-	return str
 }
 
 CharType :: enum u8 {
@@ -133,17 +77,6 @@ char_class := [128]CharType{}
 init_json_parser :: proc(total_size: u32) -> JSONParser {
 	jp := JSONParser{}
 	jp.p = init_parser(total_size)
-	queue.init(&jp.parent_stack, 16, scratch_allocator)
-
-	jp.obj_map = km_init(scratch_allocator)
-	for field in fields {
-		km_insert(&jp.obj_map, field)
-	}
-
-	jp.cur_event_id = -1
-	jp.cur_event = TempEvent{}
-	jp.seen_dur = false
-	jp.current_parent = IdPair{}
 
 	// flesh out char classes
 	char_class[u8('{')] = .ObjOpen
@@ -264,7 +197,7 @@ skip_string :: proc(jp: ^JSONParser) -> (key: TmpKey, state: JSONState) {
 		if ch == '\"' {
 			key = TmpKey{i64(start + 1), i64(real_pos(p))}
 			p.pos += 1
-			state = .TokenDone
+			state = .Finished
 			return
 		}
 
@@ -297,6 +230,7 @@ the_skipper :: proc(jp: ^JSONParser) -> JSONState {
 		}
 
 		if ch == '[' {
+			p.pos += 1
 			return .Finished
 		}
 	}
@@ -342,6 +276,7 @@ the_skipper :: proc(jp: ^JSONParser) -> JSONState {
 					push_fatal(SpallError.InvalidFile)
 				}
 
+				p.pos += 1
 				return .Finished
 			}
 		case '{': jp.skipper_objs += 1
@@ -352,18 +287,118 @@ the_skipper :: proc(jp: ^JSONParser) -> JSONState {
 	return .PartialRead
 }
 
-get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
+// skip until we've got a { or a ]
+skip_to_start_or_end :: proc(jp: ^JSONParser) -> JSONState {
+	p := &jp.p
+
+	ret := eat_spaces(p)
+	if !ret {
+		return .PartialRead
+	}
+
+	ch := p.data[chunk_pos(p)]
+	if ch == '{' || ch == ']' {
+		return .Finished
+	}
+
+	if ch == ',' {
+		p.pos += 1
+
+		ret = eat_spaces(p)
+		if !ret {
+			return .PartialRead
+		}
+
+		ch = p.data[chunk_pos(p)]
+		if ch == '{' || ch == ']' {
+			return .Finished
+		}
+	}
+
+	fmt.printf("Unable to find next event! %c\n", ch)
+	push_fatal(SpallError.InvalidFile)
+	return .InvalidToken
+}
+
+process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) {
+	switch key {
+	case "name":
+		str := in_get(&jp.p.intern, value)
+		ev.name = str
+	case "ph":
+		if len(value) != 1 {
+			return
+		}
+
+		type_ch := value[0]
+		switch type_ch {
+		case 'X': ev.type = .Complete
+		case 'B': ev.type = .Begin
+		case 'E': ev.type = .End
+		case 'i': ev.type = .Instant
+		}
+	case "dur": 
+		dur, ok := strconv.parse_f64(value)
+		if !ok { return }
+		ev.duration = dur
+	case "ts": 
+		ts, ok := strconv.parse_f64(value)
+		if !ok { return }
+		ev.timestamp = ts
+	case "tid": 
+		tid, ok := parse_u32(value)
+		if !ok { return }
+		ev.thread_id = tid
+	case "pid": 
+		pid, ok := parse_u32(value)
+		if !ok { return }
+		ev.process_id = pid
+	case "s": 
+		if len(value) != 1 {
+			return
+		}
+
+		scope_ch := value[0]
+		switch scope_ch {
+		case 'g': ev.scope = .Global
+		case 'p': ev.scope = .Process
+		case 't': ev.scope = .Thread
+		}
+	}
+}
+
+process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) {
 	p := &jp.p
 
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
 
-	count := 0
+	start := real_pos(p)
+
+	// skip to the start of the next event, or quit if we've got them all
+	ret := skip_to_start_or_end(jp)
+	if ret == .PartialRead {
+		p.pos = start
+		state = .PartialRead
+		return
+	}
+	if p.data[chunk_pos(p)] == ']' {
+		state = .Finished
+		return
+	}
+
+	start = real_pos(p)
 
 	str_start : i64 = 0
 	primitive_start : i64 = 0
 	in_string := false
 	in_primitive := false
+	in_key := false
+	key_str := ""
+
+	ev := TempEvent{}
+
+	depth_count := 0
 
 	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
 		ch := p.data[chunk_pos(p)]
@@ -372,126 +407,104 @@ get_next_token :: proc(jp: ^JSONParser) -> (token: Token, state: JSONState) {
 		jp.state = next_state
 
 		if next_state != .String && in_string {
-			token = init_token(jp, .String, str_start+1, i64(real_pos(p)))
-
-			parent := queue.peek_back(&jp.parent_stack)
-			if parent.type == .Object {
-				push_wrap(jp, token)
+			str := string(p.data[str_start:chunk_pos(p)])
+			if depth_count == 1 {
+				if in_key {
+					key_str = str
+				} else {
+					process_key_value(jp, &ev, key_str, str)
+				}
 			}
 
-			//fmt.printf("string: %s\n", get_token_str(jp, token))
-			p.pos += 1
-			state = .TokenDone
-			return
+			in_string = false
 		} else if next_state != .Primitive && in_primitive {
-			token = init_token(jp, .Primitive, primitive_start, i64(real_pos(p)))
+			str := string(p.data[primitive_start:chunk_pos(p)])
+			if depth_count == 1 {
+				process_key_value(jp, &ev, key_str, str)
+			}
 
-			//fmt.printf("primitive: %s\n", get_token_str(jp, token))
-			state = .TokenDone
-			return
+			in_primitive = false
 		}
 
 		#partial switch next_state {
-		case .ObjOpen: fallthrough
 		case .ArrOpen:
-			type := (ch == '{') ? TokenType.Object : TokenType.Array
-			token = init_token(jp, type, i64(real_pos(p)), -1)
-			push_wrap(jp, token)
+			in_key = false
+		case .ObjOpen:
+			in_key = true
+			depth_count += 1
+		case .ObjClose:
+			in_key := false
+			depth_count -= 1
+			if depth_count == 0 {
+				p.pos += 1
+				state = .EventDone
 
-			p.pos += 1
-			state = .ScopeEntered
-			return
-		case .ObjClose: fallthrough
-		case .ArrClose:
-			type := (ch == '}') ? TokenType.Object : TokenType.Array
-
-			depth := queue.len(jp.parent_stack)
-			if depth == 0 {
-				fmt.printf("1 Expected first {{, got %c\n", ch)
-				push_fatal(SpallError.InvalidFile)
-			}
-
-			loop: for {
-				token = pop_wrap(jp)
-				depth = queue.len(jp.parent_stack)
-
-				if token.start != -1 && token.end == -1 {
-					if token.type != type {
-						fmt.printf("Got an unexpected scope close? Got %s, expected %s\n", token.type, type)
-						push_fatal(SpallError.InvalidFile)
+				switch ev.type {
+				case .Instant:
+					ev.timestamp *= stamp_scale
+					json_push_instant(ev)
+				case .Complete:
+					new_event := JSONEvent{
+						name = ev.name,
+						duration = ev.duration,
+						self_time = ev.duration,
+						timestamp = ev.timestamp,
+					}
+					json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
+				case .Begin:
+					new_event := JSONEvent{
+						name = ev.name,
+						duration = -1,
+						timestamp = (ev.timestamp) * stamp_scale,
 					}
 
+					p_idx, t_idx, e_idx := json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
 
-					token.end = i64(real_pos(p) + 1)
-					p.pos += 1
-					state = .ScopeExited
-					if depth == 0 && token.type == .Array {
-						state = .Finished
+					thread := &processes[p_idx].threads[t_idx]
+					queue.push_back(&thread.bande_q, e_idx)
+				case .End:
+					p_idx, ok1 := vh_find(&process_map, u32(ev.process_id))
+					if !ok1 {
+						fmt.printf("invalid end?\n")
+						continue
+					}
+					t_idx, ok2 := vh_find(&processes[p_idx].thread_map, u32(ev.thread_id))
+					if !ok1 {
+						fmt.printf("invalid end?\n")
+						continue
 					}
 
-					return
+					thread := &processes[p_idx].threads[t_idx]
+					if queue.len(thread.bande_q) > 0 {
+						je_idx := queue.pop_back(&thread.bande_q)
+						jev := &thread.json_events[je_idx]
+						jev.duration = (ev.timestamp - jev.timestamp) * stamp_scale
+						jev.self_time = jev.duration
+						thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
+						total_max_time = max(total_max_time, jev.timestamp + jev.duration)
+					}
 				}
-
-				if depth == 0 {
-					fmt.printf("unable to find closing %c\n", type)
-					push_fatal(SpallError.InvalidFile)
-				}
+				return
 			}
-
-			fmt.printf("how am I here?\n")
-			return
-		case .Colon:
-		case .Comma:
-			depth := queue.len(jp.parent_stack)
-			if depth == 0 {
-				fmt.printf("2 Expected first {{, got %c\n", ch)
-				push_fatal(SpallError.InvalidFile)
-			}
-
-			parent := queue.peek_back(&jp.parent_stack)
-
-			if parent.type != .Array && parent.type != .Object {
-				pop_wrap(jp)
-			}
+		case .Colon: in_key = false
+		case .Comma: in_key = true
 		case .String:
 			if !in_string {
-				str_start = real_pos(p)
+				str_start = chunk_pos(p) + 1
 				in_string = true
 			}
 		case .Primitive:
 			if !in_primitive {
-				primitive_start = real_pos(p)
+				primitive_start = chunk_pos(p)
 				in_primitive = true
 			}
-		case .Starting:
-		case .Escape:
 		}
 	}
 
-	if p.pos != p.total_size {
-		if in_string {
-			jp.state = .Starting
-			p.pos = str_start
-			state = .PartialRead
-			return
-		}
-		if in_primitive {
-			jp.state = .Starting
-			p.pos = primitive_start
-			state = .PartialRead
-			return
-		}
-	}
-
-	depth := queue.len(jp.parent_stack)
-	if depth != 0 {
-		if p.pos != p.total_size {
-			state = .PartialRead
-			return
-		}
-	}
-
-	state = .Finished
+	// we ran out of chunk to process
+	jp.state = .Starting
+	p.pos = start
+	state = .PartialRead
 	return
 }
 
@@ -519,171 +532,15 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 		}
 
 		// start tokenizing normally now
-		tok, state := get_next_token(jp)
+		state := process_next_json_event(jp)
 		#partial switch state {
 		case .PartialRead:
 			p.offset = p.pos
 			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
 			return
-		case .InvalidToken:
-			fmt.printf("Your JSON file contains an invalid token!\n")
-			push_fatal(SpallError.Bug) // @Todo: Better reporting about invalid tokens
-			return
 		case .Finished:
 			finish_loading()
 			return
-		}
-
-
-		// get start of an event
-		if jp.cur_event_id == -1 {
-			if state == .ScopeEntered && tok.type == .Object {
-				jp.cur_event_id = tok.id
-			}
-			continue
-		}
-
-		// eww.
-		depth := queue.len(jp.parent_stack)
-		parent := queue.get_ptr(&jp.parent_stack, depth - 1)
-		if parent.id == tok.id {
-			parent = queue.get_ptr(&jp.parent_stack, depth - 2)
-		}
-
-		// gather keys for event
-		if state == .TokenDone && tok.type == .String && parent.id == jp.cur_event_id {
-			key := get_token_str(jp, tok)
-
-			val, ok := km_find(&jp.obj_map, key)
-			if ok {
-				jp.current_parent = IdPair{val, tok.id}
-			}
-			continue
-		}
-
-		// gather values for event
-		if state == .TokenDone &&
-		   (tok.type == .String || tok.type == .Primitive) {
-			if parent.id != jp.current_parent.id {
-				continue
-			}
-			key := jp.current_parent.key
-
-			value := get_token_str(jp, tok)
-			if key == "name" {
-				str := in_get(&p.intern, value)
-				jp.cur_event.name = str
-			}
-
-			switch key {
-			case "ph":
-				if len(value) != 1 {
-					continue
-				}
-
-				type_ch := value[0]
-				switch type_ch {
-				case 'X': jp.cur_event.type = .Complete
-				case 'B': jp.cur_event.type = .Begin
-				case 'E': jp.cur_event.type = .End
-				case 'i': jp.cur_event.type = .Instant
-				}
-			case "dur": 
-				dur, ok := strconv.parse_f64(value)
-				if !ok { continue }
-				jp.cur_event.duration = dur
-				jp.seen_dur = true
-			case "ts": 
-				ts, ok := strconv.parse_f64(value)
-				if !ok { continue }
-				jp.cur_event.timestamp = ts
-			case "tid": 
-				tid, ok := parse_u32(value)
-				if !ok { continue }
-				jp.cur_event.thread_id = tid
-			case "pid": 
-				pid, ok := parse_u32(value)
-				if !ok { continue }
-				jp.cur_event.process_id = pid
-			case "s": 
-				if len(value) != 1 {
-					continue
-				}
-
-				scope_ch := value[0]
-				switch scope_ch {
-				case 'g': jp.cur_event.scope = .Global
-				case 'p': jp.cur_event.scope = .Process
-				case 't': jp.cur_event.scope = .Thread
-				case:
-					continue
-				}
-			}
-
-			continue
-		}
-
-		// got the whole event
-		if state == .ScopeExited && tok.id == jp.cur_event_id {
-			defer {
-				jp.cur_event = TempEvent{}
-				jp.cur_event_id = -1
-				jp.seen_dur = false
-				jp.current_parent = IdPair{}
-			}
-
-			switch jp.cur_event.type {
-			case .Instant:
-				jp.cur_event.timestamp *= stamp_scale
-				json_push_instant(jp.cur_event)
-				event_count += 1
-			case .Complete:
-				if jp.seen_dur {
-					event_count += 1
-
-					new_event := JSONEvent{
-						name = jp.cur_event.name,
-						duration = jp.cur_event.duration,
-						self_time = jp.cur_event.duration,
-						timestamp = jp.cur_event.timestamp,
-					}
-
-					json_push_event(u32(jp.cur_event.process_id), u32(jp.cur_event.thread_id), new_event)
-				}
-			case .Begin:
-				new_event := JSONEvent{
-					name = jp.cur_event.name,
-					duration = -1,
-					timestamp = (jp.cur_event.timestamp) * stamp_scale,
-				}
-
-				event_count += 1
-				p_idx, t_idx, e_idx := json_push_event(u32(jp.cur_event.process_id), u32(jp.cur_event.thread_id), new_event)
-
-				thread := &processes[p_idx].threads[t_idx]
-				queue.push_back(&thread.bande_q, e_idx)
-			case .End:
-				p_idx, ok1 := vh_find(&process_map, u32(jp.cur_event.process_id))
-				if !ok1 {
-					fmt.printf("invalid end?\n")
-					continue
-				}
-				t_idx, ok2 := vh_find(&processes[p_idx].thread_map, u32(jp.cur_event.thread_id))
-				if !ok1 {
-					fmt.printf("invalid end?\n")
-					continue
-				}
-
-				thread := &processes[p_idx].threads[t_idx]
-				if queue.len(thread.bande_q) > 0 {
-					je_idx := queue.pop_back(&thread.bande_q)
-					jev := &thread.json_events[je_idx]
-					jev.duration = (jp.cur_event.timestamp - jev.timestamp) * stamp_scale
-					jev.self_time = jev.duration
-					thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
-					total_max_time = max(total_max_time, jev.timestamp + jev.duration)
-				}
-			}
 		}
 	}
 	return
@@ -751,6 +608,8 @@ json_push_event :: proc(process_id, thread_id: u32, event: JSONEvent) -> (int, i
 		thread_map := &processes[p_idx].thread_map
 		vh_insert(thread_map, thread_id, t_idx)
 	}
+
+	event_count += 1
 
 	p := &processes[p_idx]
 	p.min_time = min(p.min_time, event.timestamp)

@@ -304,6 +304,7 @@ init_loading_state :: proc(size: u32, name: string) {
 
 	first_chunk = true
 	event_count = 0
+	instant_count = 0
 
 	jp = JSONParser{}
 	bp = Parser{}
