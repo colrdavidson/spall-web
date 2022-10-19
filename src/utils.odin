@@ -129,8 +129,10 @@ time_fmt :: proc(time: f64) -> string {
 		micros_str = fmt.tprintf(" %.0fμs", micros)
 	}
 
-	nanos := math.floor((time - math.floor(time)) * 1000)
-	if (nanos > 0 && nanos < 1000) || time == 0 {
+	_, nanos := math.modf(time)
+	nanos *= 1000
+	nano_check := math.floor(nanos)
+	if (nano_check > 0 && nano_check < 1000) || time == 0 {
 		nanos_str = fmt.tprintf(" %.0fns", nanos)
 	}
 
