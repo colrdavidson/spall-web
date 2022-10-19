@@ -1638,6 +1638,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			total_tracked_time = 0.0
 			cur_stat_offset = StatOffset{}
 			selected_event = {-1, -1, -1, -1}
+			info_pane_scroll = 0
+			info_pane_scroll_vel = 0
 
 			big_global_arena.offset = current_alloc_offset
 			stats = make(map[string]Stats, 0, big_global_allocator)
