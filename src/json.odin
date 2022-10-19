@@ -349,7 +349,7 @@ skip_to_start_or_end :: proc(jp: ^JSONParser) -> JSONState {
 	push_fatal(SpallError.InvalidFile)
 }
 
-process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) {
+process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) #no_bounds_check {
 
 	type, ok := km_find(&jp.obj_map, key)
 	if !ok {
