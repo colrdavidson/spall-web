@@ -681,7 +681,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 
 		if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
 			set_cursor("pointer")
-			if clicked || mouse_up_now {
+			if (clicked || mouse_up_now) && !shift_down {
 				selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
 				clicked_on_rect = true
 				did_multiselect = false
