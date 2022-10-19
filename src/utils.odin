@@ -158,6 +158,58 @@ parse_u32 :: proc(str: string) -> (u32, bool) {
 	return u32(ret), true
 }
 
+parse_f64 :: proc(str: string) -> (val: f64, ok: bool) #no_bounds_check {
+	if str == "" {
+		return
+	}
+
+	sign: f64 = 1
+
+	i := 0
+	seen_sign := true
+	switch str[i] {
+	case '-': i += 1; sign = -1
+	case '+': i += 1;
+	case: seen_sign = false
+	}
+
+	for ; i < len(str); i += 1 {
+		ch := str[i]
+
+		if ch == '.' {
+			break
+		}
+
+		if ch < '0' || ch > '9' {
+			return 0, false
+		}
+
+		val = (val * 10) + f64(ch & 0xf)
+	}
+
+	if i < len(str) && str[i] == '.' {
+		pow10: f64 = 10
+		i += 1
+
+		for ; i < len(str); i += 1 {
+			ch := str[i]
+
+			if ch < '0' || ch > '9' {
+				return 0, false
+			}
+
+			val += f64(ch & 0xf) / pow10
+			pow10 *= 10
+		}
+	}
+
+	if (i == 1 && seen_sign) || len(str[i:]) != 0 {
+		return 0, false
+	}
+
+	return sign * val, true
+}
+
 distance :: proc(p1, p2: Vec2) -> f64 {
 	dx := p2.x - p1.x
 	dy := p2.y - p1.y

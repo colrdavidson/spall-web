@@ -374,11 +374,11 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) {
 		case 'i': ev.type = .Instant
 		}
 	case .Dur: 
-		dur, ok := strconv.parse_f64(value)
+		dur, ok := parse_f64(value)
 		if !ok { return }
 		ev.duration = dur
 	case .Ts: 
-		ts, ok := strconv.parse_f64(value)
+		ts, ok := parse_f64(value)
 		if !ok { return }
 		ev.timestamp = ts
 	case .Tid: 
