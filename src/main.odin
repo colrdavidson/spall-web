@@ -1174,7 +1174,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	// Handle inputs
 	{
 		// Handle select events
-		if clicked && !clicked_on_rect && !shift_down {
+		if clicked && pt_in_rect(clicked_pos, graph_rect) && !clicked_on_rect && !shift_down {
 			selected_event = {-1, -1, -1, -1}
 			resize(&selected_ranges, 0)
 
