@@ -48,6 +48,7 @@ mouse_up :: proc "contextless" (x, y: f64) {
 
 	is_mouse_down = false
 	was_mouse_down = true
+	mouse_up_now  = true
 
 	if frame_count != last_frame_count {
 		last_mouse_pos = mouse_pos

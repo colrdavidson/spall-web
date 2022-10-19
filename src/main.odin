@@ -32,6 +32,7 @@ wasmContext := runtime.default_context()
 is_mouse_down  := false
 was_mouse_down := false
 clicked        := false
+mouse_up_now   := false
 is_hovering    := false
 shift_down     := false
 
@@ -768,6 +769,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		clicked = false
 		is_hovering = false
 		was_mouse_down = false
+		mouse_up_now = false
 	}
 
 	dt := _dt
@@ -856,6 +858,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 
 	// process key/mouse inputs
+
+	did_pan := false
+
 	start_time, end_time: f64
 	pan_delta: Vec2
 	{
@@ -965,6 +970,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 		start_time, end_time = get_current_window(cam, display_width)
+
+		if is_mouse_down || mouse_up_now {
+			MIN_PAN :: 0.1
+			pan_dist := distance(mouse_pos, clicked_pos)
+			did_pan = (pan_dist > MIN_PAN)
+		}
 	}
 
 	// Init GL / Text canvases
@@ -1173,8 +1184,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	// Handle inputs
 	{
-		// Handle select events
-		if clicked && pt_in_rect(clicked_pos, graph_rect) && !clicked_on_rect && !shift_down {
+		// Handle de-select
+		if mouse_up_now && !did_pan && pt_in_rect(clicked_pos, graph_rect) && !clicked_on_rect && !shift_down {
 			selected_event = {-1, -1, -1, -1}
 			resize(&selected_ranges, 0)
 

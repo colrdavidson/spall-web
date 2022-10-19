@@ -150,6 +150,12 @@ parse_u32 :: proc(str: string) -> (u32, bool) {
 	return u32(ret), true
 }
 
+distance :: proc(p1, p2: Vec2) -> f64 {
+	dx := p2.x - p1.x
+	dy := p2.y - p1.y
+	return math.sqrt((dx * dx) + (dy * dy))
+}
+
 start_time: u64
 start_mem: i64
 allocator: mem.Allocator
