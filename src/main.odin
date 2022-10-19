@@ -41,6 +41,8 @@ clicked_pos    := Vec2{}
 scroll_val_y: f64 = 0
 
 cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
+info_pane_scroll: f64 = 0
+info_pane_scroll_vel: f64 = 0
 
 
 // selection state
@@ -799,7 +801,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		return res
 	}
 
-	info_line_count := 10
+	info_line_count := 7
 	for i := 0; i < info_line_count; i += 1 {
 		next_line(&pane_y, em)
 	}
@@ -850,6 +852,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	padded_graph_rect = graph_rect
 	padded_graph_rect.pos.y += graph_header_line_gap
 	padded_graph_rect.size.y -= graph_header_line_gap
+	stat_pane := rect(0, info_pane_y, width, height - info_pane_y)
 
 
 	// process key/mouse inputs
@@ -860,11 +863,17 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		max_scale := 10000000.0
 		min_scale := 0.5 * display_width / (total_max_time - total_min_time)
-		{
+		if pt_in_rect(mouse_pos, graph_rect) {
 			cam.target_scale *= _pow(1.0025, -scroll_val_y)
 			cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
+		} else if pt_in_rect(mouse_pos, stat_pane) {
+			info_pane_scroll_vel -= scroll_val_y * 10
 		}
 		scroll_val_y = 0
+
+		info_pane_scroll += (info_pane_scroll_vel * dt)
+		info_pane_scroll_vel *= _pow(0.000001, dt)
+		info_pane_scroll = min(info_pane_scroll, 0)
 
 		cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - _pow(_pow(0.1, 12), (dt)))
 		cam.current_scale = min(max(cam.current_scale, min_scale), max_scale)
@@ -1187,6 +1196,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			total_tracked_time = 0.0
 			cur_stat_offset = StatOffset{}
 			selected_event = {-1, -1, -1, -1}
+			info_pane_scroll = 0
+			info_pane_scroll_vel = 0
 
 
 			// try to fake a reduced frame of latency by extrapolating the position by the delta
@@ -1454,13 +1465,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		} else if stats_state == .Finished && did_multiselect {
 			y := info_pane_y + top_line_gap
 
+			header_start := y
+			header_height := 2 * em
+
 			column_gap := 1.5 * em
-			self_header_text   := fmt.tprintf("%-10s", "   self")
-			total_header_text  := fmt.tprintf("%-17s", "      total")
-			min_header_text    := fmt.tprintf("%-10s", "   min.")
-			avg_header_text    := fmt.tprintf("%-10s", "   avg.")
-			max_header_text    := fmt.tprintf("%-10s", "   max.")
-			name_header_text   := fmt.tprintf("%-10s", "   name")
 
 			cursor := x_subpad
 
@@ -1475,30 +1483,37 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				cursor^ += column_gap / 2
 			}
 
-			text_outf(&cursor, y, self_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, total_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, min_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, avg_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, max_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, name_header_text)
-			next_line(&y, em)
-
 			full_time := total_max_time - total_min_time
-			i := 0
-			for name, stat in stats {
-				if i > (info_line_count - 2) {
-					break
+
+			y += header_height + (em / 4)
+
+			displayed_lines := info_line_count - 1
+			if displayed_lines < len(stats) {
+				max_lines := len(stats)
+
+				// goofy hack to get line height
+				tmp := y
+				next_line(&tmp, em)
+				line_height := tmp - y
+
+				max_scroll := (f64(max_lines - displayed_lines) * line_height) + (em / 4)
+				info_pane_scroll = max(info_pane_scroll, -max_scroll)
+				y += info_pane_scroll
+			}
+
+			stat_idx := 0
+			last_pos := 0.0
+			stat_loop: for name, stat in stats {
+				stat_idx += 1
+				if y < (info_pane_y + (em / 2)) {
+					next_line(&y, em)
+					continue stat_loop
 				}
+
+				if y > height {
+					break stat_loop
+				}
+				last_pos = y
 
 				cursor = x_subpad
 
@@ -1547,8 +1562,37 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				draw_text(name, Vec2{cursor, y_before + (em / 3)}, p_font_size, monospace_font, text_color)
 
 				next_line(&y, em)
-				i += 1
 			}
+
+			y = header_start
+			cursor = x_subpad
+
+			draw_rect(rect(0, info_pane_y, width, 2 * em), toolbar_color)
+			draw_line(Vec2{0, info_pane_y + (2 * em)}, Vec2{width, info_pane_y + (2 * em)}, 1, line_color)
+
+			self_header_text   := fmt.tprintf("%-10s", "   self")
+			total_header_text  := fmt.tprintf("%-17s", "      total")
+			min_header_text    := fmt.tprintf("%-10s", "   min.")
+			avg_header_text    := fmt.tprintf("%-10s", "   avg.")
+			max_header_text    := fmt.tprintf("%-10s", "   max.")
+			name_header_text   := fmt.tprintf("%-10s", "   name")
+
+			text_outf(&cursor, y, self_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+			text_outf(&cursor, y, total_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+			text_outf(&cursor, y, min_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+			text_outf(&cursor, y, avg_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+			text_outf(&cursor, y, max_header_text)
+			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
+
+			text_outf(&cursor, y, name_header_text)
 		} else {
 			y := height - em - top_line_gap
 
@@ -1695,13 +1739,16 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	PAN_X_EPSILON :: 0.01
 	PAN_Y_EPSILON :: 1.0
 	SCALE_EPSILON :: 0.00000001
+	SCROLL_EPSILON :: 0.01
 	if math.abs(cam.pan.x - cam.target_pan_x) < PAN_X_EPSILON && 
 	   math.abs(cam.vel.y - 0) < PAN_Y_EPSILON && 
 	   math.abs(cam.current_scale - cam.target_scale) < SCALE_EPSILON &&
+	   math.abs(info_pane_scroll_vel) < SCROLL_EPSILON &&
 	   stats_state != .Started && !anim_playing {
 		cam.pan.x = cam.target_pan_x
 		cam.vel.y = 0
 		cam.current_scale = cam.target_scale
+		info_pane_scroll_vel = 0
 		was_sleeping = true
 		return false
 	}
