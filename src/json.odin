@@ -121,7 +121,7 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 	char_class[u8('f')] = .Primitive
 	char_class[u8('n')] = .Primitive
 
-	jp.obj_map = km_init(scratch_allocator)
+	jp.obj_map = km_init()
 	for field in fields {
 		km_insert(&jp.obj_map, field.name, field.type)
 	}

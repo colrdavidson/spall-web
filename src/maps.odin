@@ -189,50 +189,43 @@ in_getstr :: #force_inline proc(v: INStr) -> string {
 	return string(string_block[v.start:v.start+u32(v.len)])
 }
 
-KMEntry :: struct {
-	key: string,
-	type: FieldType,
-}
+KM_CAP :: 32
 
 // Key mashing
 KeyMap :: struct {
-	entries: [dynamic]KMEntry,
-	hashes:  [dynamic]int,
-	len_minus_one: u32,
+	keys:   [KM_CAP]string,
+	types: [KM_CAP]FieldType,
+	hashes: [KM_CAP]int,
+	len: int,
 }
 
-km_init :: proc(allocator := context.allocator) -> KeyMap {
+km_init :: proc() -> KeyMap {
 	v := KeyMap{}
-	v.entries = make([dynamic]KMEntry, 0, 16, allocator)
-	v.hashes = make([dynamic]int, 64, allocator) // must be a power of two
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
-	v.len_minus_one = u32(len(v.hashes) - 1)
 	return v
 }
 
 // lol, fibhash win
-km_hash :: proc "contextless" (key: string) -> u32 {
-/*
-	k := transmute([]u8)key
-	return hash.fnv32a(k)
-*/
+km_hash :: proc "contextless" (key: string) -> u32 #no_bounds_check {
 	return u32(key[0]) * 2654435769 
 }
 
 // expects that we only get static strings
-km_insert :: proc(v: ^KeyMap, key: string, type: FieldType) {
-	hv := km_hash(key) & v.len_minus_one
-	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := (hv + i) & v.len_minus_one
+km_insert :: proc(v: ^KeyMap, key: string, type: FieldType) #no_bounds_check {
+	hv := km_hash(key) & (KM_CAP - 1)
+	for i: u32 = 0; i < KM_CAP; i += 1 {
+		idx := (hv + i) & (KM_CAP - 1)
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
-			v.hashes[idx] = len(v.entries)
-			append(&v.entries, KMEntry{key = key, type = type})
+			v.hashes[idx] = v.len
+			v.keys[v.len] = key
+			v.types[v.len] = type
+			v.len += 1
 			return
-		} else if v.entries[e_idx].key == key {
+		} else if v.keys[e_idx] == key {
 			return
 		}
 	}
@@ -240,19 +233,19 @@ km_insert :: proc(v: ^KeyMap, key: string, type: FieldType) {
 	push_fatal(SpallError.Bug)
 }
 
-km_find :: proc (v: ^KeyMap, key: string, loc := #caller_location) -> (FieldType, bool) {
-	hv := km_hash(key) & v.len_minus_one
+km_find :: proc (v: ^KeyMap, key: string) -> (FieldType, bool) #no_bounds_check {
+	hv := km_hash(key) & (KM_CAP - 1)
 
-	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
-		idx := (hv + i) & v.len_minus_one
+	for i: u32 = 0; i < KM_CAP; i += 1 {
+		idx := (hv + i) & (KM_CAP - 1)
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
 			return .Invalid, false
 		}
 
-		if v.entries[e_idx].key == key {
-			return v.entries[e_idx].type, true
+		if v.keys[e_idx] == key {
+			return v.types[e_idx], true
 		}
 	}
 
