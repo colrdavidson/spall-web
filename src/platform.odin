@@ -210,7 +210,7 @@ reset_cursor :: proc "contextless" () { change_cursor("auto") }
 @export
 set_dpr :: proc "contextless" (_dpr: f64) { dpr = _dpr }
 
-push_fatal :: proc(code: SpallError) {
+push_fatal :: proc(code: SpallError) -> ! {
 	_push_fatal(int(code))
 	trap()
 }

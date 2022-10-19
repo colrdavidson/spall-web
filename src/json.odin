@@ -347,7 +347,6 @@ skip_to_start_or_end :: proc(jp: ^JSONParser) -> JSONState {
 
 	fmt.printf("Unable to find next event! %c\n", ch)
 	push_fatal(SpallError.InvalidFile)
-	return .InvalidToken
 }
 
 process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) {

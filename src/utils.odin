@@ -7,7 +7,7 @@ import "core:math"
 import "core:fmt"
 import "core:c"
 
-trap :: proc() {
+trap :: proc() -> ! {
 	intrinsics.trap()
 }
 

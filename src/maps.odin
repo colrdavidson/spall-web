@@ -183,7 +183,6 @@ in_get :: proc(v: ^INMap, key: string) -> INStr {
 	}
 
 	push_fatal(SpallError.Bug)
-	return INStr{}
 }
 
 in_getstr :: #force_inline proc(v: INStr) -> string {
