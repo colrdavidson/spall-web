@@ -108,6 +108,7 @@ time_fmt :: proc(time: f64) -> string {
 	millis_str : string
 	micros_str : string
 	nanos_str  : string
+	picos_str  : string
 
 	mins := math.floor(math.mod(time / ONE_MINUTE, 60))
 	if mins > 0 && mins < 60 {
@@ -135,7 +136,13 @@ time_fmt :: proc(time: f64) -> string {
 		nanos_str = fmt.tprintf(" %.0fns", nanos)
 	}
 
-	return fmt.tprintf("%s%s%s%s%s", minutes_str, seconds_str, millis_str, micros_str, nanos_str)
+	_, picos := math.modf(time)
+	picos = math.floor(picos * 1000000)
+	if (picos > 0 && picos < 1000) {
+		picos_str = fmt.tprintf(" %.0fps", picos)
+	}
+
+	return fmt.tprintf("%s%s%s%s%s%s", minutes_str, seconds_str, millis_str, micros_str, nanos_str, picos_str)
 }
 
 parse_u32 :: proc(str: string) -> (u32, bool) {
