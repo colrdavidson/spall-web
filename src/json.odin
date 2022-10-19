@@ -39,6 +39,7 @@ JSONParser :: struct {
 	p: Parser,
 
 	state: PS,
+	obj_map: KeyMap,
 
 	// skippy state
 	got_first_char: bool,
@@ -74,6 +75,30 @@ PS :: enum u8 {
 
 char_class := [128]CharType{}
 
+FieldType :: enum u8 {
+	Invalid = 0,
+	Dur,
+	Name,
+	Pid,
+	Tid,
+	Ts,
+	Ph,
+	S,
+}
+Field :: struct {
+	name: string,
+	type: FieldType,
+}
+fields := [?]Field{ 
+	{"dur", .Dur}, 
+	{"name", .Name}, 
+	{"pid", .Pid},
+	{"tid", .Tid}, 
+	{"ts", .Ts},
+	{"ph", .Ph},
+	{"s", .S},
+}
+
 init_json_parser :: proc(total_size: u32) -> JSONParser {
 	jp := JSONParser{}
 	jp.p = init_parser(total_size)
@@ -96,6 +121,11 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 	char_class[u8('f')] = .Primitive
 	char_class[u8('n')] = .Primitive
 
+	jp.obj_map = km_init(scratch_allocator)
+	for field in fields {
+		km_insert(&jp.obj_map, field.name, field.type)
+	}
+
 	jp.state = .Starting
 
 	jp.got_first_char = false
@@ -104,73 +134,73 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 	return jp
 }
 
-dfa := [][]u8{
+dfa := [?][10]PS{
 	// Any,    ArrOpen, ArrClose,     
 	// Quote,  ObjOpen, ObjClose,
 	// Escape, Colon,   Comma, Primitive
 
 	// starting
-	{
-		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
-		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
-		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	[?]PS{
+		PS.Starting, PS.ArrOpen, PS.ArrClose, 
+		PS.String,   PS.ObjOpen, PS.ObjClose, 
+		PS.Escape,   PS.Colon,   PS.Comma, PS.Primitive,
 	},
 
 	// string
-	{
-		u8(PS.String),   u8(PS.String), u8(PS.String), 
-		u8(PS.Starting), u8(PS.String), u8(PS.String), 
-		u8(PS.Escape),   u8(PS.String), u8(PS.String), u8(PS.String),
+	[?]PS{
+		PS.String,   PS.String, PS.String, 
+		PS.Starting, PS.String, PS.String, 
+		PS.Escape,   PS.String, PS.String, PS.String,
 	},
 
 	// escape
-	{
-		u8(PS.String), u8(PS.String), u8(PS.String), 
-		u8(PS.String), u8(PS.String), u8(PS.String), 
-		u8(PS.String), u8(PS.String), u8(PS.String), u8(PS.String),
+	[?]PS{
+		PS.String, PS.String, PS.String, 
+		PS.String, PS.String, PS.String, 
+		PS.String, PS.String, PS.String, PS.String,
 	},
 
 	// colon
-	{
-		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
-		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
-		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma),  u8(PS.Primitive),
+	[?]PS{
+		PS.Starting, PS.ArrOpen, PS.ArrClose, 
+		PS.String,   PS.ObjOpen, PS.ObjClose, 
+		PS.Escape,   PS.Colon,   PS.Comma,  PS.Primitive,
 	},
 
 	// []{}
-	{
-		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
-		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
-		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	[?]PS{
+		PS.Starting, PS.ArrOpen,  PS.ArrClose, 
+		PS.String,   PS.ObjOpen,  PS.ObjClose, 
+		PS.Escape,   PS.Colon,    PS.Comma, PS.Primitive,
 	},
-	{
-		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
-		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
-		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	[?]PS{
+		PS.Starting, PS.ArrOpen,  PS.ArrClose, 
+		PS.String,   PS.ObjOpen,  PS.ObjClose, 
+		PS.Escape,   PS.Colon,    PS.Comma, PS.Primitive,
 	},
-	{
-		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
-		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
-		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	[?]PS{
+		PS.Starting, PS.ArrOpen,  PS.ArrClose, 
+		PS.String,   PS.ObjOpen,  PS.ObjClose, 
+		PS.Escape,   PS.Colon,    PS.Comma, PS.Primitive,
 	},
-	{
-		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
-		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
-		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	[?]PS{
+		PS.Starting, PS.ArrOpen,  PS.ArrClose, 
+		PS.String,   PS.ObjOpen,  PS.ObjClose, 
+		PS.Escape,   PS.Colon,    PS.Comma, PS.Primitive,
 	},
 
 	// ,
-	{
-		u8(PS.Starting), u8(PS.ArrOpen),  u8(PS.ArrClose), 
-		u8(PS.String),   u8(PS.ObjOpen),  u8(PS.ObjClose), 
-		u8(PS.Escape),   u8(PS.Colon),    u8(PS.Comma), u8(PS.Primitive),
+	[?]PS{
+		PS.Starting, PS.ArrOpen,  PS.ArrClose, 
+		PS.String,   PS.ObjOpen,  PS.ObjClose, 
+		PS.Escape,   PS.Colon,    PS.Comma, PS.Primitive,
 	},
 
 	// -, 0-9, t, f, n
-	{
-		u8(PS.Primitive), u8(PS.ArrOpen),  u8(PS.ArrClose), 
-		u8(PS.Starting), u8(PS.ObjOpen),  u8(PS.ObjClose), 
-		u8(PS.Starting), u8(PS.Starting), u8(PS.Comma), u8(PS.Primitive),
+	[?]PS{
+		PS.Primitive, PS.ArrOpen,  PS.ArrClose, 
+		PS.Starting,  PS.ObjOpen,  PS.ObjClose, 
+		PS.Starting,  PS.Starting, PS.Comma, PS.Primitive,
 	},
 }
 
@@ -321,11 +351,17 @@ skip_to_start_or_end :: proc(jp: ^JSONParser) -> JSONState {
 }
 
 process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) {
-	switch key {
-	case "name":
+
+	type, ok := km_find(&jp.obj_map, key)
+	if !ok {
+		return
+	}
+
+	#partial switch type {
+	case .Name:
 		str := in_get(&jp.p.intern, value)
 		ev.name = str
-	case "ph":
+	case .Ph:
 		if len(value) != 1 {
 			return
 		}
@@ -337,23 +373,23 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) {
 		case 'E': ev.type = .End
 		case 'i': ev.type = .Instant
 		}
-	case "dur": 
+	case .Dur: 
 		dur, ok := strconv.parse_f64(value)
 		if !ok { return }
 		ev.duration = dur
-	case "ts": 
+	case .Ts: 
 		ts, ok := strconv.parse_f64(value)
 		if !ok { return }
 		ev.timestamp = ts
-	case "tid": 
+	case .Tid: 
 		tid, ok := parse_u32(value)
 		if !ok { return }
 		ev.thread_id = tid
-	case "pid": 
+	case .Pid: 
 		pid, ok := parse_u32(value)
 		if !ok { return }
 		ev.process_id = pid
-	case "s": 
+	case .S: 
 		if len(value) != 1 {
 			return
 		}
@@ -401,9 +437,9 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) {
 	depth_count := 0
 
 	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
-		ch := p.data[chunk_pos(p)]
-		class := char_class[ch]
-		next_state := PS(dfa[jp.state][class])
+		#no_bounds_check ch := p.data[chunk_pos(p)]
+		#no_bounds_check class := char_class[ch]
+		#no_bounds_check next_state := dfa[jp.state][class]
 		jp.state = next_state
 
 		if next_state != .String && in_string {
