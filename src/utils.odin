@@ -110,33 +110,28 @@ time_fmt :: proc(time: f64) -> string {
 	nanos_str  : string
 
 	mins := math.floor(math.mod(time / ONE_MINUTE, 60))
-	mins_check := math.floor(mins)
-	if mins_check > 0 && mins_check < 60 {
+	if mins > 0 && mins < 60 {
 		minutes_str = fmt.tprintf(" %.0fm", mins)
 	} 
 
 	secs := math.floor(math.mod(time / ONE_SECOND, 60))
-	secs_check := math.floor(secs)
-	if secs_check > 0 && secs_check < 60 {
+	if secs > 0 && secs < 60 {
 		seconds_str = fmt.tprintf(" %.0fs", secs)
 	} 
 
-	millis := math.mod(time / ONE_MILLI, 1000)
-	milli_check := math.floor(millis)
-	if milli_check > 0 && milli_check < 1000 {
+	millis := math.floor(math.mod(time / ONE_MILLI, 1000))
+	if millis > 0 && millis < 1000 {
 		millis_str = fmt.tprintf(" %.0fms", millis)
 	} 
 
-	micros := math.mod(time, 1000)
-	micro_check := math.floor(micros)
-	if micro_check > 0 && micro_check < 1000 {
+	micros := math.floor(math.mod(time, 1000))
+	if micros > 0 && micros < 1000 {
 		micros_str = fmt.tprintf(" %.0fμs", micros)
 	}
 
 	_, nanos := math.modf(time)
-	nanos *= 1000
-	nano_check := math.floor(nanos)
-	if (nano_check > 0 && nano_check < 1000) || time == 0 {
+	nanos = math.floor(nanos * 1000)
+	if (nanos > 0 && nanos < 1000) || time == 0 {
 		nanos_str = fmt.tprintf(" %.0fns", nanos)
 	}
 
