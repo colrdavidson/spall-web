@@ -466,12 +466,12 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) {
 					p_idx, ok1 := vh_find(&process_map, u32(ev.process_id))
 					if !ok1 {
 						fmt.printf("invalid end?\n")
-						continue
+						return
 					}
 					t_idx, ok2 := vh_find(&processes[p_idx].thread_map, u32(ev.thread_id))
 					if !ok2 {
 						fmt.printf("invalid end?\n")
-						continue
+						return
 					}
 
 					thread := &processes[p_idx].threads[t_idx]
