@@ -681,7 +681,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 
 		if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
 			set_cursor("pointer")
-			if clicked {
+			if clicked || mouse_up_now {
 				selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
 				clicked_on_rect = true
 				did_multiselect = false
@@ -716,6 +716,8 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	context = wasmContext
 	defer frame_count += 1
+
+	render_one_more := false
 
 	if first_frame {
 		manual_load(default_config, default_config_name)
@@ -1190,6 +1192,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			multiselect_t = 0
 			did_multiselect = false
 			stats_state = .NoStats
+			render_one_more = true
 		}
 
 		// user wants to multi-select
@@ -1751,7 +1754,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	PAN_Y_EPSILON :: 1.0
 	SCALE_EPSILON :: 0.00000001
 	SCROLL_EPSILON :: 0.01
-	if math.abs(cam.pan.x - cam.target_pan_x) < PAN_X_EPSILON && 
+	if !render_one_more &&
+	   math.abs(cam.pan.x - cam.target_pan_x) < PAN_X_EPSILON && 
 	   math.abs(cam.vel.y - 0) < PAN_Y_EPSILON && 
 	   math.abs(cam.current_scale - cam.target_scale) < SCALE_EPSILON &&
 	   math.abs(info_pane_scroll_vel) < SCROLL_EPSILON &&
