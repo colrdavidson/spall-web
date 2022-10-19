@@ -988,17 +988,15 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	draw_tick_start: f64
 	ticks: int
 	{
-		mus_range := f64(end_time - start_time)
+		// mus_range := end_time - start_time <- simplifies to the following
+		mus_range := display_width / cam.current_scale
 		v1 := math.log10(mus_range)
 		v2 := math.floor(v1)
 		rem := v1 - v2
 
-		division = _pow(10, v2)
-		if rem < 0.3 {
-			division -= (division * 0.8)
-		} else if rem < 0.6 {
-			division -= (division / 2)
-		}
+		division = _pow(10, v2)                            // multiples of 10
+		if rem < 0.3      { division -= (division * 0.8) } // multiples of 2
+		else if rem < 0.6 { division -= (division / 2)   } // multiples of 5
 
 		display_range_start := -cam.pan.x / cam.current_scale
 		display_range_end := (display_width - cam.pan.x) / cam.current_scale
