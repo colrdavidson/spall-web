@@ -488,9 +488,11 @@ default_config := `[
 default_config := `[
 	{"cat":"function", "name":"0", "ph":"B", "pid":0, "tid": 0, "ts": 0},
 	{"cat":"function",             "ph":"E", "pid":0, "tid": 0, "ts": 1},
-	{"cat":"function", "name":"1", "ph":"B", "pid":0, "tid": 0, "ts": 1},
+	{"cat":"function", "name":"1", "ph":"B", "pid":0, "tid": 0, "ts": 1.1},
+	{"cat":"function",             "ph":"E", "pid":0, "tid": 0, "ts": 1.2},
 	{"cat":"function", "name":"2", "ph":"B", "pid":0, "tid": 0, "ts": 2},
-	{"cat":"function",             "ph":"E", "pid":0, "tid": 0, "ts": 4},
+	{"cat":"function", "name":"3", "ph":"B", "pid":0, "tid": 0, "ts": 3},
+	{"cat":"function",             "ph":"B", "pid":0, "tid": 0, "ts": 4},
 ]`
 */
 

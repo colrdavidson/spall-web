@@ -145,34 +145,36 @@ time_fmt :: proc(time: f64) -> string {
 	return fmt.tprintf("%s%s%s%s%s%s", minutes_str, seconds_str, millis_str, micros_str, nanos_str, picos_str)
 }
 
-parse_u32 :: proc(str: string) -> (u32, bool) {
+parse_u32 :: proc(str: string) -> (val: u32, ok: bool) {
 	ret : u64 = 0
 
 	s := transmute([]u8)str
 	for ch in s {
 		if ch < '0' || ch > '9' || ret > u64(c.UINT32_MAX) {
-			return 0, false
+			return
 		}
 		ret = (ret * 10) + u64(ch & 0xf)
 	}
 	return u32(ret), true
 }
 
-parse_f64 :: proc(str: string) -> (val: f64, ok: bool) #no_bounds_check {
-	if str == "" {
-		return
-	}
-
+// this *shouldn't* be called with 0-len strings. 
+// The current JSON parser enforces it due to the way primitives are parsed
+// We reject NaNs, Infinities, and Exponents in this house.
+parse_f64 :: proc(str: string) -> (ret: f64, ok: bool) #no_bounds_check {
 	sign: f64 = 1
 
 	i := 0
-	seen_sign := true
-	switch str[i] {
-	case '-': i += 1; sign = -1
-	case '+': i += 1;
-	case: seen_sign = false
+	if str[0] == '-' {
+		sign = -1
+		i += 1
+
+		if len(str) == 1 {
+			return 0, false
+		}
 	}
 
+	val: f64 = 0
 	for ; i < len(str); i += 1 {
 		ch := str[i]
 
@@ -201,10 +203,6 @@ parse_f64 :: proc(str: string) -> (val: f64, ok: bool) #no_bounds_check {
 			val += f64(ch & 0xf) / pow10
 			pow10 *= 10
 		}
-	}
-
-	if (i == 1 && seen_sign) || len(str[i:]) != 0 {
-		return 0, false
 	}
 
 	return sign * val, true

@@ -118,6 +118,7 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 	char_class[u8('t')] = .Primitive
 	char_class[u8('f')] = .Primitive
 	char_class[u8('n')] = .Primitive
+	char_class[u8('.')] = .Primitive
 
 	jp.obj_map = km_init()
 	for field in fields {
@@ -194,7 +195,7 @@ dfa := [?][10]PS{
 		PS.Escape,   PS.Colon,    PS.Comma, PS.Primitive,
 	},
 
-	// -, 0-9, t, f, n
+	// -, ., 0-9, t, f, n
 	[?]PS{
 		PS.Primitive, PS.ArrOpen,  PS.ArrClose, 
 		PS.Starting,  PS.ObjOpen,  PS.ObjClose, 
@@ -359,7 +360,8 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) #
 		ev.name = str
 	case .Ph:
 		if len(value) != 1 {
-			return
+			fmt.printf("Invalid type!\n")
+			push_fatal(SpallError.InvalidFile)
 		}
 
 		type_ch := value[0]
@@ -371,23 +373,36 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) #
 		}
 	case .Dur: 
 		dur, ok := parse_f64(value)
-		if !ok { return }
+		if !ok {
+			fmt.printf("Invalid number!\n")
+			push_fatal(SpallError.InvalidFile)
+		}
 		ev.duration = dur
 	case .Ts: 
 		ts, ok := parse_f64(value)
-		if !ok { return }
+		if !ok {
+			fmt.printf("Invalid number!\n")
+			push_fatal(SpallError.InvalidFile)
+		}
 		ev.timestamp = ts
 	case .Tid: 
 		tid, ok := parse_u32(value)
-		if !ok { return }
+		if !ok {
+			fmt.printf("Invalid number!\n")
+			push_fatal(SpallError.InvalidFile)
+		}
 		ev.thread_id = tid
 	case .Pid: 
 		pid, ok := parse_u32(value)
-		if !ok { return }
+		if !ok {
+			fmt.printf("Invalid number!\n")
+			push_fatal(SpallError.InvalidFile)
+		}
 		ev.process_id = pid
 	case .S: 
 		if len(value) != 1 {
-			return
+			fmt.printf("Invalid scope!\n")
+			push_fatal(SpallError.InvalidFile)
 		}
 
 		scope_ch := value[0]
