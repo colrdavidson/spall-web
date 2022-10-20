@@ -399,7 +399,7 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) #
 	}
 }
 
-process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) {
+process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bounds_check {
 	p := &jp.p
 
 	p.data = p.full_chunk[chunk_pos(p):]
@@ -433,9 +433,9 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) {
 	depth_count := 0
 
 	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
-		#no_bounds_check ch := p.data[chunk_pos(p)]
-		#no_bounds_check class := char_class[ch]
-		#no_bounds_check next_state := dfa[jp.state][class]
+		ch := p.data[chunk_pos(p)]
+		class := char_class[ch]
+		next_state := dfa[jp.state][class]
 		jp.state = next_state
 
 		if next_state != .String && in_string {
