@@ -83,6 +83,7 @@ EventType :: enum u8 {
 	Begin,
 	End,
 	Metadata,
+	Sample,
 }
 EventScope :: enum u8 {
 	Global,

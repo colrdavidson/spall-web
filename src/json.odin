@@ -370,7 +370,9 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key: FieldType, value
 		case 'B': ev.type = .Begin
 		case 'E': ev.type = .End
 		case 'i': ev.type = .Instant
+		case 'I': ev.type = .Instant
 		case 'M': ev.type = .Metadata
+		case 'P': ev.type = .Sample
 		}
 	case .Dur: 
 		dur, ok := parse_f64(value)
@@ -411,6 +413,85 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key: FieldType, value
 		case 'g': ev.scope = .Global
 		case 'p': ev.scope = .Process
 		case 't': ev.scope = .Thread
+		}
+	}
+}
+
+process_event :: proc(ev: TempEvent) {
+	switch ev.type {
+	case .Instant:
+		e := ev
+		e.timestamp *= stamp_scale
+		json_push_instant(e)
+	case .Complete:
+		new_event := JSONEvent{
+			name = ev.name,
+			args = ev.args,
+			duration = ev.duration,
+			self_time = ev.duration,
+			timestamp = ev.timestamp,
+		}
+		json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
+	case .Begin:
+		new_event := JSONEvent{
+			name = ev.name,
+			args = ev.args,
+			duration = -1,
+			timestamp = (ev.timestamp) * stamp_scale,
+		}
+
+		p_idx, t_idx, e_idx := json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
+
+		thread := &processes[p_idx].threads[t_idx]
+		ids_push_back(&thread.bande_q, e_idx)
+	case .End:
+		p_idx, ok1 := vh_find(&process_map, u32(ev.process_id))
+		if !ok1 {
+			fmt.printf("invalid end?\n")
+			return
+		}
+		t_idx, ok2 := vh_find(&processes[p_idx].thread_map, u32(ev.thread_id))
+		if !ok2 {
+			fmt.printf("invalid end?\n")
+			return
+		}
+
+		thread := &processes[p_idx].threads[t_idx]
+		if thread.bande_q.len > 0 {
+			je_idx := ids_pop_back(&thread.bande_q)
+			jev := &thread.json_events[je_idx]
+			jev.duration = (ev.timestamp - jev.timestamp) * stamp_scale
+			jev.self_time = jev.duration
+			thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
+			total_max_time = max(total_max_time, jev.timestamp + jev.duration)
+		}
+	case .Sample:
+	case .Metadata:
+		meta_str := in_getstr(ev.name)
+		if meta_str == "thread_name" || meta_str == "process_name" {
+			arena := cast(^Arena)scratch_allocator.data
+			init_offset := arena.offset
+			blob, err := json.parse_string(in_getstr(ev.args), json.DEFAULT_SPECIFICATION, false, scratch_allocator)
+			if err != nil {
+				fmt.printf("Failed to parse args?\n")
+				push_fatal(SpallError.InvalidFile)
+			}
+
+			arg_map, _ := blob.(json.Object)
+			m_name, ok := arg_map["name"].(json.String)
+			if !ok {
+				fmt.printf("Invalid %s\n", meta_str)
+				push_fatal(SpallError.InvalidFile)
+			}
+
+			name := in_get(&jp.p.intern, m_name)
+			arena.offset = init_offset
+
+			if meta_str == "thread_name" {
+				assign_threadname(ev.process_id, ev.thread_id, name)
+			} else if meta_str == "process_name" {
+				assign_pidname(ev.process_id, name)
+			}
 		}
 	}
 }
@@ -504,80 +585,7 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 				p.pos += 1
 				state = .EventDone
 
-				switch ev.type {
-				case .Instant:
-					ev.timestamp *= stamp_scale
-					json_push_instant(ev)
-				case .Complete:
-					new_event := JSONEvent{
-						name = ev.name,
-						args = ev.args,
-						duration = ev.duration,
-						self_time = ev.duration,
-						timestamp = ev.timestamp,
-					}
-					json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
-				case .Begin:
-					new_event := JSONEvent{
-						name = ev.name,
-						args = ev.args,
-						duration = -1,
-						timestamp = (ev.timestamp) * stamp_scale,
-					}
-
-					p_idx, t_idx, e_idx := json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
-
-					thread := &processes[p_idx].threads[t_idx]
-					ids_push_back(&thread.bande_q, e_idx)
-				case .End:
-					p_idx, ok1 := vh_find(&process_map, u32(ev.process_id))
-					if !ok1 {
-						fmt.printf("invalid end?\n")
-						return
-					}
-					t_idx, ok2 := vh_find(&processes[p_idx].thread_map, u32(ev.thread_id))
-					if !ok2 {
-						fmt.printf("invalid end?\n")
-						return
-					}
-
-					thread := &processes[p_idx].threads[t_idx]
-					if thread.bande_q.len > 0 {
-						je_idx := ids_pop_back(&thread.bande_q)
-						jev := &thread.json_events[je_idx]
-						jev.duration = (ev.timestamp - jev.timestamp) * stamp_scale
-						jev.self_time = jev.duration
-						thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
-						total_max_time = max(total_max_time, jev.timestamp + jev.duration)
-					}
-				case .Metadata:
-					meta_str := in_getstr(ev.name)
-					if meta_str == "thread_name" || meta_str == "process_name" {
-						arena := cast(^Arena)scratch_allocator.data
-						init_offset := arena.offset
-						blob, err := json.parse_string(in_getstr(ev.args), json.DEFAULT_SPECIFICATION, false, scratch_allocator)
-						if err != nil {
-							fmt.printf("Failed to parse args?\n")
-							push_fatal(SpallError.InvalidFile)
-						}
-
-						arg_map, _ := blob.(json.Object)
-						m_name, ok := arg_map["name"].(json.String)
-						if !ok {
-							fmt.printf("Invalid %s\n", meta_str)
-							push_fatal(SpallError.InvalidFile)
-						}
-
-						name := in_get(&jp.p.intern, m_name)
-						arena.offset = init_offset
-
-						if meta_str == "thread_name" {
-							assign_threadname(ev.process_id, ev.thread_id, name)
-						} else if meta_str == "process_name" {
-							assign_pidname(ev.process_id, name)
-						}
-					}
-				}
+				process_event(ev)
 				return
 			}
 		case .Colon: in_key = false
