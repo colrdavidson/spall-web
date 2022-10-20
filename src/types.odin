@@ -1,6 +1,5 @@
 package main
 
-import "core:container/queue"
 import "core:fmt"
 import "core:mem"
 import "core:runtime"
@@ -142,7 +141,11 @@ Depth :: struct {
 	events: []Event,
 }
 
-EventQueue :: distinct queue.Queue(int)
+IdStack :: struct {
+	arr: [dynamic]int,
+	len: int,
+}
+
 Thread :: struct {
 	min_time: f64,
 	max_time: f64,
@@ -156,7 +159,7 @@ Thread :: struct {
 	depths: [dynamic]Depth,
 	instants: [dynamic]Instant,
 
-	bande_q: EventQueue,
+	bande_q: IdStack,
 }
 
 Process :: struct {
@@ -166,24 +169,6 @@ Process :: struct {
 	threads: [dynamic]Thread,
 	instants: [dynamic]Instant,
 	thread_map: ValHash,
-}
-
-print_queue :: proc(q: ^$Q/queue.Queue($T)) {
-	if queue.len(q^) == 0 {
-		fmt.printf("Queue{{}}\n")
-		return
-	}
-
-	fmt.printf("Queue{{\n")
-	for i := 0; i < queue.len(q^); i += 1 {
-		fmt.printf("\t%v", queue.get(q, i))
-
-		if i + 1 < queue.len(q^) {
-			fmt.printf(",")
-		}
-		fmt.printf("\n")
-	}
-	fmt.printf("}}\n")
 }
 
 init_process :: proc(process_id: u32) -> Process {
@@ -203,7 +188,7 @@ init_thread :: proc(thread_id: u32) -> Thread {
 		events = make([dynamic]Event, big_global_allocator),
 		depths = make([dynamic]Depth, small_global_allocator),
 		instants = make([dynamic]Instant, big_global_allocator),
+		bande_q = ids_init(scratch_allocator),
 	}
-	queue.init(&t.bande_q, 0, scratch_allocator)
 	return t
 }

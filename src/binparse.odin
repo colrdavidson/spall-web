@@ -2,7 +2,6 @@ package main
 
 import "core:fmt"
 import "core:strings"
-import "core:container/queue"
 import "core:slice"
 import "formats:spall"
 
@@ -142,7 +141,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 
 			p_idx, t_idx, e_idx := bin_push_event(event.process_id, event.thread_id, new_event)
 			thread := &processes[p_idx].threads[t_idx]
-			queue.push_back(&thread.bande_q, e_idx)
+			ids_push_back(&thread.bande_q, e_idx)
 
 			event_count += 1
 		case .End:
@@ -158,8 +157,8 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 			}
 
 			thread := &processes[p_idx].threads[t_idx]
-			if queue.len(thread.bande_q) > 0 {
-				e_idx := queue.pop_back(&thread.bande_q)
+			if thread.bande_q.len > 0 {
+				e_idx := ids_pop_back(&thread.bande_q)
 
 				thread.current_depth -= 1
 				depth := &thread.depths[thread.current_depth]
@@ -218,9 +217,6 @@ bin_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, i
 }
 
 bin_process_events :: proc() {
-	ev_stack: queue.Queue(int)
-	queue.init(&ev_stack, 0, context.temp_allocator)
-
 	for process in &processes {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 		for tm in &process.threads {
