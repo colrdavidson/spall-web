@@ -5,6 +5,7 @@ import "core:strings"
 import "core:slice"
 import "core:mem"
 import "core:c"
+import "core:encoding/json"
 
 JSONState :: enum {
 	InvalidToken,
@@ -369,6 +370,7 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key: FieldType, value
 		case 'B': ev.type = .Begin
 		case 'E': ev.type = .End
 		case 'i': ev.type = .Instant
+		case 'M': ev.type = .Metadata
 		}
 	case .Dur: 
 		dur, ok := parse_f64(value)
@@ -496,6 +498,7 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 				if len(str) > 2 {
 					ev.args = in_get(&jp.p.intern, str)
 				}
+
 				key_type = .Invalid
 			} else if depth_count == 0 {
 				p.pos += 1
@@ -546,6 +549,33 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 						jev.self_time = jev.duration
 						thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 						total_max_time = max(total_max_time, jev.timestamp + jev.duration)
+					}
+				case .Metadata:
+					meta_str := in_getstr(ev.name)
+					if meta_str == "thread_name" || meta_str == "process_name" {
+						arena := cast(^Arena)scratch_allocator.data
+						init_offset := arena.offset
+						blob, err := json.parse_string(in_getstr(ev.args), json.DEFAULT_SPECIFICATION, false, scratch_allocator)
+						if err != nil {
+							fmt.printf("Failed to parse args?\n")
+							push_fatal(SpallError.InvalidFile)
+						}
+
+						arg_map, _ := blob.(json.Object)
+						m_name, ok := arg_map["name"].(json.String)
+						if !ok {
+							fmt.printf("Invalid %s\n", meta_str)
+							push_fatal(SpallError.InvalidFile)
+						}
+
+						name := in_get(&jp.p.intern, m_name)
+						arena.offset = init_offset
+
+						if meta_str == "thread_name" {
+							assign_threadname(ev.process_id, ev.thread_id, name)
+						} else if meta_str == "process_name" {
+							assign_pidname(ev.process_id, name)
+						}
 					}
 				}
 				return
@@ -654,6 +684,43 @@ json_push_instant :: proc(event: TempEvent) {
 	}
 }
 
+assign_pidname :: proc(process_id: u32, name: INStr) {
+	p_idx, ok1 := vh_find(&process_map, process_id)
+	if !ok1 {
+		append(&processes, init_process(process_id))
+		p_idx = len(processes) - 1
+		vh_insert(&process_map, process_id, p_idx)
+	}
+	p := &processes[p_idx]
+
+	p.name = name
+}
+
+assign_threadname :: proc(process_id, thread_id: u32, name: INStr) {
+	p_idx, ok1 := vh_find(&process_map, process_id)
+	if !ok1 {
+		append(&processes, init_process(process_id))
+		p_idx = len(processes) - 1
+		vh_insert(&process_map, process_id, p_idx)
+	}
+
+	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, thread_id)
+	if !ok2 {
+		threads := &processes[p_idx].threads
+
+		append(threads, init_thread(thread_id))
+
+		t_idx = len(threads) - 1
+		thread_map := &processes[p_idx].thread_map
+		vh_insert(thread_map, thread_id, t_idx)
+	}
+
+	p := &processes[p_idx]
+	t := &p.threads[t_idx]
+
+	t.name = name
+}
+
 json_push_event :: proc(process_id, thread_id: u32, event: JSONEvent) -> (int, int, int) {
 	p_idx, ok1 := vh_find(&process_map, process_id)
 	if !ok1 {
@@ -729,8 +796,7 @@ json_process_events :: proc() {
 		// generate depth mapping
 		for tm in &process.threads {
 			if len(tm.json_events) == 0 {
-				fmt.printf("Thread contains no events? How did we even get here?\n")
-				push_fatal(SpallError.Bug)
+				continue
 			}
 
 			insertion_sort(tm.json_events[:], event_buildsort_proc)

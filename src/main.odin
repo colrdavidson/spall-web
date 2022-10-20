@@ -892,12 +892,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 			for proc_v, _ in processes {
 				if len(processes) > 1 {
-					h1_size := h1_height + (h1_height / 3)
+					h1_size := h1_height + (h1_height / 2)
 					cur_y += h1_size
 				}
 
 				for tm, _ in proc_v.threads {
-					h2_size := h2_height + (h2_height / 3)
+					h2_size := h2_height + (h2_height / 2)
 					cur_y += h2_size + ((f64(len(tm.depths)) * rect_height) + thread_gap)
 				}
 			}
@@ -1040,17 +1040,22 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			h1_size : f64 = 0
 			if len(processes) > 1 {
 				if cur_y > disp_rect.pos.y {
-					row_text := fmt.tprintf("PID: %d", proc_v.process_id)
+					row_text: string
+					if proc_v.name.len > 0 {
+						row_text = fmt.tprintf("%s (PID %d)", in_getstr(proc_v.name), proc_v.process_id)
+					} else {
+						row_text = fmt.tprintf("PID: %d", proc_v.process_id)
+					}
 					draw_text(row_text, Vec2{start_x + 5, cur_y}, h1_font_size, default_font, text_color)
 				}
 
-				h1_size = h1_height + (h1_height / 3)
+				h1_size = h1_height + (h1_height / 2)
 				cur_y += h1_size
 			}
 
 			thread_loop: for tm, t_idx in &proc_v.threads {
 				last_cur_y := cur_y
-				h2_size := h2_height + (h2_height / 3)
+				h2_size := h2_height + (h2_height / 2)
 				cur_y += h2_size
 
 				thread_advance := ((f64(len(tm.depths)) * rect_height) + thread_gap)
@@ -1064,7 +1069,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				}
 
 				if last_cur_y > disp_rect.pos.y {
-					row_text := fmt.tprintf("TID: %d", tm.thread_id)
+					row_text: string
+					if tm.name.len > 0 {
+						row_text = fmt.tprintf("%s (TID %d)", in_getstr(tm.name), tm.thread_id)
+					} else {
+						row_text = fmt.tprintf("TID: %d", tm.thread_id)
+					}
 					draw_text(row_text, Vec2{start_x + 5, last_cur_y}, h2_font_size, default_font, text_color)
 				}
 
@@ -1277,12 +1287,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			proc_loop2: for proc_v, p_idx in processes {
 				h1_size : f64 = 0
 				if len(processes) > 1 {
-					h1_size = h1_height + (h1_height / 3)
+					h1_size = h1_height + (h1_height / 2)
 					cur_y += h1_size
 				}
 
 				for tm, t_idx in proc_v.threads {
-					h2_size := h2_height + (h2_height / 3)
+					h2_size := h2_height + (h2_height / 2)
 					cur_y += h2_size
 					if cur_y > info_pane_y {
 						break proc_loop2

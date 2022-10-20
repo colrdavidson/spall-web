@@ -81,7 +81,8 @@ EventType :: enum u8 {
 	Instant,
 	Complete,
 	Begin,
-	End
+	End,
+	Metadata,
 }
 EventScope :: enum u8 {
 	Global,
@@ -149,6 +150,7 @@ Thread :: struct {
 	current_depth: u16,
 
 	thread_id: u32,
+	name: INStr,
 
 	events: [dynamic]Event,
 	json_events: [dynamic]JSONEvent,
@@ -161,6 +163,7 @@ Thread :: struct {
 
 Process :: struct {
 	min_time: f64,
+	name: INStr,
 
 	process_id: u32,
 	threads: [dynamic]Thread,
