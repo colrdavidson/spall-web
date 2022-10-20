@@ -38,6 +38,7 @@ JSONParser :: struct {
 
 	state: PS,
 	obj_map: KeyMap,
+	path_stack: PathStack,
 
 	// skippy state
 	got_first_char: bool,
@@ -75,6 +76,7 @@ char_class := [128]CharType{}
 
 FieldType :: enum u8 {
 	Invalid = 0,
+	Args,
 	Dur,
 	Name,
 	Pid,
@@ -88,6 +90,7 @@ Field :: struct {
 	type: FieldType,
 }
 fields := [?]Field{ 
+	{"args", .Args}, 
 	{"dur", .Dur}, 
 	{"name", .Name}, 
 	{"pid", .Pid},
@@ -129,6 +132,7 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 
 	jp.got_first_char = false
 	jp.skipper_objs = 0
+	jp.path_stack = path_init(scratch_allocator)
 
 	return jp
 }
@@ -348,13 +352,8 @@ skip_to_start_or_end :: proc(jp: ^JSONParser) -> JSONState {
 	push_fatal(SpallError.InvalidFile)
 }
 
-process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key, value: string) #no_bounds_check {
-	type, ok := km_find(&jp.obj_map, key)
-	if !ok {
-		return
-	}
-
-	#partial switch type {
+process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key: FieldType, value: string) #no_bounds_check {
+	#partial switch key {
 	case .Name:
 		str := in_get(&jp.p.intern, value)
 		ev.name = str
@@ -438,10 +437,11 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 
 	str_start : i64 = 0
 	primitive_start : i64 = 0
+	args_start : i64 = 0
 	in_string := false
 	in_primitive := false
 	in_key := false
-	key_str := ""
+	key_type := FieldType.Invalid
 
 	ev := TempEvent{}
 
@@ -457,9 +457,10 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 			str := string(p.data[str_start:chunk_pos(p)])
 			if depth_count == 1 {
 				if in_key {
-					key_str = str
+					key_type, _ = km_find(&jp.obj_map, str)
 				} else {
-					process_key_value(jp, &ev, key_str, str)
+					process_key_value(jp, &ev, key_type, str)
+					key_type = .Invalid
 				}
 			}
 
@@ -467,7 +468,8 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 		} else if next_state != .Primitive && in_primitive {
 			str := string(p.data[primitive_start:chunk_pos(p)])
 			if depth_count == 1 {
-				process_key_value(jp, &ev, key_str, str)
+				process_key_value(jp, &ev, key_type, str)
+				key_type = .Invalid
 			}
 
 			in_primitive = false
@@ -477,12 +479,25 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 		case .ArrOpen:
 			in_key = false
 		case .ObjOpen:
+			if depth_count == 1 && key_type == .Args {
+				args_start = chunk_pos(p)
+			}
+
 			in_key = true
 			depth_count += 1
 		case .ObjClose:
 			in_key := false
 			depth_count -= 1
-			if depth_count == 0 {
+
+			if depth_count == 1 && key_type == .Args {
+				str := string(p.data[args_start:chunk_pos(p)+1])
+
+				// skip storing args: {}
+				if len(str) > 2 {
+					ev.args = in_get(&jp.p.intern, str)
+				}
+				key_type = .Invalid
+			} else if depth_count == 0 {
 				p.pos += 1
 				state = .EventDone
 
@@ -493,6 +508,7 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 				case .Complete:
 					new_event := JSONEvent{
 						name = ev.name,
+						args = ev.args,
 						duration = ev.duration,
 						self_time = ev.duration,
 						timestamp = ev.timestamp,
@@ -501,6 +517,7 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 				case .Begin:
 					new_event := JSONEvent{
 						name = ev.name,
+						args = ev.args,
 						duration = -1,
 						timestamp = (ev.timestamp) * stamp_scale,
 					}
@@ -783,6 +800,7 @@ json_process_events :: proc() {
 
 				sorted_events[sort_idx] = Event{
 					name = event.name,
+					args = event.args,
 					timestamp = event.timestamp,
 					duration = event.duration,
 					self_time = event.self_time,

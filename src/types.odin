@@ -105,6 +105,7 @@ Instant :: struct #packed {
 
 JSONEvent :: struct #packed {
 	name: INStr,
+	args: INStr,
 	depth: u16,
 	timestamp: f64,
 	duration: f64,
@@ -112,6 +113,7 @@ JSONEvent :: struct #packed {
 }
 Event :: struct #packed {
 	name: INStr,
+	args: INStr,
 	timestamp: f64,
 	duration: f64,
 	self_time: f64,
@@ -139,11 +141,6 @@ Depth :: struct {
 	tree: [dynamic]ChunkNode,
 	bs_events: [dynamic]Event,
 	events: []Event,
-}
-
-IdStack :: struct {
-	arr: [dynamic]int,
-	len: int,
 }
 
 Thread :: struct {
@@ -192,3 +189,44 @@ init_thread :: proc(thread_id: u32) -> Thread {
 	}
 	return t
 }
+
+IdStack :: struct {
+	arr: [dynamic]int,
+	len: int,
+}
+ids_init :: proc(allocator := context.allocator) -> IdStack {
+	return IdStack{ arr = make([dynamic]int, 16, allocator), len = 0 }
+}
+ids_push_back :: proc(s: ^IdStack, id: int) #no_bounds_check {
+	if s.len >= cap(s.arr) {
+		new_capacity := max(uint(8), uint(len(s.arr))*2)
+		resize(&s.arr, int(new_capacity))
+	}
+	s.arr[s.len] = id
+	s.len += 1
+}
+ids_pop_back :: proc(s: ^IdStack) -> int #no_bounds_check {
+	s.len -= 1
+	return s.arr[s.len]
+}
+ids_peek_back :: proc(s: ^IdStack) -> int #no_bounds_check { return s.arr[s.len - 1] }
+ids_clear :: proc(s: ^IdStack) { s.len = 0 }
+
+PathStack :: struct {
+	arr: [dynamic]string,
+	len: int,
+}
+path_init :: proc(allocator := context.allocator) -> PathStack {
+	return PathStack{ arr = make([dynamic]string, 16, allocator), len = 0 }
+}
+path_push_back :: proc(s: ^PathStack, path: string) #no_bounds_check {
+	if s.len >= cap(s.arr) {
+		new_capacity := max(uint(8), uint(len(s.arr))*2)
+		resize(&s.arr, int(new_capacity))
+	}
+	s.arr[s.len] = path
+	s.len += 1
+}
+path_pop_back :: proc(s: ^PathStack) -> string #no_bounds_check { s.len -= 1; return s.arr[s.len] }
+path_peek_back :: proc(s: ^PathStack) -> string #no_bounds_check { return s.arr[s.len - 1] }
+path_clear :: proc(s: ^PathStack) { s.len = 0 }

@@ -276,28 +276,6 @@ generate_selftimes :: proc() {
 	}
 }
 
-ids_init :: proc(allocator := context.allocator) -> IdStack {
-	return IdStack{ arr = make([dynamic]int, 16, allocator), len = 0 }
-}
-ids_push_back :: proc(s: ^IdStack, id: int) #no_bounds_check {
-	if s.len >= cap(s.arr) {
-		new_capacity := max(uint(8), uint(len(s.arr))*2)
-		resize(&s.arr, int(new_capacity))
-	}
-	s.arr[s.len] = id
-	s.len += 1
-}
-ids_pop_back :: proc(s: ^IdStack) -> int #no_bounds_check {
-	s.len -= 1
-	return s.arr[s.len]
-}
-ids_peek_back :: proc(s: ^IdStack) -> int #no_bounds_check {
-	return s.arr[s.len - 1]
-}
-ids_clear :: proc(s: ^IdStack) {
-	s.len = 0
-}
-
 instant_count := 0
 first_chunk: bool
 init_loading_state :: proc(size: u32, name: string) {
