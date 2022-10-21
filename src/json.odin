@@ -34,18 +34,62 @@ TmpKey :: struct {
 	end: i64,
 }
 
+Sample :: struct {
+	node_id: i64,
+	event_idx: i64,
+}
+
+ProfileState :: struct {
+	pid: u32,
+	tid: u32,
+	time: f64,
+	nodes: map[i64]SampleNode,
+	id_stack: Stack(Sample),
+}
+
 JSONParser :: struct {
 	p: Parser,
 
 	state: PS,
 	obj_map: KeyMap,
-	path_stack: PathStack,
+	profiles: map[u64]ProfileState,
 
 	// skippy state
 	got_first_char: bool,
 	skipper_objs: int,
 	event_start: bool,
 }
+
+SampleNode :: struct {
+	id: i64,
+	parent: i64,
+	name: INStr,
+	is_other: bool,
+}
+
+Node :: struct {
+	id: i64,
+	parent: i64,
+	callFrame: struct {
+		lineNumber: i64,
+		columnNumber: i64,
+		scriptId: i64,
+
+		codeType: string,
+		functionName: string,
+		url: string,
+	},
+}
+ChunkArgs :: struct {
+	data: struct {
+		cpuProfile: struct {
+			nodes:   [dynamic]Node,
+			samples: [dynamic]i64,
+		},
+		timeDeltas: [dynamic]i64,
+	},
+}
+
 
 CharType :: enum u8 {
 	Any = 0,
@@ -133,7 +177,7 @@ init_json_parser :: proc(total_size: u32) -> JSONParser {
 
 	jp.got_first_char = false
 	jp.skipper_objs = 0
-	jp.path_stack = path_init(scratch_allocator)
+	jp.profiles = make(map[u64]ProfileState, 16, scratch_allocator)
 
 	return jp
 }
@@ -418,7 +462,7 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key: FieldType, value
 }
 
 process_event :: proc(ev: TempEvent) {
-	switch ev.type {
+	#partial switch ev.type {
 	case .Instant:
 		e := ev
 		e.timestamp *= stamp_scale
@@ -437,13 +481,13 @@ process_event :: proc(ev: TempEvent) {
 			name = ev.name,
 			args = ev.args,
 			duration = -1,
-			timestamp = (ev.timestamp) * stamp_scale,
+			timestamp = ev.timestamp,
 		}
 
 		p_idx, t_idx, e_idx := json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
 
 		thread := &processes[p_idx].threads[t_idx]
-		ids_push_back(&thread.bande_q, e_idx)
+		stack_push_back(&thread.bande_q, e_idx)
 	case .End:
 		p_idx, ok1 := vh_find(&process_map, u32(ev.process_id))
 		if !ok1 {
@@ -458,20 +502,188 @@ process_event :: proc(ev: TempEvent) {
 
 		thread := &processes[p_idx].threads[t_idx]
 		if thread.bande_q.len > 0 {
-			je_idx := ids_pop_back(&thread.bande_q)
+			je_idx := stack_pop_back(&thread.bande_q)
 			jev := &thread.json_events[je_idx]
-			jev.duration = (ev.timestamp - jev.timestamp) * stamp_scale
+			jev.duration = ev.timestamp - jev.timestamp
 			jev.self_time = jev.duration
 			thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 			total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 		}
 	case .Sample:
+		meta_str := in_getstr(ev.name)
+		profile_key := u64(ev.process_id) << 32 | u64(ev.thread_id)
+		if meta_str == "Profile" {
+			blob, err := json.parse_string(in_getstr(ev.args), json.DEFAULT_SPECIFICATION, false, scratch2_allocator)
+			if err != nil {
+				fmt.printf("Failed to parse args?\n")
+				push_fatal(SpallError.InvalidFile)
+			}
+
+			arg_map, _ := blob.(json.Object)
+			data_map, ok := arg_map["data"].(json.Object)
+			if !ok {
+				fmt.printf("Invalid %s\n", meta_str)
+				push_fatal(SpallError.InvalidFile)
+			}
+			start_time, ok2 := data_map["startTime"].(json.Float)
+			if !ok2 {
+				fmt.printf("Invalid %s\n", meta_str)
+				push_fatal(SpallError.InvalidFile)
+			}
+			free_all(scratch2_allocator)
+
+			p_idx := setup_pid(ev.process_id)
+			t_idx := setup_tid(p_idx, ev.thread_id)
+
+			ps := ProfileState{
+				pid = ev.process_id,
+				tid = ev.thread_id,
+				time = start_time,
+				nodes = make(map[i64]SampleNode, 16, scratch_allocator),
+			}
+			stack_init(&ps.id_stack, scratch_allocator)
+
+			jp.profiles[profile_key] = ps
+		} else if meta_str == "ProfileChunk" {
+			p_idx := setup_pid(ev.process_id)
+			t_idx := setup_tid(p_idx, ev.thread_id)
+
+			profile, ok := &jp.profiles[profile_key]
+			if !ok {
+				ps := ProfileState{
+					pid   = ev.process_id,
+					tid   = ev.thread_id,
+					time  = ev.timestamp,
+					nodes = make(map[i64]SampleNode, 16, scratch_allocator),
+				}
+				stack_init(&ps.id_stack, scratch_allocator)
+				jp.profiles[profile_key] = ps
+				profile, _ = &jp.profiles[profile_key]
+			}
+
+			thread := &processes[p_idx].threads[t_idx]
+
+			chunk := ChunkArgs{}
+
+			err := json.unmarshal_string(in_getstr(ev.args), &chunk, json.DEFAULT_SPECIFICATION, scratch2_allocator)
+			if err != nil {
+				fmt.printf("Failed to parse args?\n")
+				push_fatal(SpallError.InvalidFile)
+			}
+
+			for node in chunk.data.cpuProfile.nodes {
+				func_name := in_get(&jp.p.intern, node.callFrame.functionName)
+				is_other := node.callFrame.codeType == "other"
+				profile.nodes[node.id] = SampleNode{
+					id = node.id,
+					parent = node.parent,
+					name = func_name,
+					is_other = is_other,
+				}
+			}
+
+			for _, i in chunk.data.cpuProfile.samples {
+				cur_sample_id := chunk.data.cpuProfile.samples[i]
+				cur_sample_node := profile.nodes[cur_sample_id]
+				delta := chunk.data.timeDeltas[i]
+				if delta < 0 {
+					continue
+				}
+
+				profile.time += f64(delta)
+				stack_top_id : i64 = 0
+				if profile.id_stack.len > 0 {
+					tmp := stack_peek_back(&profile.id_stack)
+					stack_top_id = tmp.node_id
+				}
+
+				if stack_top_id == cur_sample_id {
+					// keep accruing dt
+					continue
+				} else if cur_sample_node.is_other && in_getstr(cur_sample_node.name) == "(garbage collector)" {
+
+					// ugh. thanks Google. GC events are weird.
+					new_event := JSONEvent{
+						name = cur_sample_node.name,
+						duration = -1,
+						timestamp = profile.time,
+					}
+
+					_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, new_event)
+
+					sample := Sample{node_id = cur_sample_id, event_idx = i64(e_idx)}
+					stack_push_back(&profile.id_stack, sample)
+				} else {
+					// changing to a new stack
+
+					ancestor_idx := -1
+					for i := 0; i < profile.id_stack.len; i += 1 {
+						tmp := profile.id_stack.arr[i]
+						if tmp.node_id == cur_sample_id {
+							ancestor_idx = i
+							break
+						}
+					}
+
+					cycle_count := 0
+					nodes_to_begin: [dynamic]i64 
+					if ancestor_idx < 0 {
+						nodes_to_begin = make([dynamic]i64, scratch2_allocator)
+						cur_node_id := cur_sample_id
+
+						find_ancestor:
+						for cur_node_id != 0 {
+							for i := profile.id_stack.len - 1; i >= 0; i -= 1 {
+								sample := profile.id_stack.arr[i]
+								if sample.node_id == cur_node_id {
+									ancestor_idx = i
+									break find_ancestor
+								}
+							}
+
+							append(&nodes_to_begin, cur_node_id)
+							cur_node_id = profile.nodes[cur_node_id].parent
+
+							if cycle_count > 1000 {
+								fmt.printf("stack too deep, do we have a cycle?\n")
+								push_fatal(SpallError.InvalidFile)
+							}
+							cycle_count += 1
+						}
+					}
+
+					for i := profile.id_stack.len - 1; i > ancestor_idx; i -= 1 {
+						sample := stack_pop_back(&profile.id_stack)
+						node := profile.nodes[sample.node_id]
+						json_patch_end(p_idx, t_idx, sample.event_idx, profile.time)
+					}
+
+					for i := len(nodes_to_begin) - 1; i >= 0; i -= 1 {
+						node_id := nodes_to_begin[i]
+						node := profile.nodes[node_id]
+
+						if node.name.len == 0 {
+							node.name = in_get(&jp.p.intern, "(anonymous)")
+						}
+
+						new_event := JSONEvent{
+							name = node.name,
+							duration = -1,
+							timestamp = profile.time,
+						}
+
+						_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, new_event)
+						sample := Sample{node_id = node_id, event_idx = i64(e_idx)}
+						stack_push_back(&profile.id_stack, sample)
+					}
+				}
+			}
+			free_all(scratch2_allocator)
+		}
 	case .Metadata:
 		meta_str := in_getstr(ev.name)
 		if meta_str == "thread_name" || meta_str == "process_name" {
-			arena := cast(^Arena)scratch_allocator.data
-			init_offset := arena.offset
-			blob, err := json.parse_string(in_getstr(ev.args), json.DEFAULT_SPECIFICATION, false, scratch_allocator)
+			blob, err := json.parse_string(in_getstr(ev.args), json.DEFAULT_SPECIFICATION, false, scratch2_allocator)
 			if err != nil {
 				fmt.printf("Failed to parse args?\n")
 				push_fatal(SpallError.InvalidFile)
@@ -485,12 +697,15 @@ process_event :: proc(ev: TempEvent) {
 			}
 
 			name := in_get(&jp.p.intern, m_name)
-			arena.offset = init_offset
+			free_all(scratch2_allocator)
 
 			if meta_str == "thread_name" {
-				assign_threadname(ev.process_id, ev.thread_id, name)
+				p_idx := setup_pid(ev.process_id)
+				t_idx := setup_tid(p_idx, ev.thread_id)
+				processes[p_idx].threads[t_idx].name = name
 			} else if meta_str == "process_name" {
-				assign_pidname(ev.process_id, name)
+				p_idx := setup_pid(ev.process_id)
+				processes[p_idx].name = name
 			}
 		}
 	}
@@ -619,7 +834,7 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 		if !jp.event_start {
 			state := the_skipper(jp)
 			if p.pos >= p.total_size {
-				finish_loading()
+				json_finish_loading(jp)
 				return
 			}
 
@@ -641,11 +856,45 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
 			return
 		case .Finished:
-			finish_loading()
+			json_finish_loading(jp)
 			return
 		}
 	}
 	return
+}
+
+json_finish_loading :: proc(jp: ^JSONParser) {
+	for _, profile in &jp.profiles {
+		p_idx, ok1 := vh_find(&process_map, profile.pid)
+		if !ok1 {
+			fmt.printf("finish_loading | invalid end in profile?\n")
+			continue
+		}
+
+		t_idx, ok2 := vh_find(&processes[p_idx].thread_map, profile.tid)
+		if !ok2 {
+			fmt.printf("finish_loading | invalid end in profile?\n")
+			continue
+		}
+
+		for i := profile.id_stack.len - 1; i >= 0; i -= 1 {
+			sample := stack_pop_back(&profile.id_stack)
+			json_patch_end(p_idx, t_idx, sample.event_idx, profile.time)
+			node := profile.nodes[sample.node_id]
+		}
+	}
+
+	free_all(scratch2_allocator)
+	finish_loading()
+}
+
+json_patch_end :: proc(p_idx, t_idx: int, e_idx: i64, end_time: f64) {
+	thread := &processes[p_idx].threads[t_idx]
+	jev := &thread.json_events[e_idx]
+	jev.duration = end_time - jev.timestamp
+	jev.self_time = jev.duration
+	thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
+	total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 }
 
 json_push_instant :: proc(event: TempEvent) {
@@ -661,13 +910,7 @@ json_push_instant :: proc(event: TempEvent) {
 		return
 	}
 
-	p_idx, ok1 := vh_find(&process_map, event.process_id)
-	if !ok1 {
-		append(&processes, init_process(event.process_id))
-		p_idx = len(processes) - 1
-		vh_insert(&process_map, event.process_id, p_idx)
-	}
-
+	p_idx := setup_pid(event.process_id)
 	p := &processes[p_idx]
 
 	if event.scope == .Process {
@@ -675,15 +918,7 @@ json_push_instant :: proc(event: TempEvent) {
 		return
 	}
 
-	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, event.thread_id)
-	if !ok2 {
-		threads := &processes[p_idx].threads
-		append(threads, init_thread(event.thread_id))
-
-		t_idx = len(threads) - 1
-		thread_map := &processes[p_idx].thread_map
-		vh_insert(thread_map, event.thread_id, t_idx)
-	}
+	t_idx := setup_tid(p_idx, event.thread_id)
 
 	t := &p.threads[t_idx]
 	if event.scope == .Thread {
@@ -692,61 +927,10 @@ json_push_instant :: proc(event: TempEvent) {
 	}
 }
 
-assign_pidname :: proc(process_id: u32, name: INStr) {
-	p_idx, ok1 := vh_find(&process_map, process_id)
-	if !ok1 {
-		append(&processes, init_process(process_id))
-		p_idx = len(processes) - 1
-		vh_insert(&process_map, process_id, p_idx)
-	}
-	p := &processes[p_idx]
-
-	p.name = name
-}
-
-assign_threadname :: proc(process_id, thread_id: u32, name: INStr) {
-	p_idx, ok1 := vh_find(&process_map, process_id)
-	if !ok1 {
-		append(&processes, init_process(process_id))
-		p_idx = len(processes) - 1
-		vh_insert(&process_map, process_id, p_idx)
-	}
-
-	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, thread_id)
-	if !ok2 {
-		threads := &processes[p_idx].threads
-
-		append(threads, init_thread(thread_id))
-
-		t_idx = len(threads) - 1
-		thread_map := &processes[p_idx].thread_map
-		vh_insert(thread_map, thread_id, t_idx)
-	}
-
-	p := &processes[p_idx]
-	t := &p.threads[t_idx]
-
-	t.name = name
-}
 
 json_push_event :: proc(process_id, thread_id: u32, event: JSONEvent) -> (int, int, int) {
-	p_idx, ok1 := vh_find(&process_map, process_id)
-	if !ok1 {
-		append(&processes, init_process(process_id))
-		p_idx = len(processes) - 1
-		vh_insert(&process_map, process_id, p_idx)
-	}
-
-	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, thread_id)
-	if !ok2 {
-		threads := &processes[p_idx].threads
-
-		append(threads, init_thread(thread_id))
-
-		t_idx = len(threads) - 1
-		thread_map := &processes[p_idx].thread_map
-		vh_insert(thread_map, thread_id, t_idx)
-	}
+	p_idx := setup_pid(process_id)
+	t_idx := setup_tid(p_idx, thread_id)
 
 	event_count += 1
 
@@ -791,7 +975,8 @@ insertion_sort :: proc(data: $T/[]$E, less: proc(i, j: E) -> bool) {
 }
 
 json_process_events :: proc() {
-	ev_stack := ids_init(context.temp_allocator)
+	ev_stack: Stack(int)
+	stack_init(&ev_stack, context.temp_allocator)
 
 	slice.sort_by(global_instants[:], instant_rendersort_proc)
 
@@ -812,14 +997,14 @@ json_process_events :: proc() {
 			free_all(scratch_allocator)
 			depth_counts := make([dynamic]uint, 0, 64, scratch_allocator)
 
-			ids_clear(&ev_stack)
+			stack_clear(&ev_stack)
 			for event, e_idx in &tm.json_events {
 				cur_start := event.timestamp
 				cur_end   := event.timestamp + bound_duration(event, tm.max_time)
 				if ev_stack.len == 0 {
-					ids_push_back(&ev_stack, e_idx)
+					stack_push_back(&ev_stack, e_idx)
 				} else {
-					prev_e_idx := ids_peek_back(&ev_stack)
+					prev_e_idx := stack_peek_back(&ev_stack)
 					prev_ev := tm.json_events[prev_e_idx]
 
 					prev_start := prev_ev.timestamp
@@ -827,24 +1012,24 @@ json_process_events :: proc() {
 
 					// if it fits within the parent
 					if cur_start >= prev_start && cur_end <= prev_end {
-						ids_push_back(&ev_stack, e_idx)
+						stack_push_back(&ev_stack, e_idx)
 					} else {
 
 						// while it doesn't overlap the parent
 						for ev_stack.len > 0 {
-							prev_e_idx = ids_peek_back(&ev_stack)
+							prev_e_idx = stack_peek_back(&ev_stack)
 							prev_ev = tm.json_events[prev_e_idx]
 
 							prev_start = prev_ev.timestamp
 							prev_end   = prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
 
 							if cur_start >= prev_start && cur_end > prev_end {
-								ids_pop_back(&ev_stack)
+								stack_pop_back(&ev_stack)
 							} else {
 								break;
 							}
 						}
-						ids_push_back(&ev_stack, e_idx)
+						stack_push_back(&ev_stack, e_idx)
 					}
 				}
 

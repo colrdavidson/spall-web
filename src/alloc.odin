@@ -68,6 +68,7 @@ arena_allocator_proc :: proc(
 
 		arena.offset += total_size
 		arena.peak_used = max(arena.peak_used, arena.offset)
+		mem.zero(ptr, size)
 		return mem.byte_slice(ptr, size), nil
 
 	case .Free:
@@ -78,7 +79,7 @@ arena_allocator_proc :: proc(
 
 	case .Resize:
 		return mem.default_resize_bytes_align(
-            mem.byte_slice(old_memory, old_size), size, alignment, arena_allocator(arena)
+            mem.byte_slice(old_memory, old_size), size, alignment, arena_allocator(arena), location
         )
 
 	case .Query_Features:
@@ -157,7 +158,7 @@ growing_arena_allocator_proc :: proc(
 
 		arena.offset = int(uint(arena.offset) + uint(total_size))
 		arena.peak_used = int(max(uint(arena.peak_used), uint(arena.offset)))
-
+		mem.zero(ptr, size)
 		return _byte_slice(ptr, size), nil
 
 	case .Free:
@@ -167,7 +168,7 @@ growing_arena_allocator_proc :: proc(
 		arena.offset = 0
 
 	case .Resize:
-		return mem.default_resize_bytes_align(_byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena))
+		return mem.default_resize_bytes_align(_byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena), location)
 
 	case .Query_Features:
 		set := (^mem.Allocator_Mode_Set)(old_memory)

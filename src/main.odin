@@ -17,10 +17,12 @@ big_global_arena := Arena{}
 small_global_arena := Arena{}
 temp_arena := Arena{}
 scratch_arena := Arena{}
+scratch2_arena := Arena{}
 
 big_global_allocator: mem.Allocator
 small_global_allocator: mem.Allocator
 scratch_allocator: mem.Allocator
+scratch2_allocator: mem.Allocator
 temp_allocator: mem.Allocator
 
 current_alloc_offset := 0
@@ -127,12 +129,14 @@ CHUNK_SIZE :: 10 * 1024 * 1024
 main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
-	temp_data, _    := js.page_alloc(ONE_MB_PAGES * 15)
-	scratch_data, _ := js.page_alloc(ONE_MB_PAGES * 20)
+	temp_data, _     := js.page_alloc(ONE_MB_PAGES * 15)
+	scratch_data, _  := js.page_alloc(ONE_MB_PAGES * 20)
+	scratch2_data, _ := js.page_alloc(ONE_MB_PAGES * 50)
 	small_global_data, _ := js.page_alloc(ONE_MB_PAGES * 1)
 
 	arena_init(&temp_arena, temp_data)
 	arena_init(&scratch_arena, scratch_data)
+	arena_init(&scratch2_arena, scratch2_data)
 	arena_init(&small_global_arena, small_global_data)
 
 	// This must be init last, because it grows infinitely.
@@ -146,6 +150,7 @@ main :: proc() {
 	// need to touch scratch
 	temp_allocator = arena_allocator(&temp_arena)
 	scratch_allocator = arena_allocator(&scratch_arena)
+	scratch2_allocator = arena_allocator(&scratch2_arena)
 	small_global_allocator = arena_allocator(&small_global_arena)
 
 	big_global_allocator = growing_arena_allocator(&big_global_arena)

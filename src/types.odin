@@ -78,6 +78,7 @@ StatOffset :: struct {
 }
 
 EventType :: enum u8 {
+	Unknown = 0,
 	Instant,
 	Complete,
 	Begin,
@@ -159,7 +160,7 @@ Thread :: struct {
 	depths: [dynamic]Depth,
 	instants: [dynamic]Instant,
 
-	bande_q: IdStack,
+	bande_q: Stack(int),
 }
 
 Process :: struct {
@@ -189,48 +190,39 @@ init_thread :: proc(thread_id: u32) -> Thread {
 		events = make([dynamic]Event, big_global_allocator),
 		depths = make([dynamic]Depth, small_global_allocator),
 		instants = make([dynamic]Instant, big_global_allocator),
-		bande_q = ids_init(scratch_allocator),
 	}
+	stack_init(&t.bande_q, scratch_allocator)
 	return t
 }
 
-IdStack :: struct {
-	arr: [dynamic]int,
+Stack :: struct($T: typeid) {
+	arr: [dynamic]T,
 	len: int,
 }
-ids_init :: proc(allocator := context.allocator) -> IdStack {
-	return IdStack{ arr = make([dynamic]int, 16, allocator), len = 0 }
+
+stack_init :: proc(s: ^$Q/Stack($T), allocator := context.allocator) {
+	s.arr = make([dynamic]T, 16, allocator)
+	s.len = 0
 }
-ids_push_back :: proc(s: ^IdStack, id: int) #no_bounds_check {
+stack_push_back :: proc(s: ^$Q/Stack($T), elem: T) #no_bounds_check {
 	if s.len >= cap(s.arr) {
 		new_capacity := max(uint(8), uint(len(s.arr))*2)
 		resize(&s.arr, int(new_capacity))
 	}
-	s.arr[s.len] = id
+	s.arr[s.len] = elem
 	s.len += 1
 }
-ids_pop_back :: proc(s: ^IdStack) -> int #no_bounds_check {
+stack_pop_back :: proc(s: ^$Q/Stack($T)) -> T #no_bounds_check {
 	s.len -= 1
 	return s.arr[s.len]
 }
-ids_peek_back :: proc(s: ^IdStack) -> int #no_bounds_check { return s.arr[s.len - 1] }
-ids_clear :: proc(s: ^IdStack) { s.len = 0 }
+stack_peek_back :: proc(s: ^$Q/Stack($T)) -> T #no_bounds_check { return s.arr[s.len - 1] }
+stack_clear :: proc(s: ^$Q/Stack($T)) { s.len = 0 }
 
-PathStack :: struct {
-	arr: [dynamic]string,
-	len: int,
-}
-path_init :: proc(allocator := context.allocator) -> PathStack {
-	return PathStack{ arr = make([dynamic]string, 16, allocator), len = 0 }
-}
-path_push_back :: proc(s: ^PathStack, path: string) #no_bounds_check {
-	if s.len >= cap(s.arr) {
-		new_capacity := max(uint(8), uint(len(s.arr))*2)
-		resize(&s.arr, int(new_capacity))
+print_stack :: proc(s: ^$Q/Stack($T)) {
+	fmt.printf("Stack{{\n")
+	for i:= 0; i < s.len; i += 1 {
+		fmt.printf("%#v\n", s.arr[i])
 	}
-	s.arr[s.len] = path
-	s.len += 1
+	fmt.printf("}}\n")
 }
-path_pop_back :: proc(s: ^PathStack) -> string #no_bounds_check { s.len -= 1; return s.arr[s.len] }
-path_peek_back :: proc(s: ^PathStack) -> string #no_bounds_check { return s.arr[s.len - 1] }
-path_clear :: proc(s: ^PathStack) { s.len = 0 }

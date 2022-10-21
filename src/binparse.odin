@@ -37,6 +37,32 @@ init_parser :: proc(size: u32) -> Parser {
 	return p
 }
 
+setup_pid :: proc(process_id: u32) -> int {
+	p_idx, ok := vh_find(&process_map, process_id)
+	if !ok {
+		append(&processes, init_process(process_id))
+		p_idx = len(processes) - 1
+		vh_insert(&process_map, process_id, p_idx)
+	}
+
+	return p_idx
+}
+
+setup_tid :: proc(p_idx: int, thread_id: u32) -> int {
+	t_idx, ok := vh_find(&processes[p_idx].thread_map, thread_id)
+	if !ok {
+		threads := &processes[p_idx].threads
+
+		append(threads, init_thread(thread_id))
+
+		t_idx = len(threads) - 1
+		thread_map := &processes[p_idx].thread_map
+		vh_insert(thread_map, thread_id, t_idx)
+	}
+
+	return t_idx
+}
+
 get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
@@ -141,7 +167,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 
 			p_idx, t_idx, e_idx := bin_push_event(event.process_id, event.thread_id, new_event)
 			thread := &processes[p_idx].threads[t_idx]
-			ids_push_back(&thread.bande_q, e_idx)
+			stack_push_back(&thread.bande_q, e_idx)
 
 			event_count += 1
 		case .End:
@@ -158,7 +184,7 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 
 			thread := &processes[p_idx].threads[t_idx]
 			if thread.bande_q.len > 0 {
-				e_idx := ids_pop_back(&thread.bande_q)
+				e_idx := stack_pop_back(&thread.bande_q)
 
 				thread.current_depth -= 1
 				depth := &thread.depths[thread.current_depth]
@@ -175,22 +201,8 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 }
 
 bin_push_event :: proc(process_id, thread_id: u32, event: Event) -> (int, int, int) {
-	p_idx, ok1 := vh_find(&process_map, process_id)
-	if !ok1 {
-		append(&processes, init_process(process_id))
-		p_idx = len(processes) - 1
-		vh_insert(&process_map, process_id, p_idx)
-	}
-
-	t_idx, ok2 := vh_find(&processes[p_idx].thread_map, thread_id)
-	if !ok2 {
-		threads := &processes[p_idx].threads
-		append(threads, init_thread(thread_id))
-
-		t_idx = len(threads) - 1
-		thread_map := &processes[p_idx].thread_map
-		vh_insert(thread_map, thread_id, t_idx)
-	}
+	p_idx := setup_pid(process_id)
+	t_idx := setup_tid(p_idx, thread_id)
 
 	p := &processes[p_idx]
 	p.min_time = min(p.min_time, event.timestamp)

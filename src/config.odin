@@ -292,6 +292,7 @@ init_loading_state :: proc(size: u32, name: string) {
 
 	// wipe all allocators
 	free_all(scratch_allocator)
+	free_all(scratch2_allocator)
 	free_all(small_global_allocator)
 	free_all(big_global_allocator)
 	free_all(temp_allocator)
@@ -323,6 +324,7 @@ finish_loading :: proc () {
 
 	free_all(temp_allocator)
 	free_all(scratch_allocator)
+	free_all(scratch2_allocator)
 
 	start_bench("process and sort events")
 	if is_json {
