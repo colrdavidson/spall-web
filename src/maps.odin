@@ -178,14 +178,7 @@ in_get :: proc(v: ^INMap, key: string) -> INStr {
 
 			return in_str
 		} else if in_getstr(v.entries[e_idx]) == key {
-			ret := v.entries[e_idx]
-			if i == 0 {
-				return ret
-			}
-
-			idx2 := (hv + i - 1) & v.len_minus_one
-			v.hashes[idx], v.hashes[idx2] = v.hashes[idx2], v.hashes[idx]
-			return ret
+			return v.entries[e_idx]
 		}
 	}
 

@@ -117,7 +117,7 @@ PS :: enum u8 {
 	Primitive,
 }
 
-char_class := [128]CharType{}
+char_class := [256]CharType{}
 
 FieldType :: enum u8 {
 	Invalid = 0,
@@ -461,6 +461,179 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key: FieldType, value
 	}
 }
 
+process_sample :: proc(ev: TempEvent) {
+	meta_str := in_getstr(ev.name)
+	profile_key := u64(ev.process_id) << 32 | u64(ev.thread_id)
+	if meta_str == "Profile" {
+		blob, err := json.parse_string(in_getstr(ev.args), json.DEFAULT_SPECIFICATION, false, scratch2_allocator)
+		if err != nil {
+			fmt.printf("Failed to parse args?\n")
+			push_fatal(SpallError.InvalidFile)
+		}
+
+		arg_map, _ := blob.(json.Object)
+		data_map, ok := arg_map["data"].(json.Object)
+		if !ok {
+			fmt.printf("Invalid %s\n", meta_str)
+			push_fatal(SpallError.InvalidFile)
+		}
+		start_time, ok2 := data_map["startTime"].(json.Float)
+		if !ok2 {
+			fmt.printf("Invalid %s\n", meta_str)
+			push_fatal(SpallError.InvalidFile)
+		}
+		free_all(scratch2_allocator)
+
+		p_idx := setup_pid(ev.process_id)
+		t_idx := setup_tid(p_idx, ev.thread_id)
+
+		ps := ProfileState{
+			pid = ev.process_id,
+			tid = ev.thread_id,
+			time = start_time,
+			nodes = make(map[i64]SampleNode, 16, scratch_allocator),
+		}
+		stack_init(&ps.id_stack, scratch_allocator)
+
+		jp.profiles[profile_key] = ps
+	} else if meta_str == "ProfileChunk" {
+		p_idx := setup_pid(ev.process_id)
+		t_idx := setup_tid(p_idx, ev.thread_id)
+
+		profile, ok := &jp.profiles[profile_key]
+		if !ok {
+			ps := ProfileState{
+				pid   = ev.process_id,
+				tid   = ev.thread_id,
+				time  = ev.timestamp,
+				nodes = make(map[i64]SampleNode, 16, scratch_allocator),
+			}
+			stack_init(&ps.id_stack, scratch_allocator)
+			jp.profiles[profile_key] = ps
+			profile, _ = &jp.profiles[profile_key]
+		}
+
+		thread := &processes[p_idx].threads[t_idx]
+
+		chunk := ChunkArgs{}
+
+		err := json.unmarshal_string(in_getstr(ev.args), &chunk, json.DEFAULT_SPECIFICATION, scratch2_allocator)
+		if err != nil {
+			fmt.printf("Failed to parse args?\n")
+			push_fatal(SpallError.InvalidFile)
+		}
+
+		for node in chunk.data.cpuProfile.nodes {
+			func_name := in_get(&jp.p.intern, node.callFrame.functionName)
+			is_other := node.callFrame.codeType == "other"
+			profile.nodes[node.id] = SampleNode{
+				id = node.id,
+				parent = node.parent,
+				name = func_name,
+				is_other = is_other,
+			}
+		}
+
+		for _, i in chunk.data.cpuProfile.samples {
+			cur_sample_id := chunk.data.cpuProfile.samples[i]
+			cur_sample_node := profile.nodes[cur_sample_id]
+			delta := chunk.data.timeDeltas[i]
+			if delta < 0 {
+				continue
+			}
+
+			profile.time += f64(delta)
+			stack_top_id : i64 = 0
+			if profile.id_stack.len > 0 {
+				tmp := stack_peek_back(&profile.id_stack)
+				stack_top_id = tmp.node_id
+			}
+
+			if stack_top_id == cur_sample_id {
+				// keep accruing dt
+				continue
+			} else if cur_sample_node.is_other && in_getstr(cur_sample_node.name) == "(garbage collector)" {
+
+				// ugh. thanks Google. GC events are weird.
+				new_event := JSONEvent{
+					name = cur_sample_node.name,
+					duration = -1,
+					timestamp = profile.time,
+				}
+
+				_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, new_event)
+
+				sample := Sample{node_id = cur_sample_id, event_idx = i64(e_idx)}
+				stack_push_back(&profile.id_stack, sample)
+			} else {
+				// changing to a new stack
+
+				ancestor_idx := -1
+				for i := 0; i < profile.id_stack.len; i += 1 {
+					tmp := profile.id_stack.arr[i]
+					if tmp.node_id == cur_sample_id {
+						ancestor_idx = i
+						break
+					}
+				}
+
+				cycle_count := 0
+				nodes_to_begin: [dynamic]i64 
+				if ancestor_idx < 0 {
+					nodes_to_begin = make([dynamic]i64, scratch2_allocator)
+					cur_node_id := cur_sample_id
+
+					find_ancestor:
+					for cur_node_id != 0 {
+						for i := profile.id_stack.len - 1; i >= 0; i -= 1 {
+							sample := profile.id_stack.arr[i]
+							if sample.node_id == cur_node_id {
+								ancestor_idx = i
+								break find_ancestor
+							}
+						}
+
+						append(&nodes_to_begin, cur_node_id)
+						cur_node_id = profile.nodes[cur_node_id].parent
+
+						if cycle_count > 1000 {
+							fmt.printf("stack too deep, do we have a cycle?\n")
+							push_fatal(SpallError.InvalidFile)
+						}
+						cycle_count += 1
+					}
+				}
+
+				for i := profile.id_stack.len - 1; i > ancestor_idx; i -= 1 {
+					sample := stack_pop_back(&profile.id_stack)
+					node := profile.nodes[sample.node_id]
+					json_patch_end(p_idx, t_idx, sample.event_idx, profile.time)
+				}
+
+				for i := len(nodes_to_begin) - 1; i >= 0; i -= 1 {
+					node_id := nodes_to_begin[i]
+					node := profile.nodes[node_id]
+
+					if node.name.len == 0 {
+						node.name = in_get(&jp.p.intern, "(anonymous)")
+					}
+
+					new_event := JSONEvent{
+						name = node.name,
+						duration = -1,
+						timestamp = profile.time,
+					}
+
+					_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, new_event)
+					sample := Sample{node_id = node_id, event_idx = i64(e_idx)}
+					stack_push_back(&profile.id_stack, sample)
+				}
+			}
+		}
+		free_all(scratch2_allocator)
+	}
+}
+
 process_event :: proc(ev: TempEvent) {
 	#partial switch ev.type {
 	case .Instant:
@@ -510,176 +683,7 @@ process_event :: proc(ev: TempEvent) {
 			total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 		}
 	case .Sample:
-		meta_str := in_getstr(ev.name)
-		profile_key := u64(ev.process_id) << 32 | u64(ev.thread_id)
-		if meta_str == "Profile" {
-			blob, err := json.parse_string(in_getstr(ev.args), json.DEFAULT_SPECIFICATION, false, scratch2_allocator)
-			if err != nil {
-				fmt.printf("Failed to parse args?\n")
-				push_fatal(SpallError.InvalidFile)
-			}
-
-			arg_map, _ := blob.(json.Object)
-			data_map, ok := arg_map["data"].(json.Object)
-			if !ok {
-				fmt.printf("Invalid %s\n", meta_str)
-				push_fatal(SpallError.InvalidFile)
-			}
-			start_time, ok2 := data_map["startTime"].(json.Float)
-			if !ok2 {
-				fmt.printf("Invalid %s\n", meta_str)
-				push_fatal(SpallError.InvalidFile)
-			}
-			free_all(scratch2_allocator)
-
-			p_idx := setup_pid(ev.process_id)
-			t_idx := setup_tid(p_idx, ev.thread_id)
-
-			ps := ProfileState{
-				pid = ev.process_id,
-				tid = ev.thread_id,
-				time = start_time,
-				nodes = make(map[i64]SampleNode, 16, scratch_allocator),
-			}
-			stack_init(&ps.id_stack, scratch_allocator)
-
-			jp.profiles[profile_key] = ps
-		} else if meta_str == "ProfileChunk" {
-			p_idx := setup_pid(ev.process_id)
-			t_idx := setup_tid(p_idx, ev.thread_id)
-
-			profile, ok := &jp.profiles[profile_key]
-			if !ok {
-				ps := ProfileState{
-					pid   = ev.process_id,
-					tid   = ev.thread_id,
-					time  = ev.timestamp,
-					nodes = make(map[i64]SampleNode, 16, scratch_allocator),
-				}
-				stack_init(&ps.id_stack, scratch_allocator)
-				jp.profiles[profile_key] = ps
-				profile, _ = &jp.profiles[profile_key]
-			}
-
-			thread := &processes[p_idx].threads[t_idx]
-
-			chunk := ChunkArgs{}
-
-			err := json.unmarshal_string(in_getstr(ev.args), &chunk, json.DEFAULT_SPECIFICATION, scratch2_allocator)
-			if err != nil {
-				fmt.printf("Failed to parse args?\n")
-				push_fatal(SpallError.InvalidFile)
-			}
-
-			for node in chunk.data.cpuProfile.nodes {
-				func_name := in_get(&jp.p.intern, node.callFrame.functionName)
-				is_other := node.callFrame.codeType == "other"
-				profile.nodes[node.id] = SampleNode{
-					id = node.id,
-					parent = node.parent,
-					name = func_name,
-					is_other = is_other,
-				}
-			}
-
-			for _, i in chunk.data.cpuProfile.samples {
-				cur_sample_id := chunk.data.cpuProfile.samples[i]
-				cur_sample_node := profile.nodes[cur_sample_id]
-				delta := chunk.data.timeDeltas[i]
-				if delta < 0 {
-					continue
-				}
-
-				profile.time += f64(delta)
-				stack_top_id : i64 = 0
-				if profile.id_stack.len > 0 {
-					tmp := stack_peek_back(&profile.id_stack)
-					stack_top_id = tmp.node_id
-				}
-
-				if stack_top_id == cur_sample_id {
-					// keep accruing dt
-					continue
-				} else if cur_sample_node.is_other && in_getstr(cur_sample_node.name) == "(garbage collector)" {
-
-					// ugh. thanks Google. GC events are weird.
-					new_event := JSONEvent{
-						name = cur_sample_node.name,
-						duration = -1,
-						timestamp = profile.time,
-					}
-
-					_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, new_event)
-
-					sample := Sample{node_id = cur_sample_id, event_idx = i64(e_idx)}
-					stack_push_back(&profile.id_stack, sample)
-				} else {
-					// changing to a new stack
-
-					ancestor_idx := -1
-					for i := 0; i < profile.id_stack.len; i += 1 {
-						tmp := profile.id_stack.arr[i]
-						if tmp.node_id == cur_sample_id {
-							ancestor_idx = i
-							break
-						}
-					}
-
-					cycle_count := 0
-					nodes_to_begin: [dynamic]i64 
-					if ancestor_idx < 0 {
-						nodes_to_begin = make([dynamic]i64, scratch2_allocator)
-						cur_node_id := cur_sample_id
-
-						find_ancestor:
-						for cur_node_id != 0 {
-							for i := profile.id_stack.len - 1; i >= 0; i -= 1 {
-								sample := profile.id_stack.arr[i]
-								if sample.node_id == cur_node_id {
-									ancestor_idx = i
-									break find_ancestor
-								}
-							}
-
-							append(&nodes_to_begin, cur_node_id)
-							cur_node_id = profile.nodes[cur_node_id].parent
-
-							if cycle_count > 1000 {
-								fmt.printf("stack too deep, do we have a cycle?\n")
-								push_fatal(SpallError.InvalidFile)
-							}
-							cycle_count += 1
-						}
-					}
-
-					for i := profile.id_stack.len - 1; i > ancestor_idx; i -= 1 {
-						sample := stack_pop_back(&profile.id_stack)
-						node := profile.nodes[sample.node_id]
-						json_patch_end(p_idx, t_idx, sample.event_idx, profile.time)
-					}
-
-					for i := len(nodes_to_begin) - 1; i >= 0; i -= 1 {
-						node_id := nodes_to_begin[i]
-						node := profile.nodes[node_id]
-
-						if node.name.len == 0 {
-							node.name = in_get(&jp.p.intern, "(anonymous)")
-						}
-
-						new_event := JSONEvent{
-							name = node.name,
-							duration = -1,
-							timestamp = profile.time,
-						}
-
-						_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, new_event)
-						sample := Sample{node_id = node_id, event_idx = i64(e_idx)}
-						stack_push_back(&profile.id_stack, sample)
-					}
-				}
-			}
-			free_all(scratch2_allocator)
-		}
+		process_sample(ev)
 	case .Metadata:
 		meta_str := in_getstr(ev.name)
 		if meta_str == "thread_name" || meta_str == "process_name" {
