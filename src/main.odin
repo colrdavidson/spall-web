@@ -63,6 +63,8 @@ released_event := EventID{-1, -1, -1, -1}
 did_multiselect := false
 clicked_on_rect := false
 
+did_pan := false
+
 stats: map[string]Stats
 stats_state := StatState.NoStats
 selected_ranges: [dynamic]Range
@@ -817,7 +819,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		is_hovering = false
 		was_mouse_down = false
 		mouse_up_now = false
-		released_event = EventID{}
+		released_event = {-1, -1, -1, -1}
 	}
 
 	dt := _dt
@@ -907,9 +909,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	// process key/mouse inputs
 
-	did_pan := false
 	if clicked {
-		pressed_event = EventID{} // so no stale events are tracked
+		did_pan = false
+		pressed_event = {-1, -1, -1, -1} // so no stale events are tracked
 	}
 
 	start_time, end_time: f64
@@ -960,7 +962,20 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		min_x_pan := min(-20 * em + display_width + -(total_max_time - total_min_time) * cam.target_scale, max_x_pan)
 
 		// compute pan, scale + scroll
-		pan_delta = mouse_pos - last_mouse_pos
+
+
+		if is_mouse_down || mouse_up_now {
+			MIN_PAN :: 5
+			pan_dist := distance(mouse_pos, clicked_pos)
+			if pan_dist > MIN_PAN {
+				did_pan = true
+			}
+		}
+
+		if did_pan {
+			pan_delta = mouse_pos - last_mouse_pos
+		}
+
 		if is_mouse_down && !shift_down {
 			if pt_in_rect(clicked_pos, padded_graph_rect) {
 
@@ -1021,12 +1036,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		cam.pan.x = cam.target_pan_x + (cam.pan.x - cam.target_pan_x) * _pow(_pow(0.1, 12), dt)
 		start_time, end_time = get_current_window(cam, display_width)
-
-		if is_mouse_down || mouse_up_now {
-			MIN_PAN :: 0.1
-			pan_dist := distance(mouse_pos, clicked_pos)
-			did_pan = (pan_dist > MIN_PAN)
-		}
 	}
 
 	// Init GL / Text canvases
