@@ -1253,7 +1253,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	// Handle inputs
 	{
 		// Handle single-select
-		if mouse_up_now && !did_pan && pressed_event == released_event && !shift_down {
+		if mouse_up_now && !did_pan && pt_in_rect(clicked_pos, graph_rect) && pressed_event == released_event && !shift_down {
 			selected_event = released_event
 			clicked_on_rect = true
 			did_multiselect = false
@@ -1835,7 +1835,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	// if there's a rectangle tooltip to render, now's the time.
 	if rendered_rect_tooltip {
 		tip_pos := mouse_pos
-		tip_pos.y -= rect_height
+		tip_pos += Vec2{1, 2} * em / dpr
 
 		ids := rect_tooltip_rect
 		thread := processes[ids.pid].threads[ids.tid]
