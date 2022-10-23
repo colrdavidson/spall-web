@@ -21,6 +21,7 @@ highlight_color := FVec4{}
 shadow_color := FVec4{}
 wide_rect_color := FVec4{}
 wide_bg_color := FVec4{}
+rect_tooltip_stats_color := FVec4{}
 
 choice_count :: 16
 color_choices: [choice_count]FVec3
@@ -45,6 +46,8 @@ default_colors :: proc "contextless" (is_dark: bool) {
 
 		subdivision_color = FVec4{ 30,  30, 30, 255}
 		division_color    = FVec4{100, 100, 100, 255}
+
+		rect_tooltip_stats_color = FVec4{150, 255, 150, 255}
 	} else {
 		bg_color         = FVec4{254, 252, 248, 255}
 		bg_color2        = FVec4{255, 255, 255, 255}
@@ -64,6 +67,8 @@ default_colors :: proc "contextless" (is_dark: bool) {
 
 		subdivision_color = FVec4{230, 230, 230, 255}
 		division_color    = FVec4{180, 180, 180, 255}
+
+		rect_tooltip_stats_color = FVec4{20, 130, 20, 255}
 	}
 }
 

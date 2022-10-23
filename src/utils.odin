@@ -87,6 +87,22 @@ ONE_SECOND :: 1000 * 1000
 ONE_MILLI :: 1000
 ONE_MICRO :: 1
 ONE_NANO :: 0.001
+
+tooltip_fmt :: proc(time: f64) -> string {
+	if time > ONE_SECOND {
+		cur_time := time / ONE_SECOND
+		return fmt.tprintf("%.1f s%s", cur_time, " ")
+	} else if time > ONE_MILLI {
+		cur_time := time / ONE_MILLI
+		return fmt.tprintf("%.1f ms", cur_time)
+	} else if time >= ONE_MICRO {
+		return fmt.tprintf("%.1f μs", time)
+	} else {
+		cur_time := time / ONE_NANO
+		return fmt.tprintf("%.1f ns", cur_time)
+	}
+}
+
 stat_fmt :: proc(time: f64) -> string {
 	if time > ONE_SECOND {
 		cur_time := time / ONE_SECOND

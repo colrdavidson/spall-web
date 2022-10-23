@@ -38,6 +38,14 @@ mouse_up_now   := false
 is_hovering    := false
 shift_down     := false
 
+// tooltip-state
+rect_tooltip_name := ""
+rect_tooltip_self_time: f64 = 0
+rect_tooltip_duration:  f64 = 0
+rect_tooltip_pos := Vec2{}
+rendered_rect_tooltip := false
+
+
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
@@ -165,20 +173,40 @@ main :: proc() {
 	rand.set_global_seed(random_seed)
 }
 
-button :: proc(in_rect: Rect, text: string, font: string) -> bool {
+tooltip :: proc(pos: Vec2, min_x, max_x: f64, text: string) {
+	text_width := measure_text(text, p_font_size, default_font)
+	text_height := get_text_height(p_font_size, default_font)
+
+	tooltip_rect := rect(pos.x, pos.y - (em / 2), text_width + em, text_height + (1.25 * em))
+	if tooltip_rect.pos.x + tooltip_rect.size.x > max_x {
+		tooltip_rect.pos.x = max_x - tooltip_rect.size.x
+	}
+	if tooltip_rect.pos.x < min_x {
+		tooltip_rect.pos.x = min_x
+	}
+
+	draw_rect(tooltip_rect, bg_color)
+	draw_rect_outline(tooltip_rect, 1, line_color)
+	draw_text(text, Vec2{tooltip_rect.pos.x + (em / 2), tooltip_rect.pos.y + (em / 2)}, p_font_size, default_font, text_color)
+}
+
+button :: proc(in_rect: Rect, label_text, tooltip_text, font: string, min_x, max_x: f64) -> bool {
 	draw_rectc(in_rect, 3, button_color)
-	text_width := measure_text(text, p_font_size, font)
-	text_height := get_text_height(p_font_size, font)
-	draw_text(text, 
+	label_width := measure_text(label_text, p_font_size, font)
+	label_height := get_text_height(p_font_size, font)
+	draw_text(label_text, 
 		Vec2{
-			in_rect.pos.x + (in_rect.size.x / 2) - (text_width / 2), 
-			in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)
+			in_rect.pos.x + (in_rect.size.x / 2) - (label_width / 2), 
+			in_rect.pos.y + (in_rect.size.y / 2) - (label_height / 2)
 		}, p_font_size, font, text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
 		set_cursor("pointer")
 		if clicked {
 			return true
+		} else {
+			tip_pos := Vec2{in_rect.pos.x, in_rect.pos.y + in_rect.size.y + em}
+			tooltip(tip_pos, min_x, max_x, tooltip_text)
 		}
 	}
 	return false
@@ -684,15 +712,6 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 		append(&gl_rects, draw_rect)
 		rect_count += 1
 
-		if pt_in_rect(mouse_pos, disp_rect) && pt_in_rect(mouse_pos, dr) {
-			set_cursor("pointer")
-			if (clicked || mouse_up_now) && !shift_down {
-				selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
-				clicked_on_rect = true
-				did_multiselect = false
-			}
-		}
-
 		underhang := disp_rect.pos.x - dr.pos.x
 		overhang := (disp_rect.pos.x + disp_rect.size.x) - dr.pos.x
 		disp_w := min(dr.size.x - underhang, dr.size.x, overhang)
@@ -714,6 +733,21 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 
 			draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 		}
+
+		if pt_in_rect(mouse_pos, graph_rect) && pt_in_rect(mouse_pos, dr) {
+			set_cursor("pointer")
+			if (clicked || mouse_up_now) && !shift_down {
+				selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
+				clicked_on_rect = true
+				did_multiselect = false
+			} else if !rendered_rect_tooltip {
+				rect_tooltip_pos = dr.pos
+				rect_tooltip_duration = duration
+				rect_tooltip_self_time = ev.self_time
+				rect_tooltip_name = fmt.tprintf("%s", display_name)
+				rendered_rect_tooltip = true
+			}
+		}
 	}
 }
 
@@ -723,6 +757,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	defer frame_count += 1
 
 	render_one_more := false
+
+	rect_tooltip_name = ""
+	rect_tooltip_duration = 0
+	rect_tooltip_self_time = 0
+	rect_tooltip_pos = Vec2{}
+	rendered_rect_tooltip = false
 
 	if first_frame {
 		manual_load(default_config, default_config_name)
@@ -1650,19 +1690,19 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		cursor_x += logo_width + edge_pad
 
 		// Open File
-		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", icon_font) {
+		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", "open file", icon_font, 0, width) {
 			open_file_dialog()
 		}
 		cursor_x += button_width + button_pad
 
 		// Reset Camera
-		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", icon_font) {
+		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf066", "reset camera", icon_font, 0, width) {
 			reset_camera(display_width)
 		}
 		cursor_x += button_width + button_pad
 
 		// Process All Events
-		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf1fe", icon_font) {
+		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf1fe", "get stats for the whole file", icon_font, 0, width) {
 			stats_state = .Started
 			did_multiselect = true
 			total_tracked_time = 0.0
@@ -1691,16 +1731,20 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		// colormode button nonsense
 		color_text : string
+		tool_text : string
 		switch colormode {
 		case .Auto:
+			tool_text = "switch to dark colors"
 			color_text = "\uf042"
 		case .Dark:
+			tool_text = "switch to light colors"
 			color_text = "\uf10c"
 		case .Light:
+			tool_text = "switch to auto colors"
 			color_text = "\uf111"
 		}
 
-		if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
+		if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, tool_text, icon_font, 0, width) {
 			new_colormode: ColorMode
 
 			// rotate between auto, dark, and light
@@ -1727,7 +1771,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 			colormode = new_colormode
 		}
-		if button(rect(width - edge_pad - ((button_width * 2) + (button_pad)), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", icon_font) {
+		if button(rect(width - edge_pad - ((button_width * 2) + (button_pad)), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf188", "toggle debug mode", icon_font, 0, width) {
 			enable_debug = !enable_debug
 		}
 	}
@@ -1765,6 +1809,42 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		events_str := fmt.tprintf("Event Count: %d", rect_count - bucket_count)
 		events_txt_width := measure_text(events_str, p_font_size, monospace_font)
 		draw_text(events_str, Vec2{width - events_txt_width - x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color2)
+	}
+
+	// if there's a rectangle tooltip to render, now's the time.
+	if rendered_rect_tooltip {
+		tip_pos := mouse_pos
+		tip_pos.y -= rect_height
+
+		rect_tooltip_stats: string
+		if rect_tooltip_self_time != 0 {
+			rect_tooltip_stats = fmt.tprintf("%s (self %s)", tooltip_fmt(rect_tooltip_duration), tooltip_fmt(rect_tooltip_self_time))
+		} else {
+			rect_tooltip_stats = fmt.tprintf("%s", tooltip_fmt(rect_tooltip_duration))
+		}
+
+		text_height := get_text_height(p_font_size, default_font)
+		name_width := measure_text(rect_tooltip_name, p_font_size, default_font)
+		stats_width := measure_text(rect_tooltip_stats, p_font_size, default_font)
+
+		rect_width := name_width + em + stats_width + em
+		tooltip_rect := rect(tip_pos.x, tip_pos.y - (em / 2), rect_width, text_height + (1.25 * em))
+
+		min_x := graph_rect.pos.x
+		max_x := graph_rect.pos.x + graph_rect.size.x
+		if tooltip_rect.pos.x + tooltip_rect.size.x > max_x {
+			tooltip_rect.pos.x = max_x - tooltip_rect.size.x
+		}
+		if tooltip_rect.pos.x < min_x {
+			tooltip_rect.pos.x = min_x
+		}
+
+		draw_rect(tooltip_rect, bg_color)
+		draw_rect_outline(tooltip_rect, 1, line_color)
+		cursor_x := tooltip_rect.pos.x + (em / 2)
+		draw_text(rect_tooltip_stats, Vec2{cursor_x, tooltip_rect.pos.y + (em / 2)}, p_font_size, default_font, rect_tooltip_stats_color)
+		cursor_x += (em * 0.35) + stats_width
+		draw_text(rect_tooltip_name, Vec2{cursor_x, tooltip_rect.pos.y + (em / 2)}, p_font_size, default_font, text_color)
 	}
 
 	// save me my battery, plz
