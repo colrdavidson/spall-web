@@ -39,9 +39,7 @@ is_hovering    := false
 shift_down     := false
 
 // tooltip-state
-rect_tooltip_name := ""
-rect_tooltip_self_time: f64 = 0
-rect_tooltip_duration:  f64 = 0
+rect_tooltip_rect := EventID{-1, -1, -1, -1}
 rect_tooltip_pos := Vec2{}
 rendered_rect_tooltip := false
 
@@ -738,9 +736,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 			set_cursor("pointer")
 			if !rendered_rect_tooltip && !shift_down {
 				rect_tooltip_pos = dr.pos
-				rect_tooltip_duration = duration
-				rect_tooltip_self_time = ev.self_time
-				rect_tooltip_name = fmt.tprintf("%s", display_name)
+				rect_tooltip_rect = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
 				rendered_rect_tooltip = true
 			}
 
@@ -760,9 +756,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	render_one_more := false
 
-	rect_tooltip_name = ""
-	rect_tooltip_duration = 0
-	rect_tooltip_self_time = 0
+	rect_tooltip_rect = EventID{-1, -1, -1, -1}
 	rect_tooltip_pos = Vec2{}
 	rendered_rect_tooltip = false
 
@@ -1818,11 +1812,23 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		tip_pos := mouse_pos
 		tip_pos.y -= rect_height
 
+		ids := rect_tooltip_rect
+		thread := processes[ids.pid].threads[ids.tid]
+		depth := thread.depths[ids.did]
+		ev := depth.events[ids.eid]
+
+		duration := bound_duration(ev, thread.max_time)
+
+		rect_tooltip_name := in_getstr(ev.name)
+		if ev.duration == -1 {
+			rect_tooltip_name = fmt.tprintf("%s (Did Not Finish)", in_getstr(ev.name))
+		}
+
 		rect_tooltip_stats: string
-		if rect_tooltip_self_time != 0 {
-			rect_tooltip_stats = fmt.tprintf("%s (self %s)", tooltip_fmt(rect_tooltip_duration), tooltip_fmt(rect_tooltip_self_time))
+		if ev.self_time != 0 && ev.self_time != duration {
+			rect_tooltip_stats = fmt.tprintf("%s (self %s)", tooltip_fmt(duration), tooltip_fmt(ev.self_time))
 		} else {
-			rect_tooltip_stats = fmt.tprintf("%s", tooltip_fmt(rect_tooltip_duration))
+			rect_tooltip_stats = fmt.tprintf("%s", tooltip_fmt(duration))
 		}
 
 		text_height := get_text_height(p_font_size, default_font)
