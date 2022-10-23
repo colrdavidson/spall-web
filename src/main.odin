@@ -57,6 +57,9 @@ info_pane_scroll_vel: f64 = 0
 // selection state
 selected_event := EventID{-1, -1, -1, -1}
 
+pressed_event := EventID{-1, -1, -1, -1}
+released_event := EventID{-1, -1, -1, -1}
+
 did_multiselect := false
 clicked_on_rect := false
 
@@ -740,10 +743,11 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 				rendered_rect_tooltip = true
 			}
 
-			if (clicked || mouse_up_now) && !shift_down {
-				selected_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
-				clicked_on_rect = true
-				did_multiselect = false
+			if clicked && !shift_down {
+				pressed_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
+			}
+			if mouse_up_now && !shift_down {
+				released_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
 			}
 		}
 	}
@@ -813,6 +817,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		is_hovering = false
 		was_mouse_down = false
 		mouse_up_now = false
+		released_event = EventID{}
 	}
 
 	dt := _dt
@@ -903,6 +908,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	// process key/mouse inputs
 
 	did_pan := false
+	if clicked {
+		pressed_event = EventID{} // so no stale events are tracked
+	}
 
 	start_time, end_time: f64
 	pan_delta: Vec2
@@ -1235,6 +1243,14 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	// Handle inputs
 	{
+		// Handle single-select
+		if mouse_up_now && !did_pan && pressed_event == released_event && !shift_down {
+			selected_event = released_event
+			clicked_on_rect = true
+			did_multiselect = false
+			render_one_more = true
+		}
+
 		// Handle de-select
 		if mouse_up_now && !did_pan && pt_in_rect(clicked_pos, graph_rect) && !clicked_on_rect && !shift_down {
 			selected_event = {-1, -1, -1, -1}
