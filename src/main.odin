@@ -1711,7 +1711,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		cursor_x += logo_width + edge_pad
 
 		// Open File
-		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf15b", "open file", icon_font, 0, width) {
+		if button(rect(cursor_x, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf07c", "open file", icon_font, 0, width) {
 			open_file_dialog()
 		}
 		cursor_x += button_width + button_pad
@@ -1860,8 +1860,17 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		name_width := measure_text(rect_tooltip_name, p_font_size, default_font)
 		stats_width := measure_text(rect_tooltip_stats, p_font_size, default_font)
 
-		rect_width := name_width + em + stats_width + em
-		tooltip_rect := rect(tip_pos.x, tip_pos.y - (em / 2), rect_width, text_height + (1.25 * em))
+		args := in_getstr(ev.args)
+		args_width := measure_text(args, p_font_size, default_font)
+
+		rect_width := max(name_width + em + stats_width + em, args_width + em)
+		rect_height := text_height + (1.25 * em)
+		if len(args) > 0 {
+			next_line(&rect_height, em)
+		}
+
+		tooltip_rect := rect(tip_pos.x, tip_pos.y - (em / 2), rect_width, rect_height)
+
 
 		min_x := graph_rect.pos.x
 		max_x := graph_rect.pos.x + graph_rect.size.x
@@ -1874,10 +1883,20 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		draw_rect(tooltip_rect, bg_color)
 		draw_rect_outline(tooltip_rect, 1, line_color)
-		cursor_x := tooltip_rect.pos.x + (em / 2)
-		draw_text(rect_tooltip_stats, Vec2{cursor_x, tooltip_rect.pos.y + (em / 2)}, p_font_size, default_font, rect_tooltip_stats_color)
+		tooltip_start_x := tooltip_rect.pos.x + (em / 2)
+		tooltip_start_y := tooltip_rect.pos.y + (em / 2)
+
+		cursor_x := tooltip_start_x
+		cursor_y := tooltip_start_y
+
+		draw_text(rect_tooltip_stats, Vec2{cursor_x, cursor_y}, p_font_size, default_font, rect_tooltip_stats_color)
 		cursor_x += (em * 0.35) + stats_width
-		draw_text(rect_tooltip_name, Vec2{cursor_x, tooltip_rect.pos.y + (em / 2)}, p_font_size, default_font, text_color)
+		draw_text(rect_tooltip_name, Vec2{cursor_x, cursor_y}, p_font_size, default_font, text_color)
+
+		if len(args) > 0 {
+			next_line(&cursor_y, em)
+			draw_text(args, Vec2{tooltip_start_x, cursor_y}, p_font_size, default_font, text_color)
+		}
 	}
 
 	// save me my battery, plz
