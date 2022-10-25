@@ -1327,13 +1327,13 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			selected_end_time   := to_world_x(cam, flopped_rect.pos.x - disp_rect.pos.x + flopped_rect.size.x)
 
 			// draw multiselect timerange
-			width_text := fmt.tprintf("%s", time_fmt(selected_end_time - selected_start_time))
-			width_text_width := measure_text(width_text, p_font_size, monospace_font)
+			width_text := measure_fmt(selected_end_time - selected_start_time)
+			width_text_width := measure_text(width_text, p_font_size, monospace_font) + em
 
 			text_bg_rect := flopped_rect
 			text_bg_rect.pos.x = text_bg_rect.pos.x + (text_bg_rect.size.x / 2) - (width_text_width / 2)
 			text_bg_rect.pos.y = text_bg_rect.pos.y - (p_height * 2)
-			text_bg_rect.size.x = width_text_width + (em / 2)
+			text_bg_rect.size.x = width_text_width
 			text_bg_rect.size.y = (p_height * 2)
 
 			if flopped_rect.size.x > text_bg_rect.size.x {
@@ -1341,7 +1341,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				draw_text(
 					width_text, 
 					Vec2{
-						flopped_rect.pos.x + (flopped_rect.size.x / 2) - (width_text_width / 2), 
+						text_bg_rect.pos.x + (em / 2), 
 						text_bg_rect.pos.y + (p_height / 2)
 					}, 
 					p_font_size,

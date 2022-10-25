@@ -6,6 +6,7 @@ import "core:math/rand"
 import "core:math"
 import "core:fmt"
 import "core:c"
+import "core:strings"
 
 trap :: proc() -> ! {
 	intrinsics.trap()
@@ -91,7 +92,7 @@ ONE_NANO :: 0.001
 tooltip_fmt :: proc(time: f64) -> string {
 	if time > ONE_SECOND {
 		cur_time := time / ONE_SECOND
-		return fmt.tprintf("%.1f s%s", cur_time, " ")
+		return fmt.tprintf("%.1f s ", cur_time)
 	} else if time > ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.1f ms", cur_time)
@@ -106,7 +107,7 @@ tooltip_fmt :: proc(time: f64) -> string {
 stat_fmt :: proc(time: f64) -> string {
 	if time > ONE_SECOND {
 		cur_time := time / ONE_SECOND
-		return fmt.tprintf("%.1f s%s", cur_time, " ")
+		return fmt.tprintf("%.1f s ", cur_time)
 	} else if time > ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.1f ms", cur_time)
@@ -159,6 +160,54 @@ time_fmt :: proc(time: f64) -> string {
 	}
 
 	return fmt.tprintf("%s%s%s%s%s%s", minutes_str, seconds_str, millis_str, micros_str, nanos_str, picos_str)
+}
+
+TimeClump :: struct {
+	value: f64,
+	unit: string,
+	max: f64,
+	digits: int,
+}
+
+measure_fmt :: proc(time: f64) -> string {
+	b := strings.builder_make(temp_allocator)
+
+	_, picos := math.modf(time)
+	picos = math.floor(picos * 1_000_000)
+
+	_, nanos := math.modf(time)
+	nanos = math.floor(nanos * 1000)
+
+	micros := math.floor(math.mod(time, 1000))
+	millis := math.floor(math.mod(time / ONE_MILLI, 1000))
+	secs := math.floor(math.mod(time / ONE_SECOND, 60))
+	mins := math.floor(math.mod(time / ONE_MINUTE, 60))
+
+	clumps := [?]TimeClump{
+		{mins,   "m",    60, 2},
+		{secs,   "s",    60, 2},
+		{millis, "ms", 1000, 3},
+		{micros, "μs", 1000, 3},
+		{nanos,  "ns", 1000, 3},
+		{picos,  "ps", 1000, 3},
+	}
+
+	for clump, idx in clumps {
+		if (clump.value > 0) && (clump.value < clump.max) {
+			if (strings.builder_len(b) > 0 && idx > 0) {
+				strings.write_rune(&b, ' ')
+			}
+
+			digits := int(math.log10(clump.value) + 1)
+			for ;digits < clump.digits; digits += 1 {
+				strings.write_byte(&b, ' ')
+			}
+
+			fmt.sbprintf(&b, "%.0f%s", clump.value, clump.unit)
+		}
+	}
+
+	return strings.to_string(b)
 }
 
 parse_u32 :: proc(str: string) -> (val: u32, ok: bool) {
