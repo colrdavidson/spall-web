@@ -307,3 +307,4 @@ restore_offset :: proc(alloc: ^mem.Allocator, offset: int) {
 	arena := cast(^Arena)scratch_allocator.data
 	arena.offset = offset
 }
+

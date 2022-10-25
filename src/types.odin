@@ -55,9 +55,10 @@ EventID :: struct {
 Stats :: struct {
 	total_time: f64,
 	self_time: f64,
+	avg_time: f64,
+	min_time: f64,
+	max_time: f64,
 	count: u32,
-	min_time: f32,
-	max_time: f32,
 }
 Range :: struct {
 	pid: int,
@@ -71,6 +72,13 @@ StatState :: enum {
 	NoStats,
 	Started,
 	Finished,
+}
+SortState :: enum {
+	SelfTime,
+	TotalTime,
+	MinTime,
+	MaxTime,
+	AvgTime,
 }
 StatOffset :: struct {
 	range_idx: int,

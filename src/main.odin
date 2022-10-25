@@ -67,6 +67,9 @@ did_pan := false
 
 stats: map[string]Stats
 stats_state := StatState.NoStats
+stat_sort_type := SortState.SelfTime
+stat_sort_descending := true
+resort_stats := false
 selected_ranges: [dynamic]Range
 cur_stat_offset := StatOffset{}
 total_tracked_time := 0.0
@@ -1487,8 +1490,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 					s.count += 1
 					s.total_time += duration
 					s.self_time += ev.self_time
-					s.min_time = min(s.min_time, f32(duration))
-					s.max_time = max(s.max_time, f32(duration))
+					s.min_time = min(s.min_time, duration)
+					s.max_time = max(s.max_time, duration)
 					total_tracked_time += duration
 
 					event_count += 1
@@ -1496,6 +1499,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 
 			if !broke_early {
+				for _, stat in &stats {
+					stat.avg_time = stat.total_time / f64(stat.count)
+				}
+
 				sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
 					Entry :: struct {
 						hash:  uintptr,
@@ -1623,15 +1630,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				total_perc_text := fmt.tprintf("%.1f%%", total_perc)
 
 				self_text := fmt.tprintf("%10s", stat_fmt(stat.self_time))
-
-				min := stat.min_time
-				min_text := fmt.tprintf("%10s", stat_fmt(f64(min)))
-
-				avg := stat.total_time / f64(stat.count)
-				avg_text := fmt.tprintf("%10s", stat_fmt(avg))
-
-				max := stat.max_time
-				max_text := fmt.tprintf("%10s", stat_fmt(f64(max)))
+				min_text := fmt.tprintf("%10s", stat_fmt(stat.min_time))
+				avg_text := fmt.tprintf("%10s", stat_fmt(stat.avg_time))
+				max_text := fmt.tprintf("%10s", stat_fmt(stat.max_time))
 
 				text_outf(&cursor, y, self_text, text_color2);   cursor += column_gap
 				{
@@ -1665,33 +1666,58 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 
 			y = header_start
-			cursor = x_subpad
+			cursor = 0
 
 			draw_rect(rect(0, info_pane_y, width, 2 * em), toolbar_color)
 			draw_line(Vec2{0, info_pane_y + (2 * em)}, Vec2{width, info_pane_y + (2 * em)}, 1, line_color)
 
+
+			column_header :: proc(cursor: ^f64, column_gap, text_y, rect_y, pane_h: f64, text: string, sort_type: SortState) {
+				start_x := cursor^
+				cursor^ += (column_gap / 2)
+
+				width := measure_text(text, p_font_size, monospace_font)
+				draw_text(text, Vec2{cursor^, text_y}, p_font_size, monospace_font, text_color)
+				cursor^ += width + (column_gap / 2)
+				end_x := cursor^
+
+				if stat_sort_type == sort_type {
+					arrow_icon := stat_sort_descending ? "\uf0dd" : "\uf0de"
+					arrow_height := get_text_height(p_font_size, icon_font)
+					arrow_width := measure_text(arrow_icon, p_font_size, icon_font)
+					draw_text(arrow_icon, Vec2{end_x - arrow_width - (column_gap / 2), rect_y + (em) - (arrow_height / 2)}, p_font_size, icon_font, text_color)
+				}
+
+				draw_line(Vec2{cursor^, rect_y}, Vec2{cursor^, rect_y + pane_h}, 0.5, text_color2)
+
+				click_rect := rect(start_x, rect_y, end_x - start_x, 2 * em)
+				if clicked && pt_in_rect(clicked_pos, click_rect) {
+					if stat_sort_type == sort_type {
+						stat_sort_descending = !stat_sort_descending
+					} else {
+						stat_sort_type = sort_type
+						stat_sort_descending = true
+					}
+					resort_stats = true
+				}
+			}
+
 			self_header_text   := fmt.tprintf("%-10s", "   self")
+			column_header(&cursor, column_gap, y, info_pane_y, info_pane_height, self_header_text, .SelfTime)
+
 			total_header_text  := fmt.tprintf("%-17s", "      total")
+			column_header(&cursor, column_gap, y, info_pane_y, info_pane_height, total_header_text, .TotalTime)
+
 			min_header_text    := fmt.tprintf("%-10s", "   min.")
+			column_header(&cursor, column_gap, y, info_pane_y, info_pane_height, min_header_text, .MinTime)
+
 			avg_header_text    := fmt.tprintf("%-10s", "   avg.")
+			column_header(&cursor, column_gap, y, info_pane_y, info_pane_height, avg_header_text, .AvgTime)
+
 			max_header_text    := fmt.tprintf("%-10s", "   max.")
+			column_header(&cursor, column_gap, y, info_pane_y, info_pane_height, max_header_text, .MaxTime)
+
 			name_header_text   := fmt.tprintf("%-10s", "   name")
-
-			text_outf(&cursor, y, self_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, total_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, min_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, avg_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
-			text_outf(&cursor, y, max_header_text)
-			vs_outf(&cursor, column_gap, info_pane_y, info_pane_height)
-
 			text_outf(&cursor, y, name_header_text)
 		} else {
 			y := height - em - top_line_gap
@@ -1699,6 +1725,71 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			draw_text("Shift-click and drag to get stats for multiple rectangles", Vec2{x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color)
 			draw_text("Click on a rectangle to inspect", Vec2{x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color)
 		}
+	}
+
+	if resort_stats {
+		fmt.printf("Sorting stats to %v desc: %v\n", stat_sort_type, stat_sort_descending)
+		sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
+			Entry :: struct {
+				hash:  uintptr,
+				next:  int,
+				key:   K,
+				value: V,
+			}
+
+
+			header := runtime.__get_map_header(m)
+			entries := (^[dynamic]Entry)(&header.m.entries)
+
+			less: proc(a, b: Entry) -> bool
+			switch stat_sort_type {
+			case .SelfTime:
+				less = proc(a, b: Entry) -> bool {
+					if stat_sort_descending {
+						return a.value.self_time > b.value.self_time
+					} else {
+						return a.value.self_time < b.value.self_time
+					}
+				}
+			case .TotalTime:
+				less = proc(a, b: Entry) -> bool {
+					if stat_sort_descending {
+						return a.value.total_time > b.value.total_time
+					} else {
+						return a.value.total_time < b.value.total_time
+					}
+				}
+			case .MinTime:
+				less = proc(a, b: Entry) -> bool {
+					if stat_sort_descending {
+						return a.value.min_time > b.value.min_time
+					} else {
+						return a.value.min_time < b.value.min_time
+					}
+				}
+			case .AvgTime:
+				less = proc(a, b: Entry) -> bool {
+					if stat_sort_descending {
+						return a.value.avg_time > b.value.avg_time
+					} else {
+						return a.value.avg_time < b.value.avg_time
+					}
+				}
+			case .MaxTime:
+				less = proc(a, b: Entry) -> bool {
+					if stat_sort_descending {
+						return a.value.max_time > b.value.max_time
+					} else {
+						return a.value.max_time < b.value.max_time
+					}
+				}
+			}
+			slice.sort_by(entries[:], less)
+
+			runtime.__dynamic_map_reset_entries(header, loc)
+		}
+		sort_map_entries_by_time(&stats)
+		resort_stats = false
 	}
 
 	// Render toolbar background
