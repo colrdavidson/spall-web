@@ -778,7 +778,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	// render loading screen
 	if loading_config {
-		pad_size : f64 = 3
+		pad_size : f64 = 4
 		chunk_size : f64 = 10
 
 		load_box := rect(0, 0, 100, 100)
@@ -789,7 +789,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			load_box.size.y + pad_size
 		)
 
-		draw_rectc(load_box, 3, FVec4{50, 50, 50, 255})
+		draw_rectc(load_box, 3, FVec4{30, 30, 30, 255})
 
 		p: Parser
 		if is_json {
@@ -811,7 +811,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				start_y + (cur_y * chunk_size), 
 				chunk_size - pad_size, 
 				chunk_size - pad_size
-			), FVec4{0, 255, 0, 255})
+			), loading_block_color)
 		}
 
 		return true

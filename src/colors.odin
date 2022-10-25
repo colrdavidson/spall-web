@@ -19,6 +19,7 @@ subbar_split_color := FVec4{}
 toolbar_color := FVec4{}
 toolbar_button_color  := FVec4{}
 toolbar_text_color := FVec4{}
+loading_block_color := FVec4{}
 
 graph_color   := FVec4{}
 highlight_color := FVec4{}
@@ -31,6 +32,8 @@ choice_count :: 16
 color_choices: [choice_count]FVec3
 
 default_colors :: proc "contextless" (is_dark: bool) {
+	loading_block_color  = FVec4{100, 194, 236, 255}
+
 	if is_dark {
 		bg_color         = FVec4{15,   15,  15, 255}
 		bg_color2        = FVec4{0,     0,   0, 255}
