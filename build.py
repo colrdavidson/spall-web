@@ -61,8 +61,8 @@ print('Building dist folder...')
 os.makedirs('build/dist', exist_ok=True)
 
 shutil.copyfile('src/index.html', 'build/dist/index.html')
-shutil.copyfile('src/index.js', 'build/dist/index.js')
-shutil.copyfile('src/runtime.js', 'build/dist/runtime.js')
+shutil.copyfile('src/spall.js', 'build/dist/spall.js')
+shutil.copyfile('src/wasm_runtime.js', 'build/dist/wasm_runtime.js')
 shutil.copyfile(f"build/{program_name}.wasm", f"build/dist/{program_name}.wasm")
 
 print('Done!')
