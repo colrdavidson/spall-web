@@ -1691,6 +1691,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				draw_line(Vec2{cursor^, rect_y}, Vec2{cursor^, rect_y + pane_h}, 0.5, text_color2)
 
 				click_rect := rect(start_x, rect_y, end_x - start_x, 2 * em)
+				if pt_in_rect(mouse_pos, click_rect) {
+					set_cursor("pointer")
+				}
+
 				if clicked && pt_in_rect(clicked_pos, click_rect) {
 					if stat_sort_type == sort_type {
 						stat_sort_descending = !stat_sort_descending
