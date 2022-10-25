@@ -12,7 +12,6 @@ import time
 import http.server
 
 RELEASE = len(sys.argv) > 1 and sys.argv[1] == 'release'
-EXTRARELEASE = len(sys.argv) > 1 and sys.argv[1] == 'extrarelease'
 
 RUN_SERVER = False
 for arg in sys.argv:

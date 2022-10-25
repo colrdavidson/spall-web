@@ -198,14 +198,14 @@ tooltip :: proc(pos: Vec2, min_x, max_x: f64, text: string) {
 }
 
 button :: proc(in_rect: Rect, label_text, tooltip_text, font: string, min_x, max_x: f64) -> bool {
-	draw_rectc(in_rect, 3, button_color)
+	draw_rectc(in_rect, 3, toolbar_button_color)
 	label_width := measure_text(label_text, p_font_size, font)
 	label_height := get_text_height(p_font_size, font)
 	draw_text(label_text, 
 		Vec2{
 			in_rect.pos.x + (in_rect.size.x / 2) - (label_width / 2), 
 			in_rect.pos.y + (in_rect.size.y / 2) - (label_height / 2)
-		}, p_font_size, font, text_color)
+		}, p_font_size, font, toolbar_text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
 		set_cursor("pointer")
@@ -1313,8 +1313,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 			// draw multiselect box
 			selected_rect := rect(c_x, c_y, d_x, d_y)
-			draw_rect_inline(selected_rect, 1, FVec4{0, 0, 255, 255})
-			draw_rect(selected_rect, FVec4{0, 0, 255, 20})
+			multiselect_color := toolbar_color
+			draw_rect_inline(selected_rect, 1, multiselect_color)
+			multiselect_color.w = 20
+			draw_rect(selected_rect, multiselect_color)
 
 			// transform multiselect rect to screen position
 			flopped_rect := Rect{}
@@ -1340,7 +1342,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			text_bg_rect.size.y = (p_height * 2)
 
 			if flopped_rect.size.x > text_bg_rect.size.x {
-				draw_rect(text_bg_rect, FVec4{0, 0, 255, 180})
+				multiselect_color.w = 180
+				draw_rect(text_bg_rect, multiselect_color)
 				draw_text(
 					width_text, 
 					Vec2{
@@ -1668,9 +1671,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			y = header_start
 			cursor = 0
 
-			draw_rect(rect(0, info_pane_y, width, 2 * em), toolbar_color)
+			draw_rect(rect(0, info_pane_y, width, 2 * em), subbar_color)
 			draw_line(Vec2{0, info_pane_y + (2 * em)}, Vec2{width, info_pane_y + (2 * em)}, 1, line_color)
-
 
 			column_header :: proc(cursor: ^f64, column_gap, text_y, rect_y, pane_h: f64, text: string, sort_type: SortState) {
 				start_x := cursor^
@@ -1688,7 +1690,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 					draw_text(arrow_icon, Vec2{end_x - arrow_width - (column_gap / 2), rect_y + (em) - (arrow_height / 2)}, p_font_size, icon_font, text_color)
 				}
 
-				draw_line(Vec2{cursor^, rect_y}, Vec2{cursor^, rect_y + pane_h}, 0.5, text_color2)
+				draw_line(Vec2{cursor^, rect_y}, Vec2{cursor^, rect_y + pane_h}, 0.5, subbar_split_color)
 
 				click_rect := rect(start_x, rect_y, end_x - start_x, 2 * em)
 				if pt_in_rect(mouse_pos, click_rect) {
@@ -1722,7 +1724,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			column_header(&cursor, column_gap, y, info_pane_y, info_pane_height, max_header_text, .MaxTime)
 
 			name_header_text   := fmt.tprintf("%-10s", "   name")
-			text_outf(&cursor, y, name_header_text)
+			text_outf(&cursor, y, name_header_text, text_color)
 		} else {
 			y := height - em - top_line_gap
 
@@ -1810,7 +1812,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		// Draw Logo
 		logo_text := "spall"
 		logo_width := measure_text(logo_text, h1_font_size, default_font)
-		draw_text(logo_text, Vec2{cursor_x, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+		draw_text(logo_text, Vec2{cursor_x, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, toolbar_text_color)
 		cursor_x += logo_width + edge_pad
 
 		// Open File
@@ -1851,7 +1853,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		file_name_width := measure_text(file_name, h1_font_size, default_font)
 		name_x := max((display_width / 2) - (file_name_width / 2), cursor_x)
-		draw_text(file_name, Vec2{name_x, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, text_color)
+		draw_text(file_name, Vec2{name_x, (toolbar_height / 2) - (h1_height / 2)}, h1_font_size, default_font, toolbar_text_color)
 
 		// colormode button nonsense
 		color_text : string

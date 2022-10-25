@@ -9,13 +9,17 @@ bg_color2     := FVec4{}
 text_color    := FVec4{}
 text_color2   := FVec4{}
 text_color3   := FVec4{}
-button_color  := FVec4{}
-button_color2 := FVec4{}
 line_color    := FVec4{}
 division_color    := FVec4{}
 subdivision_color := FVec4{}
 outline_color := FVec4{}
+
+subbar_color := FVec4{}
+subbar_split_color := FVec4{}
 toolbar_color := FVec4{}
+toolbar_button_color  := FVec4{}
+toolbar_text_color := FVec4{}
+
 graph_color   := FVec4{}
 highlight_color := FVec4{}
 shadow_color := FVec4{}
@@ -33,11 +37,15 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		text_color       = FVec4{255, 255, 255, 255}
 		text_color2      = FVec4{180, 180, 180, 255}
 		text_color3      = FVec4{0,     0,   0, 255}
-		button_color     = FVec4{40,   40,  40, 255}
-		button_color2    = FVec4{20,   20,  20, 255}
-		line_color       = FVec4{100, 100, 100, 255}
+		line_color       = FVec4{0,     0,   0, 255}
 		outline_color    = FVec4{80,   80,  80, 255}
-		toolbar_color    = FVec4{120, 120, 120, 255}
+
+		subbar_color         = FVec4{0x33, 0x33, 0x33, 255}
+		subbar_split_color   = FVec4{0x50, 0x50, 0x50, 255}
+		toolbar_button_color = FVec4{40, 40, 40, 255}
+		toolbar_color        = FVec4{0x00, 0x83, 0xb7, 255}
+		toolbar_text_color   = FVec4{0xF5, 0xF5, 0xF5, 255}
+
 		graph_color      = FVec4{180, 180, 180, 255}
 		highlight_color  = FVec4{  0,   0, 255,  32}
 		wide_rect_color  = FVec4{  0, 255,   0,   0}
@@ -54,11 +62,15 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		text_color       = FVec4{0,     0,   0, 255}
 		text_color2      = FVec4{80,   80,  80, 255}
 		text_color3      = FVec4{0,     0,   0, 255}
-		button_color     = FVec4{141, 119, 104, 255}
-		button_color2    = FVec4{191, 169, 154, 255}
-		line_color       = FVec4{150, 150, 150, 255}
+		line_color       = FVec4{200, 200, 200, 255}
 		outline_color    = FVec4{219, 211, 205, 255}
-		toolbar_color    = FVec4{219, 211, 205, 255}
+
+		subbar_color         = FVec4{235, 230, 225, 255}
+		subbar_split_color   = FVec4{150, 150, 150, 255}
+		toolbar_button_color = FVec4{40, 40, 40, 255}
+		toolbar_color        = FVec4{0x00, 0x83, 0xb7, 255}
+		toolbar_text_color   = FVec4{0xF5, 0xF5, 0xF5, 255}
+
 		graph_color      = FVec4{69,   49,  34, 255}
 		highlight_color  = FVec4{255, 255,   0,  32}
 		wide_rect_color  = FVec4{  0, 255,   0,   0}
