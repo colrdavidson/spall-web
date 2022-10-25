@@ -1728,8 +1728,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		} else {
 			y := height - em - top_line_gap
 
-			draw_text("Shift-click and drag to get stats for multiple rectangles", Vec2{x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color)
-			draw_text("Click on a rectangle to inspect", Vec2{x_subpad, prev_line(&y, em)}, p_font_size, monospace_font, text_color)
+			draw_text("Shift-click and drag to get stats for multiple rectangles", Vec2{x_subpad, prev_line(&y, em)}, p_font_size, default_font, text_color)
+			draw_text("Click on a rectangle to inspect", Vec2{x_subpad, prev_line(&y, em)}, p_font_size, default_font, text_color)
 		}
 	}
 
