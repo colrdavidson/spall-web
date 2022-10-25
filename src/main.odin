@@ -1728,7 +1728,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	}
 
 	if resort_stats {
-		fmt.printf("Sorting stats to %v desc: %v\n", stat_sort_type, stat_sort_descending)
 		sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
 			Entry :: struct {
 				hash:  uintptr,
