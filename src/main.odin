@@ -94,6 +94,7 @@ h1_font_size: f64
 h2_font_size: f64
 
 em             : f64 = 0
+p_height       : f64 = 0
 h1_height      : f64 = 0
 h2_height      : f64 = 0
 ch_width       : f64 = 0
@@ -1309,7 +1310,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 			// draw multiselect box
 			selected_rect := rect(c_x, c_y, d_x, d_y)
-			draw_rect_outline(selected_rect, 1, FVec4{0, 0, 255, 255})
+			draw_rect_inline(selected_rect, 1, FVec4{0, 0, 255, 255})
 			draw_rect(selected_rect, FVec4{0, 0, 255, 20})
 
 			// transform multiselect rect to screen position
@@ -1328,16 +1329,24 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			// draw multiselect timerange
 			width_text := fmt.tprintf("%s", time_fmt(selected_end_time - selected_start_time))
 			width_text_width := measure_text(width_text, p_font_size, monospace_font)
-			if flopped_rect.size.x > width_text_width {
+
+			text_bg_rect := flopped_rect
+			text_bg_rect.pos.x = text_bg_rect.pos.x + (text_bg_rect.size.x / 2) - (width_text_width / 2)
+			text_bg_rect.pos.y = text_bg_rect.pos.y - (p_height * 2)
+			text_bg_rect.size.x = width_text_width + (em / 2)
+			text_bg_rect.size.y = (p_height * 2)
+
+			if flopped_rect.size.x > text_bg_rect.size.x {
+				draw_rect(text_bg_rect, FVec4{0, 0, 255, 180})
 				draw_text(
 					width_text, 
 					Vec2{
 						flopped_rect.pos.x + (flopped_rect.size.x / 2) - (width_text_width / 2), 
-						flopped_rect.pos.y + flopped_rect.size.y - (em * 1.5)
+						text_bg_rect.pos.y + (p_height / 2)
 					}, 
 					p_font_size,
 					monospace_font,
-					text_color
+					FVec4{255, 255, 255, 255},
 				)
 			}
 

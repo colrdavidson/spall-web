@@ -9,6 +9,7 @@ update_font_cache :: proc(width: f64) {
 	h1_font_size = _h1_font_size
 	h2_font_size = _h2_font_size
 
+	p_height  = p_font_size
 	h1_height = h1_font_size
 	h2_height = h2_font_size
 	ch_width  = measure_text("a", p_font_size, monospace_font)
@@ -194,6 +195,18 @@ draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
 	y1 := rect.pos.y
 	x2 := rect.pos.x + rect.size.x
 	y2 := rect.pos.y + rect.size.y
+
+	draw_line(Vec2{x1, y1}, Vec2{x2, y1}, width, color)
+	draw_line(Vec2{x1, y1}, Vec2{x1, y2}, width, color)
+	draw_line(Vec2{x2, y1}, Vec2{x2, y2}, width, color)
+	draw_line(Vec2{x1, y2}, Vec2{x2, y2}, width, color)
+}
+
+draw_rect_inline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
+	x1 := rect.pos.x + width
+	y1 := rect.pos.y + width
+	x2 := rect.pos.x + rect.size.x - width
+	y2 := rect.pos.y + rect.size.y - width
 
 	draw_line(Vec2{x1, y1}, Vec2{x2, y1}, width, color)
 	draw_line(Vec2{x1, y1}, Vec2{x1, y2}, width, color)
