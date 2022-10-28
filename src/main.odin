@@ -913,6 +913,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	padded_graph_rect.size.y -= graph_header_line_gap
 	stat_pane := rect(0, info_pane_y, width, height - info_pane_y)
 
+	mini_graph_rect := rect(mini_start_x, graph_rect.pos.y, mini_graph_padded_width, display_height - graph_header_text_height)
+
 
 	// process key/mouse inputs
 
@@ -933,6 +935,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
 		} else if pt_in_rect(mouse_pos, stat_pane) {
 			info_pane_scroll_vel -= scroll_val_y * 10
+		} else if pt_in_rect(mouse_pos, mini_graph_rect) {
+			cam.vel.y += scroll_val_y * 10
 		}
 		scroll_val_y = 0
 
@@ -1159,7 +1163,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	// Chop screen sides, and draw solid overlays to cover text/rect canvas overlay gaps
 	draw_rect(rect(0, disp_rect.pos.y, width - mini_graph_padded_width, graph_header_text_height), bg_color) // top
 	draw_rect(rect(0, toolbar_height, start_x, height), bg_color) // left
-
 
 	draw_line(Vec2{start_x, disp_rect.pos.y + graph_header_text_height}, Vec2{width - mini_graph_padded_width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
 
