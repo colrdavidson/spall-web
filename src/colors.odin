@@ -13,6 +13,7 @@ line_color    := FVec4{}
 division_color    := FVec4{}
 subdivision_color := FVec4{}
 outline_color := FVec4{}
+xbar_color    := FVec4{}
 
 subbar_color := FVec4{}
 subbar_split_color := FVec4{}
@@ -57,6 +58,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 
 		subdivision_color = FVec4{ 30,  30, 30, 255}
 		division_color    = FVec4{100, 100, 100, 255}
+		xbar_color        = FVec4{180, 180, 180, 255}
 
 		rect_tooltip_stats_color = FVec4{150, 255, 150, 255}
 	} else {
@@ -82,6 +84,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 
 		subdivision_color = FVec4{230, 230, 230, 255}
 		division_color    = FVec4{180, 180, 180, 255}
+		xbar_color        = FVec4{ 80,  80,  80, 255}
 
 		rect_tooltip_stats_color = FVec4{20, 130, 20, 255}
 	}

@@ -879,13 +879,16 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	mini_graph_padded_width := mini_graph_width + (mini_graph_pad * 2)
 	mini_start_x := width - mini_graph_padded_width
 
-	wide_graph_y := toolbar_height
+	time_bar_y := toolbar_height
+	time_bar_height := (top_line_gap * 2) + em
+
+	wide_graph_y := time_bar_y + time_bar_height
 	wide_graph_height := (em * 2)
 
 	start_x := x_pad_size
 	end_x := width - x_pad_size
 	display_width := width - (start_x + mini_graph_padded_width)
-	start_y := toolbar_height + wide_graph_height
+	start_y := toolbar_height + time_bar_height + wide_graph_height
 	end_y   := info_pane_y
 	display_height := end_y - start_y
 
@@ -1152,20 +1155,21 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		}
 	}
 
+
 	// Chop screen sides, and draw solid overlays to cover text/rect canvas overlay gaps
 	draw_rect(rect(0, disp_rect.pos.y, width - mini_graph_padded_width, graph_header_text_height), bg_color) // top
 	draw_rect(rect(0, toolbar_height, start_x, height), bg_color) // left
+
 
 	draw_line(Vec2{start_x, disp_rect.pos.y + graph_header_text_height}, Vec2{width - mini_graph_padded_width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
 
 	append(&gl_rects, DrawRect{f32(mini_start_x), f32(mini_graph_width + (mini_graph_pad * 2)), {u8(bg_color.x), u8(bg_color.y), u8(bg_color.z), 255}})
 	gl_push_rects(gl_rects[:], disp_rect.pos.y + graph_header_text_height, height)
 	resize(&gl_rects, 0)
-	draw_line(Vec2{mini_start_x, toolbar_height}, Vec2{mini_start_x, info_pane_y}, 0.5, line_color)
-	draw_line(Vec2{start_x, toolbar_height}, Vec2{start_x, info_pane_y}, 0.5, line_color)
 
 
 	// Draw top wide-graph
+	highlight_start_x, highlight_end_x: f64
 	{
 		wide_scale_x := rescale(1.0, 0, total_max_time - total_min_time, 0, display_width)
 		layer_count := 1
@@ -1189,8 +1193,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 		}
 
-		highlight_start_x := rescale(start_time, 0, total_max_time - total_min_time, 0, display_width)
-		highlight_end_x := rescale(end_time, 0, total_max_time - total_min_time, 0, display_width)
+		highlight_start_x = rescale(start_time, 0, total_max_time - total_min_time, 0, display_width)
+		highlight_end_x = rescale(end_time, 0, total_max_time - total_min_time, 0, display_width)
 
 		highlight_width := highlight_end_x - highlight_start_x
 		min_highlight := 5.0
@@ -1206,8 +1210,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		highlight_box_r := rect(start_x + highlight_end_x, wide_graph_y, display_width - highlight_end_x, wide_graph_height)
 		draw_rect(highlight_box_r, FVec4{0, 0, 0, 150})
 
-		draw_line(Vec2{start_x + highlight_start_x, wide_graph_y}, Vec2{start_x + highlight_start_x, wide_graph_y + wide_graph_height}, 3, bg_color2)
-		draw_line(Vec2{start_x + highlight_end_x, wide_graph_y}, Vec2{start_x + highlight_end_x, wide_graph_y + wide_graph_height}, 3, bg_color2)
+		draw_rect(rect(0, wide_graph_y, start_x, wide_graph_height), FVec4{0, 0, 0, 255})
+		draw_rect(rect(width - mini_graph_padded_width, wide_graph_y, mini_graph_padded_width, wide_graph_height), FVec4{0, 0, 0, 255})
 	}
 
 	// Draw mini-graph
@@ -1236,6 +1240,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		draw_rect(rect(mini_start_x, disp_rect.pos.y + preview_height, mini_graph_padded_width, display_height - preview_height), shadow_color)
 	}
 
+
 	// Draw timestamps on subdivision lines
 	for i := 0; i < ticks; i += 1 {
 		tick_time := draw_tick_start + (f64(i) * division)
@@ -1247,8 +1252,72 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	}
 
 	// Remove top-left and top-right chunk
-	draw_rect(rect(width - mini_graph_padded_width, toolbar_height, width, graph_header_text_height + wide_graph_height), bg_color) // top-right
-	draw_rect(rect(0, toolbar_height, start_x, graph_header_text_height + wide_graph_height), bg_color) // top-left
+	draw_rect(rect(0, toolbar_height + time_bar_height + wide_graph_height, start_x, graph_header_text_height), bg_color) // top-left
+
+	draw_rect(rect(width - mini_graph_padded_width, toolbar_height + time_bar_height + wide_graph_height, width, graph_header_text_height), bg_color) // top-right
+
+	draw_rect(rect(0, toolbar_height, width, time_bar_height + 1), bg_color)
+
+	// draw sidelines
+	draw_line(Vec2{start_x, toolbar_height + time_bar_height}, Vec2{start_x, info_pane_y}, 0.5, line_color)
+	draw_line(Vec2{mini_start_x, toolbar_height + time_bar_height}, Vec2{mini_start_x, info_pane_y}, 0.5, line_color)
+
+	// draw global timebar
+	{
+		if event_count == 0 { total_min_time = 0; total_max_time = 1000 }
+		start_time : f64 = 0
+		end_time   := total_max_time - total_min_time
+		default_scale := rescale(1.0, start_time, end_time, 0, display_width)
+
+		mus_range := display_width / default_scale
+		v1 := math.log10(mus_range)
+		v2 := math.floor(v1)
+		rem := v1 - v2
+
+		subdivisions := 10
+		division := _pow(10, v2); // multiples of 10
+		if rem < 0.3      { division -= (division * 0.8); } // multiples of 2
+		else if rem < 0.6 { division -= (division / 2); } // multiples of 5
+
+		display_range_start := -width / default_scale
+		display_range_end := width / default_scale
+
+		draw_tick_start = f_round_down(display_range_start, division)
+		draw_tick_end := f_round_down(display_range_end, division)
+		tick_range := draw_tick_end - draw_tick_start
+
+		division /= f64(subdivisions)
+		ticks := (int(tick_range / division) + 1)
+
+		for i := 0; i < ticks; i += 1 {
+			tick_time := draw_tick_start + (f64(i) * division)
+			x_off := (tick_time * default_scale)
+
+			line_start_y: f64
+			if (i % subdivisions) == 0 {
+				time_str := time_fmt(tick_time)
+				text_width := measure_text(time_str, p_font_size, default_font)
+
+				draw_text(time_str, 
+					Vec2{
+						start_x + x_off - (text_width / 2),
+						toolbar_height + (time_bar_height / 2) - (em / 2)
+					}, p_font_size, default_font, text_color)
+				line_start_y = toolbar_height + (time_bar_height / 2) - (em / 2) + p_height
+			} else {
+				line_start_y = toolbar_height + (time_bar_height / 2) - (em / 2) + p_height + (p_height / 6)
+			}
+
+			draw_line(
+				Vec2{start_x + x_off, line_start_y}, 
+				Vec2{start_x + x_off, toolbar_height + time_bar_height - 2}, 2, division_color)
+		}
+
+		draw_line(Vec2{start_x + highlight_start_x, toolbar_height + (time_bar_height / 2) - (em / 2) + p_height}, Vec2{start_x + highlight_start_x, toolbar_height + time_bar_height + wide_graph_height}, 2, xbar_color)
+		draw_line(Vec2{start_x + highlight_end_x, toolbar_height + (time_bar_height / 2) - (em / 2) + p_height}, Vec2{start_x + highlight_end_x, toolbar_height + time_bar_height + wide_graph_height}, 2, xbar_color)
+		draw_line(Vec2{0, toolbar_height + time_bar_height + wide_graph_height}, Vec2{width, toolbar_height + time_bar_height + wide_graph_height}, 0.5, line_color)
+	}
+
 
 	// Render info pane
 	draw_line(Vec2{0, info_pane_y}, Vec2{width, info_pane_y}, 1, line_color)
