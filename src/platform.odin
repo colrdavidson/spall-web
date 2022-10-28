@@ -184,7 +184,7 @@ draw_text :: #force_inline proc "contextless" (str: string, pos: Vec2, scale: f6
     _canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, color.w, scale, font)
 }
 draw_line :: #force_inline proc "contextless" (start, end: Vec2, strokeWidth: f64, color: FVec4) {
-    _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, color.x, color.y, color.z, color.w, strokeWidth * dpr * dpr)
+    _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, color.x, color.y, color.z, color.w, strokeWidth * dpr)
 }
 draw_arc :: #force_inline proc "contextless" (center: Vec2, radius, angleStart, angleEnd: f64, strokeWidth: f64, color: FVec4) {
     _canvas_arc(center.x * dpr, center.y * dpr, radius * dpr, angleStart, angleEnd, color.x, color.y, color.z, color.w, strokeWidth * dpr)

@@ -1164,7 +1164,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	draw_rect(rect(0, disp_rect.pos.y, width - mini_graph_padded_width, graph_header_text_height), bg_color) // top
 	draw_rect(rect(0, toolbar_height, start_x, height), bg_color) // left
 
-	draw_line(Vec2{start_x, disp_rect.pos.y + graph_header_text_height}, Vec2{width - mini_graph_padded_width, disp_rect.pos.y + graph_header_text_height}, 0.5, line_color)
+	draw_line(Vec2{start_x, disp_rect.pos.y + graph_header_text_height}, Vec2{width - mini_graph_padded_width, disp_rect.pos.y + graph_header_text_height}, 1, line_color)
 
 	append(&gl_rects, DrawRect{f32(mini_start_x), f32(mini_graph_width + (mini_graph_pad * 2)), {u8(bg_color.x), u8(bg_color.y), u8(bg_color.z), 255}})
 	gl_push_rects(gl_rects[:], disp_rect.pos.y + graph_header_text_height, height)
@@ -1262,8 +1262,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	draw_rect(rect(0, toolbar_height, width, time_bar_height + 1), bg_color)
 
 	// draw sidelines
-	draw_line(Vec2{start_x, toolbar_height + time_bar_height}, Vec2{start_x, info_pane_y}, 0.5, line_color)
-	draw_line(Vec2{mini_start_x, toolbar_height + time_bar_height}, Vec2{mini_start_x, info_pane_y}, 0.5, line_color)
+	draw_line(Vec2{start_x, toolbar_height + time_bar_height}, Vec2{start_x, info_pane_y}, 1, line_color)
+	draw_line(Vec2{mini_start_x, toolbar_height + time_bar_height}, Vec2{mini_start_x, info_pane_y}, 1, line_color)
 
 	// draw global timebar
 	{
@@ -1318,7 +1318,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		draw_line(Vec2{start_x + highlight_start_x, toolbar_height + (time_bar_height / 2) - (em / 2) + p_height}, Vec2{start_x + highlight_start_x, toolbar_height + time_bar_height + wide_graph_height}, 2, xbar_color)
 		draw_line(Vec2{start_x + highlight_end_x, toolbar_height + (time_bar_height / 2) - (em / 2) + p_height}, Vec2{start_x + highlight_end_x, toolbar_height + time_bar_height + wide_graph_height}, 2, xbar_color)
-		draw_line(Vec2{0, toolbar_height + time_bar_height + wide_graph_height}, Vec2{width, toolbar_height + time_bar_height + wide_graph_height}, 0.5, line_color)
+		draw_line(Vec2{0, toolbar_height + time_bar_height + wide_graph_height}, Vec2{width, toolbar_height + time_bar_height + wide_graph_height}, 1, line_color)
 	}
 
 
@@ -1661,7 +1661,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 			vs_outf :: proc(cursor: ^f64, column_gap, info_pane_y, info_pane_height: f64) {
 				cursor^ += column_gap / 2
-				draw_line(Vec2{cursor^, info_pane_y}, Vec2{cursor^, info_pane_y + info_pane_height}, 0.5, text_color2)
+				draw_line(Vec2{cursor^, info_pane_y}, Vec2{cursor^, info_pane_y + info_pane_height}, 1, text_color2)
 				cursor^ += column_gap / 2
 			}
 
@@ -1762,7 +1762,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 					draw_text(arrow_icon, Vec2{end_x - arrow_width - (column_gap / 2), rect_y + (em) - (arrow_height / 2)}, p_font_size, icon_font, text_color)
 				}
 
-				draw_line(Vec2{cursor^, rect_y}, Vec2{cursor^, rect_y + pane_h}, 0.5, subbar_split_color)
+				draw_line(Vec2{cursor^, rect_y}, Vec2{cursor^, rect_y + pane_h}, 1, subbar_split_color)
 
 				click_rect := rect(start_x, rect_y, end_x - start_x, 2 * em)
 				if pt_in_rect(mouse_pos, click_rect) {
