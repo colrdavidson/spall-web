@@ -59,7 +59,7 @@ print("Compiled in {:.1f} seconds".format(time.time() - start_time))
 print('Building dist folder...')
 os.makedirs('build/dist', exist_ok=True)
 
-shutil.copyfile('src/index.html', 'build/dist/index.html')
+shutil.copyfile('src/spall.html', 'build/dist/spall.html')
 shutil.copyfile('src/spall.js', 'build/dist/spall.js')
 shutil.copyfile('src/wasm_runtime.js', 'build/dist/wasm_runtime.js')
 shutil.copyfile(f"build/{program_name}.wasm", f"build/dist/{program_name}.wasm")
