@@ -13,6 +13,8 @@ spall is a profiler library and a web-frontend for exploring your code and diggi
 - Light/Dark Modes! You can blow your eyes out in light mode, relish the sweet neon colors in dark mode, or auto-switch with your system
 - Velociraptors Included! Uhh, wait, sorry, we're all out. No velociraptors here. You can pretend though.
 
+Try it over at [Gravity Moth](https://gravitymoth.com/spall)
+
 ## Usage
 
 spall includes a small single-header C library, `spall.h`.
