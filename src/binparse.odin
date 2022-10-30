@@ -63,16 +63,16 @@ setup_tid :: proc(p_idx: int, thread_id: u32) -> int {
 	return t_idx
 }
 
-get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
+get_next_event :: proc(p: ^Parser, temp_ev: ^TempEvent) -> BinaryState {
 	p.data = p.full_chunk[chunk_pos(p):]
 	p.offset = p.chunk_start+chunk_pos(p)
 
 	header_sz := i64(size_of(u64))
 	if real_pos(p) + header_sz > p.total_size {
-		return TempEvent{}, .Finished
+		return .Finished
 	}
 	if i64(chunk_pos(p) + header_sz) > i64(len(p.data)) {
-		return TempEvent{}, .PartialRead
+		return .PartialRead
 	}
 
 	type := (^spall.Event_Type)(raw_data(p.data[chunk_pos(p):]))^
@@ -80,53 +80,49 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 	case .Begin:
 		event_sz := i64(size_of(spall.Begin_Event))
 		if real_pos(p) + event_sz > p.total_size {
-			return TempEvent{}, .Finished
+			return .Finished
 		}
 		if i64(chunk_pos(p) + event_sz) > i64(len(p.data)) {
-			return TempEvent{}, .PartialRead
+			return .PartialRead
 		}
 		event := (^spall.Begin_Event)(raw_data(p.data[chunk_pos(p):]))^
 
 		event_tail := i64(event.name_len) + i64(event.args_len)
 		if (real_pos(p) + event_sz + event_tail) > p.total_size {
-			return TempEvent{}, .Finished
+			return .Finished
 		}
 		if i64(chunk_pos(p) + event_sz + event_tail) > i64(len(p.data)) {
-			return TempEvent{}, .PartialRead
+			return .PartialRead
 		}
 
 		name := string(p.data[chunk_pos(p)+event_sz:chunk_pos(p)+event_sz+i64(event.name_len)])
 		str := in_get(&p.intern, name)
 
-		ev := TempEvent{
-			type = .Begin,
-			timestamp = event.time,
-			thread_id = event.tid,
-			process_id = event.pid,
-			name = str,
-		}
+		temp_ev.type = .Begin
+		temp_ev.timestamp = event.time
+		temp_ev.thread_id = event.tid
+		temp_ev.process_id = event.pid
+		temp_ev.name = str
 
 		p.pos += i64(event_sz) + i64(event.name_len) + i64(event.args_len)
-		return ev, .EventRead
+		return .EventRead
 	case .End:
 		event_sz := i64(size_of(spall.End_Event))
 		if real_pos(p) + event_sz > p.total_size {
-			return TempEvent{}, .Finished
+			return .Finished
 		}
 		if i64(chunk_pos(p) + event_sz) > i64(len(p.data)) {
-			return TempEvent{}, .PartialRead
+			return .PartialRead
 		}
 		event := (^spall.End_Event)(raw_data(p.data[chunk_pos(p):]))^
 
-		ev := TempEvent{
-			type = .End,
-			timestamp = event.time,
-			thread_id = event.tid,
-			process_id = event.pid,
-		}
+		temp_ev.type = .End
+		temp_ev.timestamp = event.time
+		temp_ev.thread_id = event.tid
+		temp_ev.process_id = event.pid
 		
 		p.pos += i64(event_sz)
-		return ev, .EventRead
+		return .EventRead
 	case .StreamOver:          fallthrough; // @Todo
 	case .Custom_Data:         fallthrough; // @Todo
 	case .Instant:             fallthrough; // @Todo
@@ -138,13 +134,15 @@ get_next_event :: proc(p: ^Parser) -> (TempEvent, BinaryState) {
 		push_fatal(SpallError.InvalidFile)
 	}
 
-	return TempEvent{}, .PartialRead
+	return .PartialRead
 }
 
 load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
+	temp_ev := TempEvent{}
+
 	set_next_chunk(p, start, chunk)
 	hot_loop: for {
-		event, state := get_next_event(p)
+		state := get_next_event(p, &temp_ev)
 
 		#partial switch state {
 		case .PartialRead:
@@ -156,27 +154,27 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 			return
 		}
 
-		#partial switch event.type {
+		#partial switch temp_ev.type {
 		case .Begin:
 			new_event := Event{
-				name = event.name,
+				name = temp_ev.name,
 				duration = -1,
 				self_time = -1,
-				timestamp = (event.timestamp) * stamp_scale,
+				timestamp = (temp_ev.timestamp) * stamp_scale,
 			}
 
-			p_idx, t_idx, e_idx := bin_push_event(event.process_id, event.thread_id, new_event)
+			p_idx, t_idx, e_idx := bin_push_event(temp_ev.process_id, temp_ev.thread_id, new_event)
 			thread := &processes[p_idx].threads[t_idx]
 			stack_push_back(&thread.bande_q, e_idx)
 
 			event_count += 1
 		case .End:
-			p_idx, ok1 := vh_find(&process_map, event.process_id)
+			p_idx, ok1 := vh_find(&process_map, temp_ev.process_id)
 			if !ok1 {
 				fmt.printf("invalid end?\n")
 				continue
 			}
-			t_idx, ok2 := vh_find(&processes[p_idx].thread_map, event.thread_id)
+			t_idx, ok2 := vh_find(&processes[p_idx].thread_map, temp_ev.thread_id)
 			if !ok1 {
 				fmt.printf("invalid end?\n")
 				continue
@@ -189,12 +187,12 @@ load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
 				thread.current_depth -= 1
 				depth := &thread.depths[thread.current_depth]
 				jev := &depth.bs_events[e_idx]
-				jev.duration = (event.timestamp * stamp_scale) - jev.timestamp
+				jev.duration = (temp_ev.timestamp * stamp_scale) - jev.timestamp
 				jev.self_time = jev.duration
 				thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
 				total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 			} else {
-				fmt.printf("Got unexpected end event! [pid: %d, tid: %d, ts: %f]\n", event.process_id, event.thread_id, event.timestamp)
+				fmt.printf("Got unexpected end event! [pid: %d, tid: %d, ts: %f]\n", temp_ev.process_id, temp_ev.thread_id, temp_ev.timestamp)
 			}
 		}
 	}
