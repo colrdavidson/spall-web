@@ -85,7 +85,7 @@ get_next_event :: proc(p: ^Parser, temp_ev: ^TempEvent) -> BinaryState {
 		if i64(chunk_pos(p) + event_sz) > i64(len(p.data)) {
 			return .PartialRead
 		}
-		event := (^spall.Begin_Event)(raw_data(p.data[chunk_pos(p):]))^
+		event := (^spall.Begin_Event)(raw_data(p.data[chunk_pos(p):]))
 
 		event_tail := i64(event.name_len) + i64(event.args_len)
 		if (real_pos(p) + event_sz + event_tail) > p.total_size {
@@ -114,7 +114,7 @@ get_next_event :: proc(p: ^Parser, temp_ev: ^TempEvent) -> BinaryState {
 		if i64(chunk_pos(p) + event_sz) > i64(len(p.data)) {
 			return .PartialRead
 		}
-		event := (^spall.End_Event)(raw_data(p.data[chunk_pos(p):]))^
+		event := (^spall.End_Event)(raw_data(p.data[chunk_pos(p):]))
 
 		temp_ev.type = .End
 		temp_ev.timestamp = event.time
