@@ -29,6 +29,7 @@ current_alloc_offset := 0
 
 wasmContext := runtime.default_context()
 
+bp: Parser
 
 // input state
 is_mouse_down  := false
@@ -790,15 +791,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		)
 
 		draw_rectc(load_box, 3, FVec4{30, 30, 30, 255})
-
-		p: Parser
-		if is_json {
-			p = jp.p
-		} else {
-			p = bp
-		}
-
-		chunk_count := int(rescale(f64(p.offset), 0, f64(p.total_size), 0, 100))
+		chunk_count := int(rescale(f64(bp.offset), 0, f64(bp.total_size), 0, 100))
 
 		chunk := rect(0, 0, chunk_size, chunk_size)
 		start_x := load_box.pos.x + pad_size

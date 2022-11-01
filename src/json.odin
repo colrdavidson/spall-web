@@ -14,21 +14,6 @@ JSONState :: enum {
 	EventDone,
 }
 
-TokenType :: enum u8 {
-	Nil       = 0,
-	Object    = 1,
-	Array     = 2,
-	String    = 4,
-	Primitive = 8,
-}
-
-Token :: struct {
-	type: TokenType,
-	start: i64,
-	end: i64,
-	id: int,
-}
-
 TmpKey :: struct {
 	start: i64,
 	end: i64,
@@ -48,8 +33,6 @@ ProfileState :: struct {
 }
 
 JSONParser :: struct {
-	p: Parser,
-
 	state: PS,
 	obj_map: KeyMap,
 	profiles: map[u64]ProfileState,
@@ -145,9 +128,8 @@ fields := [?]Field{
 	{"s", .S},
 }
 
-init_json_parser :: proc(total_size: u32) -> JSONParser {
+init_json_parser :: proc() -> JSONParser {
 	jp := JSONParser{}
-	jp.p = init_parser(total_size)
 
 	// flesh out char classes
 	char_class[u8('{')] = .ObjOpen
@@ -252,9 +234,9 @@ dfa := [?][10]PS{
 	},
 }
 
-eat_spaces :: proc(p: ^Parser) -> bool {
-	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
-		ch := p.data[chunk_pos(p)]
+eat_spaces :: proc(chunk: []u8) -> bool {
+	for ; chunk_pos() < i64(len(chunk)); bp.pos += 1 {
+		ch := chunk[chunk_pos()]
 		if ch != ' ' && ch != '\n' && ch != '\r' && ch != '\t' {
 			return true
 		}
@@ -263,98 +245,93 @@ eat_spaces :: proc(p: ^Parser) -> bool {
 	return false
 }
 
-skip_string :: proc(jp: ^JSONParser) -> (key: TmpKey, state: JSONState) {
-	p := &jp.p
+skip_string :: proc(chunk: []u8) -> (key: TmpKey, state: JSONState) {
+	start := real_pos()
+	bp.pos += 1
 
-	start := real_pos(p)
-	p.pos += 1
-
-	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
-		ch := p.data[chunk_pos(p)]
+	for ; chunk_pos() < i64(len(chunk)); bp.pos += 1 {
+		ch := chunk[chunk_pos()]
 
 		if ch == '\"' {
-			key = TmpKey{i64(start + 1), i64(real_pos(p))}
-			p.pos += 1
+			key = TmpKey{i64(start + 1), i64(real_pos())}
+			bp.pos += 1
 			state = .Finished
 			return
 		}
 
-		if ch == '\\' && (chunk_pos(p) + 1) < i64(len(p.data)) {
-			p.pos += 1
+		if ch == '\\' && (chunk_pos() + 1) < i64(len(chunk)) {
+			bp.pos += 1
 		}
 	}
 
 	state = .PartialRead
+	bp.pos = start
 	return
 }
 
-the_skipper :: proc(jp: ^JSONParser) -> JSONState {
-	p := &jp.p
-
-	p.data = p.full_chunk[chunk_pos(p):]
-	p.offset = p.chunk_start+chunk_pos(p)
+the_skipper :: proc(jp: ^JSONParser, chunk: []u8) -> JSONState {
 
 	// speed-skip until we have data we care about
 	if !jp.got_first_char {
-		ret := eat_spaces(p)
+		ret := eat_spaces(chunk)
 		if !ret {
 			return .PartialRead
 		}
 
-		ch := p.data[chunk_pos(p)]
+		ch := chunk[chunk_pos()]
 		if ch != '{' && ch != '[' {
 			fmt.printf("Your JSON file is invalid! got %c, expected [ or {{\n", ch)
 			push_fatal(SpallError.InvalidFile)
 		}
 
 		if ch == '[' {
-			p.pos += 1
+			bp.pos += 1
 			return .Finished
 		}
 	}
 
 	// scan until we've got the token for the first object in the traceEvents array
-	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
-		ch := p.data[chunk_pos(p)]
+	for ; chunk_pos() < i64(len(chunk)); bp.pos += 1 {
+		ch := chunk[chunk_pos()]
 
 		switch ch {
 		case '"': 
-			start := real_pos(p)
+			start := real_pos()
 
-			key, state := skip_string(jp)
+			key, state := skip_string(chunk)
 			if state == .PartialRead {
-				p.pos = start
+				bp.pos = start
 				return .PartialRead
 			}
 
-			key_str := string(p.full_chunk[key.start-p.chunk_start:key.end-p.chunk_start])
+			key_str := string(chunk[key.start:key.end])
 			if jp.skipper_objs == 1 && key_str == "traceEvents" {
-				ret := eat_spaces(p)
+				ret := eat_spaces(chunk)
 				if !ret {
-					p.pos = start
+					bp.pos = start
 					return .PartialRead
 				}
 
-				ch := p.data[chunk_pos(p)]
+				ch := chunk[chunk_pos()]
 				if ch != ':' {
 					fmt.printf("Your JSON file is invalid! got %c, expected :\n", ch)
 					push_fatal(SpallError.InvalidFile)
 				}
-				p.pos += 1
+				bp.pos += 1
 
-				ret = eat_spaces(p)
+				ret = eat_spaces(chunk)
 				if !ret {
-					p.pos = start
+					bp.pos = start
 					return .PartialRead
 				}
 
-				ch = p.data[chunk_pos(p)]
+				ch = chunk[chunk_pos()]
 				if ch != '[' {
 					fmt.printf("Your JSON file is invalid! got %c, expected [\n", ch)
 					push_fatal(SpallError.InvalidFile)
 				}
 
-				p.pos += 1
+				bp.pos += 1
 				return .Finished
 			}
 		case '{': jp.skipper_objs += 1
@@ -366,28 +343,26 @@ the_skipper :: proc(jp: ^JSONParser) -> JSONState {
 }
 
 // skip until we've got a { or a ]
-skip_to_start_or_end :: proc(jp: ^JSONParser) -> JSONState {
-	p := &jp.p
-
-	ret := eat_spaces(p)
+skip_to_start_or_end :: proc(chunk: []u8) -> JSONState {
+	ret := eat_spaces(chunk)
 	if !ret {
 		return .PartialRead
 	}
 
-	ch := p.data[chunk_pos(p)]
+	ch := chunk[chunk_pos()]
 	if ch == '{' || ch == ']' {
 		return .Finished
 	}
 
 	if ch == ',' {
-		p.pos += 1
+		bp.pos += 1
 
-		ret = eat_spaces(p)
+		ret = eat_spaces(chunk)
 		if !ret {
 			return .PartialRead
 		}
 
-		ch = p.data[chunk_pos(p)]
+		ch = chunk[chunk_pos()]
 		if ch == '{' || ch == ']' {
 			return .Finished
 		}
@@ -397,10 +372,10 @@ skip_to_start_or_end :: proc(jp: ^JSONParser) -> JSONState {
 	push_fatal(SpallError.InvalidFile)
 }
 
-process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key: FieldType, value: string) #no_bounds_check {
+process_key_value :: proc(intern: ^INMap, ev: ^TempEvent, key: FieldType, value: string) #no_bounds_check {
 	#partial switch key {
 	case .Name:
-		str := in_get(&jp.p.intern, value)
+		str := in_get(intern, value)
 		ev.name = str
 	case .Ph:
 		if len(value) != 1 {
@@ -461,7 +436,9 @@ process_key_value :: proc(jp: ^JSONParser, ev: ^TempEvent, key: FieldType, value
 	}
 }
 
-process_sample :: proc(ev: TempEvent) {
+process_sample :: proc(ev: ^TempEvent) {
+	new_event: JSONEvent = ---
+
 	meta_str := in_getstr(ev.name)
 	profile_key := u64(ev.process_id) << 32 | u64(ev.thread_id)
 	if meta_str == "Profile" {
@@ -524,7 +501,7 @@ process_sample :: proc(ev: TempEvent) {
 		}
 
 		for node in chunk.data.cpuProfile.nodes {
-			func_name := in_get(&jp.p.intern, node.callFrame.functionName)
+			func_name := in_get(&bp.intern, node.callFrame.functionName)
 			is_other := node.callFrame.codeType == "other"
 			profile.nodes[node.id] = SampleNode{
 				id = node.id,
@@ -555,13 +532,12 @@ process_sample :: proc(ev: TempEvent) {
 			} else if cur_sample_node.is_other && in_getstr(cur_sample_node.name) == "(garbage collector)" {
 
 				// ugh. thanks Google. GC events are weird.
-				new_event := JSONEvent{
-					name = cur_sample_node.name,
-					duration = -1,
-					timestamp = profile.time,
-				}
+				mem.zero(&new_event, size_of(JSONEvent))
+				new_event.name = cur_sample_node.name
+				new_event.duration = -1
+				new_event.timestamp = profile.time
 
-				_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, new_event)
+				_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, &new_event)
 
 				sample := Sample{node_id = cur_sample_id, event_idx = i64(e_idx)}
 				stack_push_back(&profile.id_stack, sample)
@@ -615,16 +591,15 @@ process_sample :: proc(ev: TempEvent) {
 					node := profile.nodes[node_id]
 
 					if node.name.len == 0 {
-						node.name = in_get(&jp.p.intern, "(anonymous)")
+						node.name = in_get(&bp.intern, "(anonymous)")
 					}
 
-					new_event := JSONEvent{
-						name = node.name,
-						duration = -1,
-						timestamp = profile.time,
-					}
+					mem.zero(&new_event, size_of(JSONEvent))
+					new_event.name = node.name
+					new_event.duration = -1
+					new_event.timestamp = profile.time
 
-					_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, new_event)
+					_, _, e_idx := json_push_event(ev.process_id, ev.thread_id, &new_event)
 					sample := Sample{node_id = node_id, event_idx = i64(e_idx)}
 					stack_push_back(&profile.id_stack, sample)
 				}
@@ -634,7 +609,7 @@ process_sample :: proc(ev: TempEvent) {
 	}
 }
 
-process_event :: proc(ev: TempEvent) {
+process_event :: proc(ev: ^TempEvent) {
 	#partial switch ev.type {
 	case .Instant:
 		e := ev
@@ -648,7 +623,7 @@ process_event :: proc(ev: TempEvent) {
 			self_time = ev.duration,
 			timestamp = ev.timestamp,
 		}
-		json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
+		json_push_event(u32(ev.process_id), u32(ev.thread_id), &new_event)
 	case .Begin:
 		new_event := JSONEvent{
 			name = ev.name,
@@ -657,7 +632,7 @@ process_event :: proc(ev: TempEvent) {
 			timestamp = ev.timestamp,
 		}
 
-		p_idx, t_idx, e_idx := json_push_event(u32(ev.process_id), u32(ev.thread_id), new_event)
+		p_idx, t_idx, e_idx := json_push_event(u32(ev.process_id), u32(ev.thread_id), &new_event)
 
 		thread := &processes[p_idx].threads[t_idx]
 		stack_push_back(&thread.bande_q, e_idx)
@@ -700,7 +675,7 @@ process_event :: proc(ev: TempEvent) {
 				push_fatal(SpallError.InvalidFile)
 			}
 
-			name := in_get(&jp.p.intern, m_name)
+			name := in_get(&bp.intern, m_name)
 			free_all(scratch2_allocator)
 
 			if meta_str == "thread_name" {
@@ -715,27 +690,23 @@ process_event :: proc(ev: TempEvent) {
 	}
 }
 
-process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bounds_check {
-	p := &jp.p
-
-	p.data = p.full_chunk[chunk_pos(p):]
-	p.offset = p.chunk_start+chunk_pos(p)
-
-	start := real_pos(p)
+process_next_json_event :: proc(jp: ^JSONParser, chunk: []u8) -> (state: JSONState) #no_bounds_check {
+	start := real_pos()
 
 	// skip to the start of the next event, or quit if we've got them all
-	ret := skip_to_start_or_end(jp)
+	ret := skip_to_start_or_end(chunk)
 	if ret == .PartialRead {
-		p.pos = start
+		bp.pos = start
 		state = .PartialRead
 		return
 	}
-	if p.data[chunk_pos(p)] == ']' {
+
+	if chunk[chunk_pos()] == ']' {
 		state = .Finished
 		return
 	}
 
-	start = real_pos(p)
+	start = real_pos()
 
 	str_start : i64 = 0
 	primitive_start : i64 = 0
@@ -748,29 +719,28 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 	ev := TempEvent{}
 
 	depth_count := 0
-
-	for ; chunk_pos(p) < i64(len(p.data)); p.pos += 1 {
-		ch := p.data[chunk_pos(p)]
+	for ; chunk_pos() < i64(len(chunk)); bp.pos += 1 {
+		ch := chunk[chunk_pos()]
 		class := char_class[ch]
 		next_state := dfa[jp.state][class]
 		jp.state = next_state
 
 		if next_state != .String && in_string {
-			str := string(p.data[str_start:chunk_pos(p)])
+			str := string(chunk[str_start:chunk_pos()])
 			if depth_count == 1 {
 				if in_key {
 					key_type, _ = km_find(&jp.obj_map, str)
 				} else {
-					process_key_value(jp, &ev, key_type, str)
+					process_key_value(&bp.intern, &ev, key_type, str)
 					key_type = .Invalid
 				}
 			}
 
 			in_string = false
 		} else if next_state != .Primitive && in_primitive {
-			str := string(p.data[primitive_start:chunk_pos(p)])
+			str := string(chunk[primitive_start:chunk_pos()])
 			if depth_count == 1 {
-				process_key_value(jp, &ev, key_type, str)
+				process_key_value(&bp.intern, &ev, key_type, str)
 				key_type = .Invalid
 			}
 
@@ -782,7 +752,7 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 			in_key = false
 		case .ObjOpen:
 			if depth_count == 1 && key_type == .Args {
-				args_start = chunk_pos(p)
+				args_start = chunk_pos()
 			}
 
 			in_key = true
@@ -792,31 +762,31 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 			depth_count -= 1
 
 			if depth_count == 1 && key_type == .Args {
-				str := string(p.data[args_start:chunk_pos(p)+1])
+				str := string(chunk[args_start:chunk_pos()+1])
 
 				// skip storing args: {}
 				if len(str) > 2 {
-					ev.args = in_get(&jp.p.intern, str)
+					ev.args = in_get(&bp.intern, str)
 				}
 
 				key_type = .Invalid
 			} else if depth_count == 0 {
-				p.pos += 1
+				bp.pos += 1
 				state = .EventDone
 
-				process_event(ev)
+				process_event(&ev)
 				return
 			}
 		case .Colon: in_key = false
 		case .Comma: in_key = true
 		case .String:
 			if !in_string {
-				str_start = chunk_pos(p) + 1
+				str_start = chunk_pos() + 1
 				in_string = true
 			}
 		case .Primitive:
 			if !in_primitive {
-				primitive_start = chunk_pos(p)
+				primitive_start = chunk_pos()
 				in_primitive = true
 			}
 		}
@@ -824,28 +794,25 @@ process_next_json_event :: proc(jp: ^JSONParser) -> (state: JSONState) #no_bound
 
 	// we ran out of chunk to process
 	jp.state = .Starting
-	p.pos = start
+	bp.pos = start
 	state = .PartialRead
 	return
 }
 
 // this is gross + brittle. I'm sorry. I need a better way to do JSON streaming
-load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
-	p := &jp.p
-	set_next_chunk(p, start, chunk)
-	hot_loop: for {
+load_json_chunk :: proc (jp: ^JSONParser, chunk: []u8) {
+	hot_loop: for bp.pos <= i64(bp.total_size) {
 		// skip until we hit the start of the traceEvents arr
 		if !jp.event_start {
-			state := the_skipper(jp)
-			if p.pos >= p.total_size {
-				json_finish_loading(jp)
-				return
+			state := the_skipper(jp, chunk)
+			if bp.pos >= i64(bp.total_size) {
+				break hot_loop
 			}
 
 			#partial switch state {
 			case .PartialRead:
-				p.offset = p.pos
-				get_chunk(f64(p.pos), f64(CHUNK_SIZE))
+				bp.offset = bp.pos
+				get_chunk(f64(bp.pos), f64(CHUNK_SIZE))
 				return
 			case .Finished:
 				jp.event_start = true
@@ -853,17 +820,18 @@ load_json_chunk :: proc (jp: ^JSONParser, start, total_size: u32, chunk: []u8) {
 		}
 
 		// start tokenizing normally now
-		state := process_next_json_event(jp)
+		state := process_next_json_event(jp, chunk)
 		#partial switch state {
 		case .PartialRead:
-			p.offset = p.pos
-			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
+			bp.offset = bp.pos
+			get_chunk(f64(bp.pos), f64(CHUNK_SIZE))
 			return
 		case .Finished:
-			json_finish_loading(jp)
-			return
+			break hot_loop
 		}
 	}
+
+	json_finish_loading(jp)
 	return
 }
 
@@ -901,7 +869,7 @@ json_patch_end :: proc(p_idx, t_idx: int, e_idx: i64, end_time: f64) {
 	total_max_time = max(total_max_time, jev.timestamp + jev.duration)
 }
 
-json_push_instant :: proc(event: TempEvent) {
+json_push_instant :: proc(event: ^TempEvent) {
 	instant := Instant{
 		name = event.name,
 		timestamp = event.timestamp,
@@ -932,7 +900,7 @@ json_push_instant :: proc(event: TempEvent) {
 }
 
 
-json_push_event :: proc(process_id, thread_id: u32, event: JSONEvent) -> (int, int, int) {
+json_push_event :: proc(process_id, thread_id: u32, event: ^JSONEvent) -> (int, int, int) {
 	p_idx := setup_pid(process_id)
 	t_idx := setup_tid(p_idx, thread_id)
 
@@ -948,7 +916,7 @@ json_push_event :: proc(process_id, thread_id: u32, event: JSONEvent) -> (int, i
 	total_min_time = min(total_min_time, event.timestamp)
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
-	append(&t.json_events, event)
+	append(&t.json_events, event^)
 	return p_idx, t_idx, len(t.json_events)-1
 }
 

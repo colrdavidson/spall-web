@@ -33,9 +33,6 @@ find_idx :: proc(events: []Event, val: f64) -> int {
 	return low
 }
 
-jp: JSONParser
-bp: Parser
-
 @export
 start_loading_file :: proc "contextless" (size: u32, name: string) {
 	context = wasmContext
@@ -46,12 +43,7 @@ start_loading_file :: proc "contextless" (size: u32, name: string) {
 
 manual_load :: proc(config, name: string) {
 	init_loading_state(u32(len(config)), name)
-	load_config_chunk(0, u32(len(config)), transmute([]u8)config)
-}
-
-set_next_chunk :: proc(p: ^Parser, start: u32, chunk: []u8) {
-	p.chunk_start = i64(start)
-	p.full_chunk = chunk
+	load_config_chunk(transmute([]u8)config)
 }
 
 gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f64) {
@@ -307,8 +299,7 @@ init_loading_state :: proc(size: u32, name: string) {
 	event_count = 0
 	instant_count = 0
 
-	jp = JSONParser{}
-	bp = Parser{}
+	bp = init_parser(size)
 	
 	loading_config = true
 	post_loading = false
@@ -359,9 +350,10 @@ finish_loading :: proc () {
 	return
 }
 
+jp: JSONParser
 stamp_scale: f64
 @export
-load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
+load_config_chunk :: proc "contextless" (chunk: []u8) {
 	context = wasmContext
 	defer free_all(context.temp_allocator)
 
@@ -377,7 +369,7 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 		is_json = magic != spall.MAGIC
 		if is_json {
 			stamp_scale = 1
-			jp = init_json_parser(total_size)
+			jp = init_json_parser()
 		} else {
 			hdr := cast(^spall.Header)raw_data(chunk)
 			if hdr.version != 1 {
@@ -386,7 +378,6 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 			}
 
 			stamp_scale = hdr.timestamp_unit
-			bp = init_parser(total_size)
 			bp.pos += i64(header_sz)
 		}
 
@@ -394,9 +385,9 @@ load_config_chunk :: proc "contextless" (start, total_size: u32, chunk: []u8) {
 	}
 
 	if is_json {
-		load_json_chunk(&jp, start, total_size, chunk)
+		load_json_chunk(&jp, chunk)
 	} else {
-		load_binary_chunk(&bp, start, total_size, chunk)
+		load_binary_chunk(chunk)
 	}
 
 	return

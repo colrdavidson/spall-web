@@ -370,7 +370,7 @@ async function init() {
 						}
 
 						try {
-							window.wasm.load_config_chunk(offset, loading_file.size, ...bytes(e.target.result));
+							window.wasm.load_config_chunk(...bytes(e.target.result));
 							wakeUp();
 						} catch (e) {
 							console.error(e);

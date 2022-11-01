@@ -16,25 +16,17 @@ BinaryState :: enum {
 Parser :: struct {
 	pos: i64,
 	offset: i64,
-
-	data: []u8,
-	full_chunk: []u8,
-	chunk_start: i64,
-	total_size: i64,
+	total_size: u32,
 
 	intern: INMap,
 }
 
-real_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos }
-chunk_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos - p.offset }
+real_pos :: #force_inline proc() -> i64 { return bp.pos }
+chunk_pos :: #force_inline proc() -> i64 { return bp.pos - bp.offset }
 
-init_parser :: proc(size: u32) -> Parser {
-	p := Parser{}
-	p.pos    = 0
-	p.offset = 0
-	p.total_size = i64(size)
+init_parser :: proc(total_size: u32) -> Parser {
+	p := Parser{total_size = total_size}
 	p.intern = in_init(big_global_allocator)
-
 	return p
 }
 
@@ -64,25 +56,25 @@ setup_tid :: proc(p_idx: int, thread_id: u32) -> int {
 	return t_idx
 }
 
-get_next_event :: proc(p: ^Parser, chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
+get_next_event :: proc(chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
 
 	header_sz := i64(size_of(u64))
-	if chunk_pos(p) + header_sz > i64(len(chunk)) {
+	if chunk_pos() + header_sz > i64(len(chunk)) {
 		return .PartialRead
 	}
 
-	data_start := chunk[chunk_pos(p):]
+	data_start := chunk[chunk_pos():]
 	type := (^spall.Event_Type)(raw_data(data_start))^
 	#partial switch type {
 	case .Begin:
 		event_sz := i64(size_of(spall.Begin_Event))
-		if chunk_pos(p) + event_sz > i64(len(chunk)) {
+		if chunk_pos() + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
 		event := (^spall.Begin_Event)(raw_data(data_start))
 
 		event_tail := i64(event.name_len) + i64(event.args_len)
-		if (chunk_pos(p) + event_sz + event_tail) > i64(len(chunk)) {
+		if (chunk_pos() + event_sz + event_tail) > i64(len(chunk)) {
 			return .PartialRead
 		}
 
@@ -92,13 +84,13 @@ get_next_event :: proc(p: ^Parser, chunk: []u8, temp_ev: ^TempEvent) -> BinarySt
 		temp_ev.timestamp = event.time
 		temp_ev.thread_id = event.tid
 		temp_ev.process_id = event.pid
-		temp_ev.name = in_get(&p.intern, name)
+		temp_ev.name = in_get(&bp.intern, name)
 
-		p.pos += event_sz + event_tail
+		bp.pos += event_sz + event_tail
 		return .EventRead
 	case .End:
 		event_sz := i64(size_of(spall.End_Event))
-		if chunk_pos(p) + event_sz > i64(len(chunk)) {
+		if chunk_pos() + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
 		event := (^spall.End_Event)(raw_data(data_start))
@@ -108,7 +100,7 @@ get_next_event :: proc(p: ^Parser, chunk: []u8, temp_ev: ^TempEvent) -> BinarySt
 		temp_ev.thread_id = event.tid
 		temp_ev.process_id = event.pid
 		
-		p.pos += event_sz
+		bp.pos += event_sz
 		return .EventRead
 	case:
 		return .Failure
@@ -117,19 +109,19 @@ get_next_event :: proc(p: ^Parser, chunk: []u8, temp_ev: ^TempEvent) -> BinarySt
 	return .PartialRead
 }
 
-load_binary_chunk :: proc(p: ^Parser, start, total_size: u32, chunk: []u8) {
+load_binary_chunk :: proc(chunk: []u8) {
 	temp_ev := TempEvent{}
 	ev := Event{}
 
 	full_chunk := chunk
-	for p.pos < i64(total_size) {
+	for bp.pos < i64(bp.total_size) {
 		mem.zero(&temp_ev, size_of(TempEvent))
-		state := get_next_event(p, full_chunk, &temp_ev)
+		state := get_next_event(full_chunk, &temp_ev)
 
 		#partial switch state {
 		case .PartialRead:
-			p.offset = p.pos
-			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
+			bp.offset = bp.pos
+			get_chunk(f64(bp.pos), f64(CHUNK_SIZE))
 			return
 		case .Failure:
 			push_fatal(SpallError.InvalidFile)
