@@ -129,7 +129,6 @@ fields := [?]Field{
 }
 
 init_json_parser :: proc() -> JSONParser {
-	jp := JSONParser{}
 
 	// flesh out char classes
 	char_class[u8('{')] = .ObjOpen
@@ -150,16 +149,17 @@ init_json_parser :: proc() -> JSONParser {
 	char_class[u8('n')] = .Primitive
 	char_class[u8('.')] = .Primitive
 
-	jp.obj_map = km_init()
+	jp := JSONParser{
+		obj_map = km_init(),
+		state = .Starting,
+		got_first_char = false,
+		skipper_objs = 0,
+		profiles = make(map[u64]ProfileState, 16, scratch_allocator),
+	}
+
 	for field in fields {
 		km_insert(&jp.obj_map, field.name, field.type)
 	}
-
-	jp.state = .Starting
-
-	jp.got_first_char = false
-	jp.skipper_objs = 0
-	jp.profiles = make(map[u64]ProfileState, 16, scratch_allocator)
 
 	return jp
 }
@@ -493,7 +493,6 @@ process_sample :: proc(ev: ^TempEvent) {
 		thread := &processes[p_idx].threads[t_idx]
 
 		chunk := ChunkArgs{}
-
 		err := json.unmarshal_string(in_getstr(ev.args), &chunk, json.DEFAULT_SPECIFICATION, scratch2_allocator)
 		if err != nil {
 			fmt.printf("Failed to parse args?\n")
@@ -526,10 +525,12 @@ process_sample :: proc(ev: ^TempEvent) {
 				stack_top_id = tmp.node_id
 			}
 
+			// keep accruing dt
 			if stack_top_id == cur_sample_id {
-				// keep accruing dt
 				continue
-			} else if cur_sample_node.is_other && in_getstr(cur_sample_node.name) == "(garbage collector)" {
+			}
+
+			if cur_sample_node.is_other && in_getstr(cur_sample_node.name) == "(garbage collector)" {
 
 				// ugh. thanks Google. GC events are weird.
 				mem.zero(&new_event, size_of(JSONEvent))
@@ -612,9 +613,8 @@ process_sample :: proc(ev: ^TempEvent) {
 process_event :: proc(ev: ^TempEvent) {
 	#partial switch ev.type {
 	case .Instant:
-		e := ev
-		e.timestamp *= stamp_scale
-		json_push_instant(e)
+		ev.timestamp *= stamp_scale
+		json_push_instant(ev)
 	case .Complete:
 		new_event := JSONEvent{
 			name = ev.name,
@@ -639,13 +639,13 @@ process_event :: proc(ev: ^TempEvent) {
 	case .End:
 		p_idx, ok1 := vh_find(&process_map, u32(ev.process_id))
 		if !ok1 {
-			fmt.printf("invalid end?\n")
-			return
+			fmt.printf("Invalid pid: %d\n", ev.process_id)
+			push_fatal(SpallError.InvalidFile)
 		}
 		t_idx, ok2 := vh_find(&processes[p_idx].thread_map, u32(ev.thread_id))
 		if !ok2 {
-			fmt.printf("invalid end?\n")
-			return
+			fmt.printf("Invalid tid: %d\n", ev.thread_id)
+			push_fatal(SpallError.InvalidFile)
 		}
 
 		thread := &processes[p_idx].threads[t_idx]

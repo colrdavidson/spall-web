@@ -29,7 +29,6 @@ current_alloc_offset := 0
 
 wasmContext := runtime.default_context()
 
-bp: Parser
 
 // input state
 is_mouse_down  := false
@@ -127,6 +126,8 @@ first_frame := true
 loading_config := true
 post_loading := false
 event_count: i64
+
+bp: Parser
 
 string_block: [dynamic]u8
 processes: [dynamic]Process
