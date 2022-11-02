@@ -279,6 +279,7 @@ distance :: proc(p1, p2: Vec2) -> f64 {
 	return math.sqrt((dx * dx) + (dy * dy))
 }
 
+ingest_start_time: u64
 start_time: u64
 start_mem: i64
 allocator: mem.Allocator

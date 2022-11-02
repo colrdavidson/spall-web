@@ -271,6 +271,8 @@ generate_selftimes :: proc() {
 instant_count := 0
 first_chunk: bool
 init_loading_state :: proc(size: u32, name: string) {
+	ingest_start_time = u64(get_time())
+
 	b := strings.builder_from_slice(file_name_store[:])
 	strings.write_string(&b, name)
 	file_name = strings.to_string(b)
@@ -347,6 +349,10 @@ finish_loading :: proc () {
 
 	loading_config = false
 	post_loading = true
+
+	ingest_end_time := u64(get_time())
+	time_range := ingest_end_time - ingest_start_time
+	fmt.printf("runtime: %fs (%dms)\n", f32(time_range) / 1000, time_range)
 	return
 }
 
