@@ -297,6 +297,7 @@ init_loading_state :: proc(size: u32, name: string) {
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
 
+	last_read = 0
 	first_chunk = true
 	event_count = 0
 	instant_count = 0

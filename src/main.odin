@@ -128,6 +128,7 @@ post_loading := false
 event_count: i64
 
 bp: Parser
+last_read: i64
 
 string_block: [dynamic]u8
 processes: [dynamic]Process

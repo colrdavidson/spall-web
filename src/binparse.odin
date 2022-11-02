@@ -109,7 +109,6 @@ get_next_event :: proc(chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
 	return .PartialRead
 }
 
-last_read : i64 = 0
 load_binary_chunk :: proc(chunk: []u8) {
 	temp_ev := TempEvent{}
 	ev := Event{}
