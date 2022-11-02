@@ -93,8 +93,9 @@ typedef struct SpallEndEvent {
 
 typedef struct SpallProfile {
     double timestamp_unit;
-    bool (*write)(struct SpallProfile *self, void *data, size_t length);
+    bool (*write)(struct SpallProfile *self, const void *data, size_t length);
     bool (*flush)(struct SpallProfile *self);
+    void (*close)(struct SpallProfile *self);
     union {
         FILE *file;
         void *userdata;
@@ -159,16 +160,18 @@ extern "C" {
 #endif
 
 #ifdef SPALL_BUFFER_PROFILING
+static void Spall__BufferProfile(SpallProfile *ctx, SpallBuffer *wb, double spall_time_begin, double spall_time_end, const char *name, int name_len) {
+    // precon: ctx
+    // precon: ctx->write
+    char temp_buffer_data[2048];
+    SpallBuffer temp_buffer = { temp_buffer_data, sizeof(temp_buffer_data) };
+    if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, name, sizeof(name) - 1, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_begin)) return;
+    if (!SpallTraceEndTidPid(ctx, &temp_buffer, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_end)) return;
+    ctx->write(ctx, temp_buffer_data, temp_buffer.head);
+}
 #define SPALL_BUFFER_PROFILE_BEGIN() double spall_time_begin = (SPALL_BUFFER_PROFILING_GET_TIME())
 // Don't call this with anything other than a string literal
-#define SPALL_BUFFER_PROFILE_END(name) do { \
-        double spall_time_end = (SPALL_BUFFER_PROFILING_GET_TIME()); \
-        char temp_buffer_data[sizeof(SpallBeginEvent) + sizeof("" name "") - 1 + sizeof(SpallEndEvent)]; \
-        SpallBuffer temp_buffer = {temp_buffer_data, sizeof(temp_buffer_data)}; \
-        if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, name, sizeof(name) - 1, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_begin)) return false; \
-        if (!SpallTraceEndTidPid(ctx, &temp_buffer, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_end)) return false; \
-        if (!Spall__FileWrite(ctx, temp_buffer_data, sizeof(temp_buffer_data))) return false; \
-    } while (0)
+#define SPALL_BUFFER_PROFILE_END(name) Spall__BufferProfile(ctx, wb, spall_time_begin, (SPALL_BUFFER_PROFILING_GET_TIME()), "" name "", sizeof("" name "") - 1)
 #else
 #define SPALL_BUFFER_PROFILE_BEGIN()
 #define SPALL_BUFFER_PROFILE_END(name)
@@ -178,7 +181,7 @@ extern char SpallSingleThreadedBufferData[];
 char SpallSingleThreadedBufferData[1 << 16];
 SpallBuffer SpallSingleThreadedBuffer = {SpallSingleThreadedBufferData, sizeof(SpallSingleThreadedBufferData)};
 
-static bool Spall__FileWrite(SpallProfile *ctx, void *p, size_t n) {
+static bool Spall__FileWrite(SpallProfile *ctx, const void *p, size_t n) {
     if (!ctx->file) return false;
 #ifdef SPALL_DEBUG
     if (feof(ctx->file)) return false;
@@ -193,11 +196,28 @@ static bool Spall__FileFlush(SpallProfile *ctx) {
     if (fflush(ctx->file)) return false;
     return true;
 }
+static void Spall__FileClose(SpallProfile *ctx) {
+    if (!ctx->file) return;
+
+#ifdef SPALL_JSON
+#ifdef SPALL_DEBUG
+    if (!feof(ctx->file) && !ferror(ctx->file))
+#endif
+    {
+        fseek(ctx->file, -2, SEEK_CUR); // seek back to overwrite trailing comma
+        fwrite("\n]}\n", sizeof("\n]}\n") - 1, 1, ctx->file);
+    }
+#endif
+    fflush(ctx->file);
+    fclose(ctx->file);
+    ctx->file = NULL;
+}
 
 static bool Spall__BufferFlush(SpallProfile *ctx, SpallBuffer *wb) {
     // precon: wb
     // precon: wb->data
     // precon: wb->head <= wb->length
+    // precon: !ctx || ctx->write
 #ifdef SPALL_DEBUG
     if (wb->ctx != ctx) return false; // Buffer must be bound to this context (or to NULL)
 #endif
@@ -213,8 +233,11 @@ static bool Spall__BufferFlush(SpallProfile *ctx, SpallBuffer *wb) {
 
 static bool Spall__BufferWrite(SpallProfile *ctx, SpallBuffer *wb, void *p, size_t n) {
     // precon: !wb || wb->head < wb->length
-    // precon: ctx->file
+    // precon: !ctx || ctx->write
     if (!wb) return ctx->write(ctx, p, n);
+#ifdef SPALL_DEBUG
+    if (wb->ctx != ctx) return false; // Buffer must be bound to this context (or to NULL)
+#endif
     if (wb->head + n > wb->length && !Spall__BufferFlush(ctx, wb)) return false;
     if (n > wb->length) {
         SPALL_BUFFER_PROFILE_BEGIN();
@@ -263,6 +286,7 @@ static SpallProfile Spall__Init(const char *filename, double timestamp_unit) {
     ctx.file = fopen(filename, "wb"); // TODO: handle utf8 and long paths on windows
     ctx.write = Spall__FileWrite;
     ctx.flush = Spall__FileFlush;
+    ctx.close = Spall__FileClose;
     if (!ctx.file) { SpallQuit(&ctx); return ctx; }
     ctx.timestamp_unit = timestamp_unit;
 
@@ -284,17 +308,7 @@ SpallProfile SpallInit    (const char *filename, double timestamp_unit) { return
 
 void SpallQuit(SpallProfile *ctx) {
     if (!ctx) return;
-    if (ctx->file) {
-#ifdef SPALL_JSON
-        fseek(ctx->file, -2, SEEK_CUR); // seek back to overwrite trailing comma
-        fprintf(ctx->file, "\n]}\n");
-        fflush(ctx->file);
-        fclose(ctx->file);
-#else
-        fflush(ctx->file);
-        fclose(ctx->file);
-#endif
-    }
+    if (ctx->close) ctx->close(ctx);
 
     memset(ctx, 0, sizeof(*ctx));
 }
