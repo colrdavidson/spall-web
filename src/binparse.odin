@@ -109,6 +109,7 @@ get_next_event :: proc(chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
 	return .PartialRead
 }
 
+last_read : i64 = 0
 load_binary_chunk :: proc(chunk: []u8) {
 	temp_ev := TempEvent{}
 	ev := Event{}
@@ -120,9 +121,11 @@ load_binary_chunk :: proc(chunk: []u8) {
 
 		#partial switch state {
 		case .PartialRead:
-			if bp.pos + i64(size_of(spall.End_Event)) > i64(bp.total_size) {
-				fmt.printf("Invalid trailing event?\n")
+			if bp.pos == last_read {
+				fmt.printf("Invalid trailing data? dropping from [%d -> %d] (%d bytes)\n", bp.pos, bp.total_size, i64(bp.total_size) - bp.pos)
 				break load_loop
+			} else {
+				last_read = bp.pos
 			}
 
 			bp.offset = bp.pos
