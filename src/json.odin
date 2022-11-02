@@ -613,7 +613,6 @@ process_sample :: proc(ev: ^TempEvent) {
 process_event :: proc(ev: ^TempEvent) {
 	#partial switch ev.type {
 	case .Instant:
-		ev.timestamp *= stamp_scale
 		json_push_instant(ev)
 	case .Complete:
 		new_event := JSONEvent{
@@ -635,7 +634,7 @@ process_event :: proc(ev: ^TempEvent) {
 		p_idx, t_idx, e_idx := json_push_event(u32(ev.process_id), u32(ev.thread_id), &new_event)
 
 		thread := &processes[p_idx].threads[t_idx]
-		stack_push_back(&thread.bande_q, e_idx)
+		stack_push_back(&thread.bande_q, EVData{idx = e_idx, depth = 0, self_time = -1})
 	case .End:
 		p_idx, ok1 := vh_find(&process_map, u32(ev.process_id))
 		if !ok1 {
@@ -650,8 +649,8 @@ process_event :: proc(ev: ^TempEvent) {
 
 		thread := &processes[p_idx].threads[t_idx]
 		if thread.bande_q.len > 0 {
-			je_idx := stack_pop_back(&thread.bande_q)
-			jev := &thread.json_events[je_idx]
+			jev_data := stack_pop_back(&thread.bande_q)
+			jev := &thread.json_events[jev_data.idx]
 			jev.duration = ev.timestamp - jev.timestamp
 			jev.self_time = jev.duration
 			thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)

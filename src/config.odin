@@ -337,7 +337,9 @@ finish_loading :: proc () {
 	stop_bench("generate spatial partitions")
 
 	start_bench("generate self-time")
-	generate_selftimes()
+	if is_json {
+		generate_selftimes()
+	}
 	stop_bench("generate self-time")
 
 	t = 0
