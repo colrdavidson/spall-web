@@ -267,7 +267,7 @@ static SpallProfile Spall__Init(const char *filename, double timestamp_unit) {
     ctx.timestamp_unit = timestamp_unit;
 
 #ifdef SPALL_JSON
-    if (fprintf(ctx.file, "{\"traceEvents\":[\n") <= 0) { SpallQuit(&ctx); return ctx; }
+    if (!ctx.write(&ctx, "{\"traceEvents\":[\n", sizeof("{\"traceEvents\":[\n") - 1)) { SpallQuit(&ctx); return ctx; }
 #else
     SpallHeader header;
     header.magic_header = 0x0BADF00D;
@@ -288,6 +288,8 @@ void SpallQuit(SpallProfile *ctx) {
 #ifdef SPALL_JSON
         fseek(ctx->file, -2, SEEK_CUR); // seek back to overwrite trailing comma
         fprintf(ctx->file, "\n]}\n");
+        fflush(ctx->file);
+        fclose(ctx->file);
 #else
         fflush(ctx->file);
         fclose(ctx->file);
@@ -330,13 +332,16 @@ bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *na
     memcpy(ev.name_bytes, name, (uint8_t)name_len);
 
 #ifdef SPALL_JSON
-    if (fprintf(ctx->file,
-                "{\"name\":\"%.*s\",\"ph\":\"B\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
-                (int)ev.event.name_length, ev.name_bytes,
-                ev.event.pid,
-                ev.event.tid,
-                ev.event.when * ctx->timestamp_unit)
-        <= 0) return false;
+    char buf[1024];
+    int buf_len = snprintf(buf, sizeof(buf),
+                           "{\"name\":\"%.*s\",\"ph\":\"B\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
+                           (int)ev.event.name_length, ev.name_bytes,
+                           ev.event.pid,
+                           ev.event.tid,
+                           ev.event.when * ctx->timestamp_unit);
+    if (buf_len <= 0) return false;
+    if (buf_len >= sizeof(buf)) return false;
+    if (!Spall__BufferWrite(ctx, wb, buf, buf_len)) return false;
 #else
     if (!Spall__BufferWrite(ctx, wb, &ev, sizeof(SpallBeginEvent) + (uint8_t)name_len + (uint8_t)args_len)) return false;
 #endif
@@ -361,12 +366,15 @@ bool SpallTraceEndTidPid(SpallProfile *ctx, SpallBuffer *wb, uint32_t tid, uint3
     ev.when = when;
 
 #ifdef SPALL_JSON
-    if (fprintf(ctx->file,
-                "{\"ph\":\"E\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
-                ev.pid,
-                ev.tid,
-                ev.when * ctx->timestamp_unit)
-        <= 0) return false;
+    char buf[512];
+    int buf_len = snprintf(buf, sizeof(buf),
+                           "{\"ph\":\"E\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
+                           ev.pid,
+                           ev.tid,
+                           ev.when * ctx->timestamp_unit);
+    if (buf_len <= 0) return false;
+    if (buf_len >= sizeof(buf)) return false;
+    if (!Spall__BufferWrite(ctx, wb, buf, buf_len)) return false;
 #else
     if (!Spall__BufferWrite(ctx, wb, &ev, sizeof(ev))) return false;
 #endif
