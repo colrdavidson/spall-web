@@ -2074,12 +2074,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	// save me my battery, plz
 	PAN_X_EPSILON :: 0.01
 	PAN_Y_EPSILON :: 1.0
-	SCALE_EPSILON :: 0.00000001
+	SCALE_EPSILON :: 0.01
 	SCROLL_EPSILON :: 0.01
 	if !render_one_more &&
 	   math.abs(cam.pan.x - cam.target_pan_x) < PAN_X_EPSILON && 
 	   math.abs(cam.vel.y - 0) < PAN_Y_EPSILON && 
-	   math.abs(cam.current_scale - cam.target_scale) < SCALE_EPSILON &&
+	   math.abs((cam.current_scale - cam.target_scale) / cam.target_scale) < SCALE_EPSILON &&
 	   math.abs(info_pane_scroll_vel) < SCROLL_EPSILON &&
 	   stats_state != .Started && !anim_playing {
 		cam.pan.x = cam.target_pan_x
