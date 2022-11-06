@@ -167,7 +167,7 @@ static void Spall__BufferProfile(SpallProfile *ctx, SpallBuffer *wb, double spal
     SpallBuffer temp_buffer = { temp_buffer_data, sizeof(temp_buffer_data) };
     if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, name, sizeof(name) - 1, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_begin)) return;
     if (!SpallTraceEndTidPid(ctx, &temp_buffer, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_end)) return;
-    ctx->write(ctx, temp_buffer_data, temp_buffer.head);
+    if (ctx->write) ctx->write(ctx, temp_buffer_data, temp_buffer.head);
 }
 #define SPALL_BUFFER_PROFILE_BEGIN() double spall_time_begin = (SPALL_BUFFER_PROFILING_GET_TIME())
 // Don't call this with anything other than a string literal
@@ -224,7 +224,7 @@ static bool Spall__BufferFlush(SpallProfile *ctx, SpallBuffer *wb) {
 
     if (wb->head && ctx) {
         SPALL_BUFFER_PROFILE_BEGIN();
-        if (!ctx->write(ctx, wb->data, wb->head)) return false;
+        if (!ctx->write || !ctx->write(ctx, wb->data, wb->head)) return false;
         SPALL_BUFFER_PROFILE_END("Buffer Flush");
     }
     wb->head = 0;
@@ -234,14 +234,14 @@ static bool Spall__BufferFlush(SpallProfile *ctx, SpallBuffer *wb) {
 static bool Spall__BufferWrite(SpallProfile *ctx, SpallBuffer *wb, void *p, size_t n) {
     // precon: !wb || wb->head < wb->length
     // precon: !ctx || ctx->write
-    if (!wb) return ctx->write(ctx, p, n);
+    if (!wb) return ctx->write && ctx->write(ctx, p, n);
 #ifdef SPALL_DEBUG
     if (wb->ctx != ctx) return false; // Buffer must be bound to this context (or to NULL)
 #endif
     if (wb->head + n > wb->length && !Spall__BufferFlush(ctx, wb)) return false;
     if (n > wb->length) {
         SPALL_BUFFER_PROFILE_BEGIN();
-        if (!ctx->write(ctx, p, n)) return false;
+        if (!ctx->write || !ctx->write(ctx, p, n)) return false;
         SPALL_BUFFER_PROFILE_END("Unbuffered Write");
         return true;
     }
@@ -319,7 +319,7 @@ bool SpallFlush(SpallProfile *ctx) {
     if (!ctx->file) return false;
 #endif
 
-    if (!ctx->flush(ctx)) return false;
+    if (!ctx->flush || !ctx->flush(ctx)) return false;
     return true;
 }
 
