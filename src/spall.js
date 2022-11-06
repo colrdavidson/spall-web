@@ -90,7 +90,7 @@ const text_canvas = document.getElementById('text-canvas');
 const text_ctx = text_canvas.getContext('2d');
 
 const rect_canvas = document.getElementById('rect-canvas');
-const gl_ctx = rect_canvas.getContext('webgl2');
+const gl_ctx = rect_canvas.getContext('webgl2', { alpha: false });
 
 // WebGL2 init
 const shader = init_shader(gl_ctx, vert_src, frag_src);
@@ -305,7 +305,7 @@ async function init() {
 				_gl_init_frame: (r, g, b, a) => {
 					gl_ctx.viewport(0, 0, gl_ctx.canvas.width, gl_ctx.canvas.height);
 
-					gl_ctx.clearColor(r / 255, g / 255, b / 255, a / 255);
+					gl_ctx.clearColor(r / 255, g / 255, b / 255, 1.0);
 					gl_ctx.clear(gl_ctx.COLOR_BUFFER_BIT);
 
 					gl_ctx.uniform1f(dpr_uni, dpr);
