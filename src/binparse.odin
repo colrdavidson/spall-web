@@ -79,12 +79,14 @@ get_next_event :: proc(chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
 		}
 
 		name := string(data_start[event_sz:event_sz+i64(event.name_len)])
+		args := string(data_start[event_sz+i64(event.name_len):event_sz+i64(event.name_len)+i64(event.args_len)])
 
 		temp_ev.type = .Begin
 		temp_ev.timestamp = event.time
 		temp_ev.thread_id = event.tid
 		temp_ev.process_id = event.pid
 		temp_ev.name = in_get(&bp.intern, name)
+		temp_ev.args = in_get(&bp.intern, args)
 
 		bp.pos += event_sz + event_tail
 		return .EventRead
