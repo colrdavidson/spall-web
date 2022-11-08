@@ -104,6 +104,10 @@ void *run_work(void *ptr) {
 	*/
 	memset(spall_buffer.data, 1, spall_buffer.length);
 
+	/*
+ 		fwrite handles the file-locking for us, and we write in atomic buffer-wide chunks,
+		so you shouldn't need to do anything special in your threaded event emitting code.
+ 	*/
 	SpallBufferInit(&spall_ctx, &spall_buffer);
 	for (int i = 0; i < 1000000; i++) {
 		foo();
@@ -123,5 +127,10 @@ int main() {
 	pthread_join(thread_1, NULL);
 	pthread_join(thread_2, NULL);
 
+	/*
+ 		If you're using SPALL_JSON and you want to use non-Spall JSON tooling, don't forget to quit!
+		Quit writes the closing braces to the file. Spall can handle JSON files without the trailing ]}\n,
+ 		but other tools can definitely be fussy about it
+ 	*/
 	SpallQuit(&spall_ctx);
 }
