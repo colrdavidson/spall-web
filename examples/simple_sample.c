@@ -33,24 +33,32 @@ double get_time_in_micros() {
 }
 #endif
 
-int main() {
-	SpallProfile ctx = SpallInit("simple_sample.spall", 1);
+static SpallProfile spall_ctx;
+static SpallBuffer  spall_buffer;
+void hello_world() {
+	SpallTraceBeginLenTidPid(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, 0, 0, get_time_in_micros());
 
-	#define BUFFER_SIZE (100 * 1024 * 1024)
+	printf("Hello World\n");
+
+	SpallTraceEndTidPid(&spall_ctx, &spall_buffer, 0, 0, get_time_in_micros());
+}
+
+int main() {
+	spall_ctx = SpallInit("simple_sample.spall", 1);
+
+	#define BUFFER_SIZE (1 * 1024 * 1024)
 	unsigned char *buffer = malloc(BUFFER_SIZE);
 
-	SpallBuffer buf = {0};
-	buf.length = BUFFER_SIZE;
-	buf.data = buffer;
+	spall_buffer = (SpallBuffer){
+		.length = BUFFER_SIZE,
+		.data = buffer,
+	};
 
-	char ev_str[] = "Hello World";
-
-	SpallBufferInit(&ctx, &buf);
+	SpallBufferInit(&spall_ctx, &spall_buffer);
 	for (int i = 0; i < 1000000; i++) {
-		SpallTraceBeginLenTidPid(&ctx, &buf, ev_str, sizeof(ev_str) - 1, 0, 0, get_time_in_micros());
-		SpallTraceEndTidPid(&ctx, &buf, 0, 0, get_time_in_micros());
+		hello_world();
 	}
 
-	SpallBufferQuit(&ctx, &buf);
-	SpallQuit(&ctx);
+	SpallBufferQuit(&spall_ctx, &spall_buffer);
+	SpallQuit(&spall_ctx);
 }
