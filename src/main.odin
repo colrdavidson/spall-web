@@ -1525,9 +1525,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		INITIAL_ITER :: 25_000
 		FULL_ITER    :: 1_000_000
+		just_started := cur_stat_offset.range_idx == 0 && cur_stat_offset.event_idx == 0
 		if stats_state == .Started && did_multiselect {
 			event_count := 0
-			just_started := cur_stat_offset.range_idx == 0 && cur_stat_offset.event_idx == 0
 			iter_max := just_started ? INITIAL_ITER : FULL_ITER
 
 			broke_early := false
@@ -1618,9 +1618,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		// If we've got stats cooking already
 		} else if stats_state == .Started {
 			y := info_pane_y + top_line_gap
-
-			draw_text("Stats loading...", Vec2{x_subpad, y}, p_font_size, monospace_font, text_color)
-
+			center_x := width / 2
+			
 			total_count := 0
 			cur_count := 0
 			for range, r_idx in selected_ranges {
@@ -1635,8 +1634,26 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				}
 			}
 
-			progress_count := fmt.tprintf("%d of %d", cur_count, total_count)
-			draw_text(progress_count, Vec2{x_subpad, y + em}, p_font_size, monospace_font, text_color)
+
+			loading_str := fmt.tprint("Stats loading...")
+			progress_str := fmt.tprintf("%d of %d", cur_count, total_count)
+			hint_str := fmt.tprint("Release multi-select to get the rest of the stats")
+
+			strs := []string{ loading_str, progress_str }
+			if just_started && total_count >= INITIAL_ITER {
+				strs = []string{ loading_str, progress_str, hint_str }
+			}
+
+			max_height := 0.0
+			for str in strs {
+				next_line(&max_height, em)
+			}
+
+			cur_y := y + ((height - y) / 2) - (max_height / 2)
+			for str in strs {
+				str_width := measure_text(str, p_font_size, default_font)
+				draw_text(str, Vec2{center_x - (str_width / 2), next_line(&cur_y, em)}, p_font_size, default_font, text_color)
+			}
 
 		// If stats are ready to display
 		} else if stats_state == .Finished && did_multiselect {
