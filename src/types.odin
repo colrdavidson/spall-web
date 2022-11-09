@@ -202,6 +202,7 @@ init_thread :: proc(thread_id: u32) -> Thread {
 		min_time = 0x7fefffffffffffff, 
 		thread_id = thread_id,
 		events = make([dynamic]Event, big_global_allocator),
+		json_events = make([dynamic]JSONEvent, big_global_allocator),
 		depths = make([dynamic]Depth, small_global_allocator),
 		instants = make([dynamic]Instant, big_global_allocator),
 	}

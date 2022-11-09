@@ -56,10 +56,9 @@ arena_allocator_proc :: proc(
 	switch mode {
 	case .Alloc:
 		#no_bounds_check end := &arena.data[arena.offset]
-
 		ptr := mem.align_forward(end, uintptr(alignment))
-
-		total_size := size + mem.ptr_sub((^byte)(ptr), (^byte)(end))
+		align_skip := uint(uintptr(ptr) - uintptr(end))
+		total_size := size + align_skip
 
 		if arena.offset + total_size > len(arena.data) {
 			fmt.printf("Out of memory @ %s\n", location)
@@ -69,6 +68,7 @@ arena_allocator_proc :: proc(
 		arena.offset += total_size
 		arena.peak_used = max(arena.peak_used, arena.offset)
 		mem.zero(ptr, size)
+
 		return mem.byte_slice(ptr, size), nil
 
 	case .Free:
@@ -139,7 +139,8 @@ growing_arena_allocator_proc :: proc(
 	case .Alloc:
 		#no_bounds_check end := &arena.data[uint(arena.offset)]
 		ptr := mem.align_forward(end, uintptr(alignment))
-		total_size := uint(size) + uint(mem.ptr_sub((^byte)(ptr), (^byte)(end)))
+		align_skip := uint(uintptr(ptr) - uintptr(end))
+		total_size := uint(size) + align_skip
 
 		if uint(arena.offset) + uint(total_size) > uint(len(arena.data)) {
 			page_count := _align_formula(total_size, PAGE_SIZE) / PAGE_SIZE
