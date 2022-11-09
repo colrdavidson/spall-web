@@ -965,8 +965,8 @@ json_process_events :: proc() {
 
 			insertion_sort(tm.json_events[:], event_buildsort_proc)
 
-			free_all(scratch_allocator)
-			depth_counts := make([dynamic]uint, 0, 64, scratch_allocator)
+			free_all(scratch2_allocator)
+			depth_counts := make([dynamic]uint, 0, 64, scratch2_allocator)
 
 			stack_clear(&ev_stack)
 			for event, e_idx in &tm.json_events {
@@ -1012,14 +1012,14 @@ json_process_events :: proc() {
 				event.depth = u16(cur_depth)
 			}
 
-			depth_offsets := make([]uint, len(depth_counts), scratch_allocator)
+			depth_offsets := make([]uint, len(depth_counts), scratch2_allocator)
 			cur_offset : uint = 0
 			for i := 0; i < len(depth_counts); i += 1 {
 				depth_offsets[i] = cur_offset
 				cur_offset += depth_counts[i]
 			}
 
-			depth_counters := make([]uint, len(depth_counts), scratch_allocator)
+			depth_counters := make([]uint, len(depth_counts), scratch2_allocator)
 			mem.zero_slice(depth_counters)
 
 			sorted_events := make([]Event, len(tm.json_events), big_global_allocator)

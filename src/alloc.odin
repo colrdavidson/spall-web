@@ -58,15 +58,15 @@ arena_allocator_proc :: proc(
 		#no_bounds_check end := &arena.data[arena.offset]
 		ptr := mem.align_forward(end, uintptr(alignment))
 		align_skip := uint(uintptr(ptr) - uintptr(end))
-		total_size := size + align_skip
+		total_size := uint(size) + align_skip
 
-		if arena.offset + total_size > len(arena.data) {
+		if uint(arena.offset) + uint(total_size) > uint(len(arena.data)) {
 			fmt.printf("Out of memory @ %s\n", location)
 			push_fatal(SpallError.OutOfMemory)
 		}
 
-		arena.offset += total_size
-		arena.peak_used = max(arena.peak_used, arena.offset)
+		arena.offset = int(uint(arena.offset) + uint(total_size))
+		arena.peak_used = int(max(arena.peak_used, arena.offset))
 		mem.zero(ptr, size)
 
 		return mem.byte_slice(ptr, size), nil
