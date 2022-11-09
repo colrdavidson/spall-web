@@ -323,9 +323,8 @@ bool SpallFlush(SpallProfile *ctx) {
     return true;
 }
 
-bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, uint32_t pid, double when) {
+bool SpallTraceBeginLenArgsTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, const char *args, signed long args_len, uint32_t tid, uint32_t pid, double when) {
     SpallBeginEventMax ev;
-	signed long args_len = 0;
 
 #ifdef SPALL_DEBUG
     if (!ctx) return false;
@@ -335,6 +334,7 @@ bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *na
 #endif
     name_len = SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
     args_len = SPALL_MIN(args_len, 255); // will be interpreted as truncated in the app (?)
+    char *args_bytes = ev.name_bytes + name_len;
 
     ev.event.type = SpallEventType_Begin;
     ev.event.category = 0;
@@ -344,11 +344,13 @@ bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *na
     ev.event.name_length = (uint8_t)name_len;
     ev.event.args_length = (uint8_t)args_len;
     memcpy(ev.name_bytes, name, (uint8_t)name_len);
+    memcpy(args_bytes, args, (uint8_t)args_len);
 
 #ifdef SPALL_JSON
     char buf[1024];
     int buf_len = snprintf(buf, sizeof(buf),
-                           "{\"name\":\"%.*s\",\"ph\":\"B\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
+                           "{\"args\":\"%.*s\",\"name\":\"%.*s\",\"ph\":\"B\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
+                           (int)ev.event.args_length, args_bytes,
                            (int)ev.event.name_length, ev.name_bytes,
                            ev.event.pid,
                            ev.event.tid,
@@ -363,8 +365,9 @@ bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *na
     return true;
 }
 
-bool SpallTraceBeginLenTid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, double when) { return SpallTraceBeginLenTidPid(ctx, wb, name, name_len, tid, 0, when); }
-bool SpallTraceBeginLen   (SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, double when)               { return SpallTraceBeginLenTidPid(ctx, wb, name, name_len,   0, 0, when); }
+bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, uint32_t pid, double when) { return SpallTraceBeginLenArgsTidPid(ctx, wb, name, name_len, "", 0, tid, 0, when); }
+bool SpallTraceBeginLenTid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, double when) { return SpallTraceBeginLenArgsTidPid(ctx, wb, name, name_len, "", 0, tid, 0, when); }
+bool SpallTraceBeginLen   (SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, double when)               { return SpallTraceBeginLenArgsTidPid(ctx, wb, name, name_len, "", 0,  0, 0, when); }
 
 bool SpallTraceEndTidPid(SpallProfile *ctx, SpallBuffer *wb, uint32_t tid, uint32_t pid, double when) {
     SpallEndEvent ev;
