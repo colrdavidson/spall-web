@@ -724,7 +724,7 @@ process_next_json_event :: proc(jp: ^JSONParser, chunk: []u8) -> (state: JSONSta
 		next_state := dfa[jp.state][class]
 		jp.state = next_state
 
-		if next_state != .String && in_string {
+		if next_state != .String && next_state != .Escape && in_string {
 			str := string(chunk[str_start:chunk_pos()])
 			if depth_count == 1 {
 				if in_key {
