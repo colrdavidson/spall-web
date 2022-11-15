@@ -54,7 +54,7 @@ arena_allocator_proc :: proc(
 	arena := cast(^Arena)allocator_data
 
 	switch mode {
-	case .Alloc:
+	case .Alloc, .Alloc_Non_Zeroed:
 		#no_bounds_check end := &arena.data[arena.offset]
 		ptr := mem.align_forward(end, uintptr(alignment))
 		align_skip := uint(uintptr(ptr) - uintptr(end))
@@ -67,7 +67,10 @@ arena_allocator_proc :: proc(
 
 		arena.offset = int(uint(arena.offset) + uint(total_size))
 		arena.peak_used = int(max(arena.peak_used, arena.offset))
-		mem.zero(ptr, size)
+
+		if mode != .Alloc_Non_Zeroed {
+			mem.zero(ptr, size)
+		}
 
 		return mem.byte_slice(ptr, size), nil
 
@@ -85,7 +88,7 @@ arena_allocator_proc :: proc(
 	case .Query_Features:
 		set := (^mem.Allocator_Mode_Set)(old_memory)
 		if set != nil {
-			set^ = {.Alloc, .Free_All, .Resize, .Query_Features}
+			set^ = {.Alloc, .Alloc_Non_Zeroed, .Free_All, .Resize, .Query_Features}
 		}
 		return nil, nil
 
@@ -136,7 +139,7 @@ growing_arena_allocator_proc :: proc(
 	arena := cast(^Arena)allocator_data
 
 	switch mode {
-	case .Alloc:
+	case .Alloc, .Alloc_Non_Zeroed:
 		#no_bounds_check end := &arena.data[uint(arena.offset)]
 		ptr := mem.align_forward(end, uintptr(alignment))
 		align_skip := uint(uintptr(ptr) - uintptr(end))
@@ -159,6 +162,7 @@ growing_arena_allocator_proc :: proc(
 
 		arena.offset = int(uint(arena.offset) + uint(total_size))
 		arena.peak_used = int(max(uint(arena.peak_used), uint(arena.offset)))
+
 		return _byte_slice(ptr, size), nil
 
 	case .Free:

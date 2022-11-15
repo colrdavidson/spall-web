@@ -822,6 +822,13 @@ load_json_chunk :: proc (jp: ^JSONParser, chunk: []u8) {
 		state := process_next_json_event(jp, chunk)
 		#partial switch state {
 		case .PartialRead:
+			if bp.pos == last_read {
+				fmt.printf("Invalid trailing data? dropping from [%d -> %d] (%d bytes)\n", bp.pos, bp.total_size, i64(bp.total_size) - bp.pos)
+				break hot_loop
+			} else {
+				last_read = bp.pos
+			}
+
 			bp.offset = bp.pos
 			get_chunk(f64(bp.pos), f64(CHUNK_SIZE))
 			return
