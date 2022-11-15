@@ -7,13 +7,13 @@ import "formats:spall"
 buf: [dynamic]u8
 
 emit_json_event :: proc(tid, ts, dur: int) {
-	name := fmt.tprintf("foo-%d\n", tid)
+	name := fmt.tprintf("foo-%d", tid)
 	str := fmt.tprintf("\t\t{{\"cat\":\"function\", \"dur\":%d, \"name\":\"%s\", \"ph\":\"X\", \"pid\":0, \"tid\": %d, \"ts\": %d}},\n", dur, name, tid, ts)
 	append(&buf, str)
 }
 
 emit_header :: proc() {
-	header := spall.Header{magic = spall.MAGIC, version = 0, timestamp_unit = 1.0, must_be_0 = 0}
+	header := spall.Header{magic = spall.MAGIC, version = 1, timestamp_unit = 1.0, must_be_0 = 0}
 	header_bytes := transmute([size_of(spall.Header)]u8)header
 	append(&buf, ..header_bytes[:])
 }
@@ -47,7 +47,7 @@ gen_triangle :: proc(tid, start, end: int) {
 		return
 	}
 
-	name := fmt.tprintf("foo-%d\n", tid)
+	name := fmt.tprintf("foo-%d", tid)
 	emit_begin_event(name, 0, tid, start)
 	gen_triangle(tid, start + 1, end - 1)
 	emit_end_event(0, tid, end)
@@ -106,7 +106,7 @@ main :: proc() {
 	gen_triangles(8, 10, 300_000)
 	//fmt.fprintf("\t]\n}}")
 
-	out_file := "test_DUMP.spall"
+	out_file := "big_triangles.spall"
 	if os.write_entire_file(out_file, buf[:]) {
 		//fmt.printf("Done, wrote %v events to %v (%v bytes)\n", len(trace.traceEvents), out_file, len(buf))
 	} else {
