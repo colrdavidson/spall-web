@@ -294,6 +294,8 @@ init_loading_state :: proc(size: u32, name: string) {
 	process_map = vh_init(scratch_allocator)
 	global_instants = make([dynamic]Instant, big_global_allocator)
 	string_block = make([dynamic]u8, big_global_allocator)
+	stats = sm_init(big_global_allocator)
+	selected_ranges = make([dynamic]Range, 0, big_global_allocator)
 	total_max_time = 0
 	total_min_time = 0x7fefffffffffffff
 

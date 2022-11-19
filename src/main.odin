@@ -29,7 +29,6 @@ current_alloc_offset := 0
 
 wasmContext := runtime.default_context()
 
-
 // input state
 is_mouse_down  := false
 was_mouse_down := false
@@ -65,7 +64,7 @@ clicked_on_rect := false
 
 did_pan := false
 
-stats: map[string]Stats
+stats: StatMap
 stats_state := StatState.NoStats
 stat_sort_type := SortState.SelfTime
 stat_sort_descending := true
@@ -1426,9 +1425,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			// push it into screen-space
 			flopped_rect.pos.x -= disp_rect.pos.x
 
-			big_global_arena.offset = current_alloc_offset
-			stats = make(map[string]Stats, 0, big_global_allocator)
-			selected_ranges = make([dynamic]Range, 0, big_global_allocator)
+			resize(&selected_ranges, 0)
+			sm_clear(&stats)
 
 			// build out ranges
 			cur_y := padded_graph_rect.pos.y - cam.pan.y
@@ -1523,7 +1521,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 		}
 
-		INITIAL_ITER :: 25_000
+		INITIAL_ITER :: 40_000
 		FULL_ITER    :: 1_000_000
 		just_started := cur_stat_offset.range_idx == 0 && cur_stat_offset.event_idx == 0
 		if stats_state == .Started && did_multiselect {
@@ -1551,11 +1549,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 					duration := bound_duration(ev, thread.max_time)
 
-					name := in_getstr(ev.name)
-					s, ok := &stats[name]
+					s, ok := sm_get(&stats, ev.name)
 					if !ok {
-						stats[name] = Stats{min_time = 1e308}
-						s = &stats[name]
+						s = sm_insert(&stats, ev.name, Stats{min_time = 1e308})
 					}
 					s.count += 1
 					s.total_time += duration
@@ -1569,29 +1565,15 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			}
 
 			if !broke_early {
-				for _, stat in &stats {
-					stat.avg_time = stat.total_time / f64(stat.count)
+				for i := 0; i < len(stats.entries); i += 1 {
+					entry := &stats.entries[i]
+					entry.val.avg_time = entry.val.total_time / f64(entry.val.count)
 				}
 
-				sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
-					Entry :: struct {
-						hash:  uintptr,
-						next:  int,
-						key:   K,
-						value: V,
-					}
-
-					map_sort :: proc(a: Entry, b: Entry) -> bool {
-						return a.value.self_time > b.value.self_time
-					}
-
-					header := runtime.__get_map_header(m)
-					entries := (^[dynamic]Entry)(&header.m.entries)
-					slice.sort_by(entries[:], map_sort)
-					runtime.__dynamic_map_reset_entries(header, loc)
+				self_sort :: proc(a, b: StatEntry) -> bool {
+					return a.val.self_time > b.val.self_time
 				}
-
-				sort_map_entries_by_time(&stats)
+				sm_sort(&stats, self_sort)
 				stats_state = .Finished
 			}
 		}
@@ -1682,8 +1664,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			y += header_height + (em / 4)
 
 			displayed_lines := info_line_count - 1
-			if displayed_lines < len(stats) {
-				max_lines := len(stats)
+			if displayed_lines < len(stats.entries) {
+				max_lines := len(stats.entries)
 
 				// goofy hack to get line height
 				tmp := y
@@ -1697,7 +1679,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 			stat_idx := 0
 			last_pos := 0.0
-			stat_loop: for name, stat in stats {
+			stat_loop: for i := 0; i < len(stats.entries); i += 1 {
+				entry := stats.entries[i]
+				name := entry.key
+				stat := entry.val
+
 				stat_idx += 1
 				if y < (info_pane_y + (em / 2)) {
 					next_line(&y, em)
@@ -1745,9 +1731,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				cursor += column_gap / 2
 
 				//name_width := measure_text(name, p_font_size, monospace_font)
-				tmp_color := color_choices[name_color_idx(name)]
+				name_str := in_getstr(name)
+				tmp_color := color_choices[name_color_idx(name_str)]
 				draw_rect(dr, FVec4{tmp_color.x, tmp_color.y, tmp_color.z, 255})
-				draw_text(name, Vec2{cursor, y_before + (em / 3)}, p_font_size, monospace_font, text_color)
+				draw_text(name_str, Vec2{cursor, y_before + (em / 3)}, p_font_size, monospace_font, text_color)
 
 				next_line(&y, em)
 			}
@@ -1818,66 +1805,50 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	}
 
 	if resort_stats {
-		sort_map_entries_by_time :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
-			Entry :: struct {
-				hash:  uintptr,
-				next:  int,
-				key:   K,
-				value: V,
-			}
-
-
-			header := runtime.__get_map_header(m)
-			entries := (^[dynamic]Entry)(&header.m.entries)
-
-			less: proc(a, b: Entry) -> bool
-			switch stat_sort_type {
-			case .SelfTime:
-				less = proc(a, b: Entry) -> bool {
-					if stat_sort_descending {
-						return a.value.self_time > b.value.self_time
-					} else {
-						return a.value.self_time < b.value.self_time
-					}
-				}
-			case .TotalTime:
-				less = proc(a, b: Entry) -> bool {
-					if stat_sort_descending {
-						return a.value.total_time > b.value.total_time
-					} else {
-						return a.value.total_time < b.value.total_time
-					}
-				}
-			case .MinTime:
-				less = proc(a, b: Entry) -> bool {
-					if stat_sort_descending {
-						return a.value.min_time > b.value.min_time
-					} else {
-						return a.value.min_time < b.value.min_time
-					}
-				}
-			case .AvgTime:
-				less = proc(a, b: Entry) -> bool {
-					if stat_sort_descending {
-						return a.value.avg_time > b.value.avg_time
-					} else {
-						return a.value.avg_time < b.value.avg_time
-					}
-				}
-			case .MaxTime:
-				less = proc(a, b: Entry) -> bool {
-					if stat_sort_descending {
-						return a.value.max_time > b.value.max_time
-					} else {
-						return a.value.max_time < b.value.max_time
-					}
+		less: proc(a, b: StatEntry) -> bool
+		switch stat_sort_type {
+		case .SelfTime:
+			less = proc(a, b: StatEntry) -> bool {
+				if stat_sort_descending {
+					return a.val.self_time > b.val.self_time
+				} else {
+					return a.val.self_time < b.val.self_time
 				}
 			}
-			slice.sort_by(entries[:], less)
-
-			runtime.__dynamic_map_reset_entries(header, loc)
+		case .TotalTime:
+			less = proc(a, b: StatEntry) -> bool {
+				if stat_sort_descending {
+					return a.val.total_time > b.val.total_time
+				} else {
+					return a.val.total_time < b.val.total_time
+				}
+			}
+		case .MinTime:
+			less = proc(a, b: StatEntry) -> bool {
+				if stat_sort_descending {
+					return a.val.min_time > b.val.min_time
+				} else {
+					return a.val.min_time < b.val.min_time
+				}
+			}
+		case .AvgTime:
+			less = proc(a, b: StatEntry) -> bool {
+				if stat_sort_descending {
+					return a.val.avg_time > b.val.avg_time
+				} else {
+					return a.val.avg_time < b.val.avg_time
+				}
+			}
+		case .MaxTime:
+			less = proc(a, b: StatEntry) -> bool {
+				if stat_sort_descending {
+					return a.val.max_time > b.val.max_time
+				} else {
+					return a.val.max_time < b.val.max_time
+				}
+			}
 		}
-		sort_map_entries_by_time(&stats)
+		sm_sort(&stats, less)
 		resort_stats = false
 	}
 
@@ -1922,8 +1893,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			info_pane_scroll_vel = 0
 
 			big_global_arena.offset = current_alloc_offset
-			stats = make(map[string]Stats, 0, big_global_allocator)
-			selected_ranges = make([dynamic]Range, 0, big_global_allocator)
+			resize(&selected_ranges, 0)
+			sm_clear(&stats)
 
 			for proc_v, p_idx in processes {
 				for tm, t_idx in proc_v.threads {
