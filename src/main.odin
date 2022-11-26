@@ -206,7 +206,7 @@ button :: proc(in_rect: Rect, label_text, tooltip_text, font: string, min_x, max
 	draw_text(label_text, 
 		Vec2{
 			in_rect.pos.x + (in_rect.size.x / 2) - (label_width / 2), 
-			in_rect.pos.y + (in_rect.size.y / 2) - (label_height / 2)
+			in_rect.pos.y + (in_rect.size.y / 2) - (label_height / 2),
 		}, p_font_size, font, toolbar_text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
@@ -788,7 +788,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			(width / 2) - (load_box.size.x / 2) - pad_size, 
 			(height / 2) - (load_box.size.y / 2) - pad_size, 
 			load_box.size.x + pad_size, 
-			load_box.size.y + pad_size
+			load_box.size.y + pad_size,
 		)
 
 		draw_rectc(load_box, 3, FVec4{30, 30, 30, 255})
@@ -804,7 +804,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				start_x + (cur_x * chunk_size), 
 				start_y + (cur_y * chunk_size), 
 				chunk_size - pad_size, 
-				chunk_size - pad_size
+				chunk_size - pad_size,
 			), loading_block_color)
 		}
 
@@ -1298,7 +1298,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				draw_text(time_str, 
 					Vec2{
 						start_x + x_off - (text_width / 2),
-						toolbar_height + (time_bar_height / 2) - (em / 2)
+						toolbar_height + (time_bar_height / 2) - (em / 2),
 					}, p_font_size, default_font, text_color)
 				line_start_y = toolbar_height + (time_bar_height / 2) - (em / 2) + p_height
 			} else {
@@ -1414,7 +1414,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 					width_text, 
 					Vec2{
 						text_bg_rect.pos.x + (em / 2), 
-						text_bg_rect.pos.y + (p_height / 2)
+						text_bg_rect.pos.y + (p_height / 2),
 					}, 
 					p_font_size,
 					monospace_font,

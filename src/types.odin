@@ -26,7 +26,7 @@ DrawRect :: struct #packed {
 ColorMode :: enum {
 	Dark,
 	Light,
-	Auto
+	Auto,
 }
 
 SpallError :: enum int {

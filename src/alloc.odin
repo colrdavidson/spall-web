@@ -82,7 +82,7 @@ arena_allocator_proc :: proc(
 
 	case .Resize:
 		return mem.default_resize_bytes_align(
-            mem.byte_slice(old_memory, old_size), size, alignment, arena_allocator(arena), location
+            mem.byte_slice(old_memory, old_size), size, alignment, arena_allocator(arena), location,
         )
 
 	case .Query_Features:

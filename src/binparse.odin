@@ -242,7 +242,7 @@ bin_push_event :: proc(process_id, thread_id: u32, event: ^Event) -> (int, int, 
 
 	if int(t.current_depth) >= len(t.depths) {
 		depth := Depth{
-			bs_events = make([dynamic]Event, big_global_allocator)
+			bs_events = make([dynamic]Event, big_global_allocator),
 		}
 		append(&t.depths, depth)
 	}

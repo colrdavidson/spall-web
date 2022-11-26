@@ -1050,7 +1050,7 @@ json_process_events :: proc() {
 			for i := 0; i < len(depth_counts); i += 1 {
 				count := depth_counts[i]
 				depth := Depth{
-					events = sorted_events[ev_start:ev_start+count]
+					events = sorted_events[ev_start:ev_start+count],
 				}
 				ev_start += count
 
