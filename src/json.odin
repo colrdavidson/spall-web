@@ -928,27 +928,29 @@ json_push_event :: proc(process_id, thread_id: u32, event: ^JSONEvent) -> (int, 
 
 pid_sort_proc :: proc(a, b: Process) -> bool { return a.min_time < b.min_time }
 tid_sort_proc :: proc(a, b: Thread) -> bool  { return a.min_time < b.min_time }
-event_buildsort_proc :: proc(a, b: JSONEvent) -> bool {
-	if a.timestamp == b.timestamp {
-		return a.duration > b.duration
-	}
-	return a.timestamp < b.timestamp
-}
 instant_rendersort_proc :: proc(a, b: Instant) -> bool {
 	return a.timestamp < b.timestamp
 }
 
-insertion_sort :: proc(data: $T/[]$E, less: proc(i, j: E) -> bool) {
-	for i := 1; i < len(data); i += 1 {
+// duration bounding is important when sorting, we don't want to accidentally a -1 somewhere
+insertion_sort_events :: proc(events: []JSONEvent, max_time: f64) {
+	event_buildsort :: proc(max_time: f64, a, b: JSONEvent) -> bool {
+		if a.timestamp == b.timestamp {
+			return bound_duration(a, max_time) > bound_duration(b, max_time)
+		}
+		return a.timestamp < b.timestamp
+	}
+
+	for i := 1; i < len(events); i += 1 {
 		j := i - 1
 
-		temp := data[i]
-		for ; j >= 0 && less(temp, data[j]); {
-			data[j+1] = data[j]
+		temp := events[i]
+		for ; j >= 0 && event_buildsort(max_time, temp, events[j]); {
+			events[j+1] = events[j]
 			j -= 1
 		}
 
-		data[j+1] = temp
+		events[j+1] = temp
 	}
 }
 
@@ -970,7 +972,7 @@ json_process_events :: proc() {
 				continue
 			}
 
-			insertion_sort(tm.json_events[:], event_buildsort_proc)
+			insertion_sort_events(tm.json_events[:], tm.max_time)
 
 			free_all(scratch2_allocator)
 			depth_counts := make([dynamic]uint, 0, 64, scratch2_allocator)
