@@ -154,7 +154,7 @@ init_json_parser :: proc() -> JSONParser {
 		state = .Starting,
 		got_first_char = false,
 		skipper_objs = 0,
-		profiles = make(map[u64]ProfileState, 16, scratch_allocator),
+		profiles = make(map[u64]ProfileState, 16, big_global_allocator),
 	}
 
 	for field in fields {
@@ -468,7 +468,7 @@ process_sample :: proc(ev: ^TempEvent) {
 			pid = ev.process_id,
 			tid = ev.thread_id,
 			time = start_time,
-			nodes = make(map[i64]SampleNode, 16, scratch_allocator),
+			nodes = make(map[i64]SampleNode, 16, big_global_allocator),
 		}
 		stack_init(&ps.id_stack, scratch_allocator)
 
@@ -483,7 +483,7 @@ process_sample :: proc(ev: ^TempEvent) {
 				pid   = ev.process_id,
 				tid   = ev.thread_id,
 				time  = ev.timestamp,
-				nodes = make(map[i64]SampleNode, 16, scratch_allocator),
+				nodes = make(map[i64]SampleNode, 16, big_global_allocator),
 			}
 			stack_init(&ps.id_stack, scratch_allocator)
 			jp.profiles[profile_key] = ps
