@@ -171,6 +171,7 @@ extern void __attribute__((no_instrument_function)) init_thread(uint32_t _tid, s
 	uint8_t *buffer = (uint8_t *)malloc(buffer_size);
 	spall_buffer = (SpallBuffer){ .data = buffer, .length = buffer_size };
 
+	// removing initial page-fault bubbles to make the data a little more accurate, at the cost of thread spin-up time
 	memset(buffer, 1, buffer_size);
 
 	SpallBufferInit(&spall_ctx, &spall_buffer);
