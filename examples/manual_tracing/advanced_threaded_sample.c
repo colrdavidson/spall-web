@@ -9,7 +9,7 @@
 #include <pthread.h>
 
 #define SPALL_IMPLEMENTATION
-#include "../spall.h"
+#include "../.../spall.h"
 
 static uint64_t mul_u64_u32_shr(uint64_t cyc, uint32_t mult, uint32_t shift) {
     __uint128_t x = cyc;
@@ -30,7 +30,7 @@ static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
 	overhead *considerably*. For my i7-8559U, it's the difference between ~20 ns and ~6 ns, which can be
 	huge.
 */
-static double get_rdtsc_ms() {
+static double get_rdtsc_multiplier() {
 	struct perf_event_attr pe = {
         .type = PERF_TYPE_HARDWARE,
         .size = sizeof(struct perf_event_attr),
@@ -118,7 +118,7 @@ void *run_work(void *ptr) {
 }
 
 int main() {
-	spall_ctx = SpallInit("spall_sample.spall", get_rdtsc_ms());
+	spall_ctx = SpallInit("spall_sample.spall", get_rdtsc_multiplier());
 
 	pthread_t thread_1, thread_2;
 	pthread_create(&thread_1, NULL, run_work, NULL);

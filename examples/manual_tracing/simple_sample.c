@@ -4,7 +4,7 @@
 #include <time.h>
 
 #define SPALL_IMPLEMENTATION
-#include "../spall.h"
+#include "../../spall.h"
 
 #if _WIN32
 #define WIN32_LEAN_AND_MEAN
