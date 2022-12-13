@@ -9,7 +9,7 @@
 #include <pthread.h>
 
 #define SPALL_IMPLEMENTATION
-#include "../.../spall.h"
+#include "../../spall.h"
 
 static uint64_t mul_u64_u32_shr(uint64_t cyc, uint32_t mult, uint32_t shift) {
     __uint128_t x = cyc;
@@ -55,6 +55,7 @@ static double get_rdtsc_multiplier() {
         fprintf(stderr, "Perf system doesn't support user time\n");
         return 1;
     }
+
 	double nanos = (double)mul_u64_u32_shr(1000000, pc->time_mult, pc->time_shift);
 	return nanos / 1000000000;
 }
