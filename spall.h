@@ -134,7 +134,7 @@ bool         spall_flush(SpallProfile *ctx);
 extern SpallBuffer SpallSingleThreadedBuffer;
 
 bool spall_buffer_init (SpallProfile *ctx, SpallBuffer *wb);
-bool spall_buffer_close(SpallProfile *ctx, SpallBuffer *wb);
+bool spall_buffer_quit (SpallProfile *ctx, SpallBuffer *wb);
 bool spall_buffer_flush(SpallProfile *ctx, SpallBuffer *wb);
 
 // Begin events
