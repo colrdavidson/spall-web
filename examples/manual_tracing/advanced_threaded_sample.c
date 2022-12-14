@@ -64,8 +64,8 @@ static SpallProfile spall_ctx;
 static _Thread_local SpallBuffer spall_buffer;
 static _Thread_local uint32_t tid;
 
-#define BEGIN_FUNC() do { SpallTraceBeginLenTidPid(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, tid, 0, __rdtsc()); } while(0)
-#define END_FUNC() do { SpallTraceEndTidPid(&spall_ctx, &spall_buffer, tid, 0, __rdtsc()); } while(0)
+#define BEGIN_FUNC() do { spall_trace_begin_tid_pid(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, __rdtsc(), tid, 0); } while(0)
+#define END_FUNC() do { spall_trace_end_tid_pid(&spall_ctx, &spall_buffer, __rdtsc(), tid, 0); } while(0)
 
 void bar() {
 	BEGIN_FUNC();
@@ -109,17 +109,17 @@ void *run_work(void *ptr) {
  		fwrite handles the file-locking for us, and we write in atomic buffer-wide chunks,
 		so you shouldn't need to do anything special in your threaded event emitting code.
  	*/
-	SpallBufferInit(&spall_ctx, &spall_buffer);
+	spall_buffer_init(&spall_ctx, &spall_buffer);
 	for (int i = 0; i < 1000000; i++) {
 		foo();
 	}
 
-	SpallBufferQuit(&spall_ctx, &spall_buffer);
+	spall_buffer_quit(&spall_ctx, &spall_buffer);
 	return NULL;
 }
 
 int main() {
-	spall_ctx = SpallInit("spall_sample.spall", get_rdtsc_multiplier());
+	spall_ctx = spall_init("spall_sample.spall", get_rdtsc_multiplier());
 
 	pthread_t thread_1, thread_2;
 	pthread_create(&thread_1, NULL, run_work, NULL);
@@ -133,5 +133,5 @@ int main() {
 		Quit writes the closing braces to the file. Spall can handle JSON files without the trailing ]}\n,
  		but other tools can definitely be fussy about it
  	*/
-	SpallQuit(&spall_ctx);
+	spall_quit(&spall_ctx);
 }
