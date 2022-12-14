@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define SPALL_IMPLEMENTATION
 #include "../../spall.h"
 
 #if _WIN32
@@ -36,15 +35,15 @@ double get_time_in_micros() {
 static SpallProfile spall_ctx;
 static SpallBuffer  spall_buffer;
 void hello_world() {
-	spall_trace_begin_tid_pid(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, get_time_in_micros(), 0, 0);
+	spall_buffer_begin(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, get_time_in_micros());
 
 	printf("Hello World\n");
 
-	spall_trace_end_tid_pid(&spall_ctx, &spall_buffer, get_time_in_micros(), 0, 0);
+	spall_buffer_end(&spall_ctx, &spall_buffer, get_time_in_micros());
 }
 
 int main() {
-	spall_ctx = spall_init("simple_sample.spall", 1);
+	spall_ctx = spall_init_file("simple_sample.spall", 1);
 
 	#define BUFFER_SIZE (1 * 1024 * 1024)
 	unsigned char *buffer = malloc(BUFFER_SIZE);
