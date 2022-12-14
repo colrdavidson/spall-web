@@ -165,7 +165,7 @@ static void Spall__BufferProfile(SpallProfile *ctx, SpallBuffer *wb, double spal
     // precon: ctx->write
     char temp_buffer_data[2048];
     SpallBuffer temp_buffer = { temp_buffer_data, sizeof(temp_buffer_data) };
-    if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, name, sizeof(name) - 1, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_begin)) return;
+    if (!SpallTraceBeginLenTidPid(ctx, &temp_buffer, name, name_len, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_begin)) return;
     if (!SpallTraceEndTidPid(ctx, &temp_buffer, (uint32_t)(uintptr_t)wb->data, 4222222222, spall_time_end)) return;
     if (ctx->write) ctx->write(ctx, temp_buffer_data, temp_buffer.head);
 }
@@ -365,7 +365,7 @@ bool SpallTraceBeginLenArgsTidPid(SpallProfile *ctx, SpallBuffer *wb, const char
     return true;
 }
 
-bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, uint32_t pid, double when) { return SpallTraceBeginLenArgsTidPid(ctx, wb, name, name_len, "", 0, tid, 0, when); }
+bool SpallTraceBeginLenTidPid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, uint32_t pid, double when) { return SpallTraceBeginLenArgsTidPid(ctx, wb, name, name_len, "", 0, tid, pid, when); }
 bool SpallTraceBeginLenTid(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, uint32_t tid, double when) { return SpallTraceBeginLenArgsTidPid(ctx, wb, name, name_len, "", 0, tid, 0, when); }
 bool SpallTraceBeginLen   (SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, double when)               { return SpallTraceBeginLenArgsTidPid(ctx, wb, name, name_len, "", 0,  0, 0, when); }
 
