@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <pthread.h>
 
-#define SPALL_IMPLEMENTATION
 #include "../../spall.h"
 
 static uint64_t mul_u64_u32_shr(uint64_t cyc, uint32_t mult, uint32_t shift) {
@@ -64,8 +63,8 @@ static SpallProfile spall_ctx;
 static _Thread_local SpallBuffer spall_buffer;
 static _Thread_local uint32_t tid;
 
-#define BEGIN_FUNC() do { spall_trace_begin_tid_pid(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, __rdtsc(), tid, 0); } while(0)
-#define END_FUNC() do { spall_trace_end_tid_pid(&spall_ctx, &spall_buffer, __rdtsc(), tid, 0); } while(0)
+#define BEGIN_FUNC() do { spall_buffer_begin_ex(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, __rdtsc(), tid, 0); } while(0)
+#define END_FUNC() do { spall_buffer_end_ex(&spall_ctx, &spall_buffer, __rdtsc(), tid, 0); } while(0)
 
 void bar() {
 	BEGIN_FUNC();
@@ -119,7 +118,7 @@ void *run_work(void *ptr) {
 }
 
 int main() {
-	spall_ctx = spall_init("spall_sample.spall", get_rdtsc_multiplier());
+	spall_ctx = spall_init_file("spall_sample.spall", get_rdtsc_multiplier());
 
 	pthread_t thread_1, thread_2;
 	pthread_create(&thread_1, NULL, run_work, NULL);

@@ -9,7 +9,6 @@
 #include <asm/unistd.h>
 #include <unistd.h>
 
-#define SPALL_IMPLEMENTATION
 #include "../../spall.h"
 
 #include "instrument.h"
@@ -189,7 +188,7 @@ extern void __attribute__((no_instrument_function)) exit_thread() {
 }
 
 extern void __attribute__((no_instrument_function)) init_profile(char *filename) {
-	spall_ctx = spall_init(filename, get_rdtsc_multiplier());
+	spall_ctx = spall_init_file(filename, get_rdtsc_multiplier());
 }
 
 extern void __attribute__((no_instrument_function)) exit_profile(void) {
@@ -207,7 +206,7 @@ extern void __attribute__((no_instrument_function)) __cyg_profile_func_enter(voi
 		name = (Name){.str = not_found, .len = sizeof(not_found) - 1};
 	}
 
-	spall_trace_begin_tid_pid(&spall_ctx, &spall_buffer, name.str, name.len, __rdtsc(), tid, 0);
+	spall_buffer_begin_ex(&spall_ctx, &spall_buffer, name.str, name.len, __rdtsc(), tid, 0);
 }
 
 extern void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *fn, void *caller) {
@@ -215,5 +214,5 @@ extern void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void
 		return;
 	}
 
-	spall_trace_end_tid_pid(&spall_ctx, &spall_buffer, __rdtsc(), tid, 0);
+	spall_buffer_end_ex(&spall_ctx, &spall_buffer, __rdtsc(), tid, 0);
 }
