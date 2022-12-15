@@ -14,10 +14,10 @@ TODO: Optional Helper APIs:
   - Counter Event: should allow tracking arbitrary named values with a single event, for memory and frame profiling
 
   - Ring-buffer API
-		spall_ring_init
-		spall_ring_emit_begin
-		spall_ring_emit_end
-		spall_ring_flush
+        spall_ring_init
+        spall_ring_emit_begin
+        spall_ring_emit_end
+        spall_ring_flush
 */
 
 #ifndef SPALL_H
@@ -43,7 +43,7 @@ TODO: Optional Helper APIs:
 typedef struct SpallHeader {
     uint64_t magic_header; // = 0x0BADF00D
     uint64_t version; // = 1
-    double timestamp_unit;
+    double   timestamp_unit;
     uint64_t must_be_0;
 } SpallHeader;
 
@@ -65,7 +65,7 @@ typedef struct SpallBeginEvent {
 
     uint32_t pid;
     uint32_t tid;
-    double when;
+    double   when;
 
     uint8_t name_length;
     uint8_t args_length;
@@ -78,10 +78,10 @@ typedef struct SpallBeginEventMax {
 } SpallBeginEventMax;
 
 typedef struct SpallEndEvent {
-    uint8_t type; // = SpallEventType_End
+    uint8_t  type; // = SpallEventType_End
     uint32_t pid;
     uint32_t tid;
-    double  when;
+    double   when;
 } SpallEndEvent;
 
 #pragma pack(pop)
@@ -228,41 +228,54 @@ SPALL_FN bool spall_buffer_abort(SpallBuffer *wb) {
     return true;
 }
 
-SPALL_FN SpallHeader spall_build_header(double timestamp_unit) {
-    SpallHeader header;
-    header.magic_header = 0x0BADF00D;
-    header.version = 1;
-    header.timestamp_unit = timestamp_unit;
-    header.must_be_0 = 0;
-    return header;
+SPALL_FN size_t spall_build_header(void *buffer, size_t rem_size, double timestamp_unit) {
+    size_t header_size = sizeof(SpallHeader);
+    if (header_size > rem_size) {
+        return 0;
+    }
+
+    SpallHeader *header = (SpallHeader *)buffer;
+    header->magic_header = 0x0BADF00D;
+    header->version = 1;
+    header->timestamp_unit = timestamp_unit;
+    header->must_be_0 = 0;
+    return header_size;
 }
-SPALL_FN SpallBeginEventMax spall_build_begin(const char *name, signed long name_len, const char *args, signed long args_len, double when, uint32_t tid, uint32_t pid, int *event_len) {
-    SpallBeginEventMax ev;
+SPALL_FN size_t spall_build_begin(void *buffer, size_t rem_size, const char *name, signed long name_len, const char *args, signed long args_len, double when, uint32_t tid, uint32_t pid) {
+    SpallBeginEventMax *ev = (SpallBeginEventMax *)buffer;
+    uint8_t trunc_name_len = SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
+    uint8_t trunc_args_len = SPALL_MIN(args_len, 255); // will be interpreted as truncated in the app (?)
 
-    name_len = SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
-    args_len = SPALL_MIN(args_len, 255); // will be interpreted as truncated in the app (?)
-    char *args_bytes = ev.name_bytes + name_len;
+    size_t ev_size = sizeof(SpallBeginEvent) + trunc_name_len + trunc_args_len;
+    if (ev_size > rem_size) {
+        return 0;
+    }
 
-    ev.event.type = SpallEventType_Begin;
-    ev.event.category = 0;
-    ev.event.pid = pid;
-    ev.event.tid = tid;
-    ev.event.when = when;
-    ev.event.name_length = (uint8_t)name_len;
-    ev.event.args_length = (uint8_t)args_len;
-    memcpy(ev.name_bytes, name, (uint8_t)name_len);
-    memcpy(args_bytes,    args, (uint8_t)args_len);
+    ev->event.type = SpallEventType_Begin;
+    ev->event.category = 0;
+    ev->event.pid = pid;
+    ev->event.tid = tid;
+    ev->event.when = when;
+    ev->event.name_length = trunc_name_len;
+    ev->event.args_length = trunc_args_len;
+    memcpy(ev->name_bytes,            name, trunc_name_len);
+    memcpy(ev->name_bytes + name_len, args, trunc_args_len);
 
-    *event_len = sizeof(SpallBeginEvent) + (uint8_t)name_len + (uint8_t)args_len;
-    return ev;
+    return ev_size;
 }
-SPALL_FN SpallEndEvent spall_build_end(double when, uint32_t tid, uint32_t pid) {
-    SpallEndEvent ev;
-    ev.type = SpallEventType_End;
-    ev.pid = pid;
-    ev.tid = tid;
-    ev.when = when;
-    return ev;
+SPALL_FN size_t spall_build_end(void *buffer, size_t rem_size, double when, uint32_t tid, uint32_t pid) {
+    size_t ev_size = sizeof(SpallEndEvent);
+    if (ev_size > rem_size) {
+        return 0;
+    }
+
+    SpallEndEvent *ev = (SpallEndEvent *)buffer;
+    ev->type = SpallEventType_End;
+    ev->pid = pid;
+    ev->tid = tid;
+    ev->when = when;
+
+    return ev_size;
 }
 
 SPALL_FN void spall_quit(SpallProfile *ctx) {
@@ -290,8 +303,9 @@ SPALL_FN SpallProfile spall_init_callbacks(double timestamp_unit,
     if (ctx.is_json) {
         if (!ctx.write(&ctx, "{\"traceEvents\":[\n", sizeof("{\"traceEvents\":[\n") - 1)) { spall_quit(&ctx); return ctx; }
     } else {
-        SpallHeader header = spall_build_header(timestamp_unit);
-        if (!ctx.write(&ctx, &header, sizeof(header))) { spall_quit(&ctx); return ctx; }
+        SpallHeader header;
+        size_t len = spall_build_header(&header, sizeof(header), timestamp_unit);
+        if (!ctx.write(&ctx, &header, len)) { spall_quit(&ctx); return ctx; }
     }
 
     return ctx;
@@ -325,24 +339,25 @@ SPALL_FN bool spall_buffer_begin_args(SpallProfile *ctx, SpallBuffer *wb, const 
     if (!ctx) return false;
     if (!name) return false;
     if (name_len <= 0) return false;
+    if (!wb) return false;
 #endif
-    int ev_len = 0;
-    SpallBeginEventMax ev = spall_build_begin(name, name_len, args, args_len, when, tid, pid, &ev_len);
 
     if (ctx->is_json) {
         char buf[1024];
         int buf_len = snprintf(buf, sizeof(buf),
                                "{\"args\":\"%.*s\",\"name\":\"%.*s\",\"ph\":\"B\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
-                               (int)ev.event.args_length, ev.args_bytes,
-                               (int)ev.event.name_length, ev.name_bytes,
-                               ev.event.pid,
-                               ev.event.tid,
-                               ev.event.when * ctx->timestamp_unit);
+                               (int)(uint8_t)args_len, args, (int)(uint8_t)name_len, name, pid, tid, when * ctx->timestamp_unit);
         if (buf_len <= 0) return false;
         if (buf_len >= sizeof(buf)) return false;
         if (!spall__buffer_write(ctx, wb, buf, buf_len)) return false;
     } else {
-        if (!spall__buffer_write(ctx, wb, &ev, ev_len)) return false;
+        if ((wb->head + sizeof(SpallBeginEventMax)) > wb->length) {
+            if (!spall__buffer_flush(ctx, wb)) {
+                return false;
+            }
+        }
+
+        wb->head += spall_build_begin(wb->data + wb->head, wb->length - wb->head, name, name_len, args, args_len, when, tid, pid);
     }
 
     return true;
@@ -359,22 +374,25 @@ SPALL_FN bool spall_buffer_begin(SpallProfile *ctx, SpallBuffer *wb, const char 
 SPALL_FN bool spall_buffer_end_ex(SpallProfile *ctx, SpallBuffer *wb, double when, uint32_t tid, uint32_t pid) {
 #ifdef SPALL_DEBUG
     if (!ctx) return false;
+    if (!wb) return false;
 #endif
-
-    SpallEndEvent ev = spall_build_end(when, tid, pid);
 
     if (ctx->is_json) {
         char buf[512];
         int buf_len = snprintf(buf, sizeof(buf),
                                "{\"ph\":\"E\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
-                               ev.pid,
-                               ev.tid,
-                               ev.when * ctx->timestamp_unit);
+                               pid, tid, when * ctx->timestamp_unit);
         if (buf_len <= 0) return false;
         if (buf_len >= sizeof(buf)) return false;
         if (!spall__buffer_write(ctx, wb, buf, buf_len)) return false;
     } else {
-        if (!spall__buffer_write(ctx, wb, &ev, sizeof(ev))) return false;
+        if ((wb->head + sizeof(SpallEndEvent)) > wb->length) {
+            if (!spall__buffer_flush(ctx, wb)) {
+                return false;
+            }
+        }
+
+        wb->head += spall_build_end(wb->data + wb->head, wb->length - wb->head, when, tid, pid);
     }
 
     return true;
