@@ -25,7 +25,7 @@ static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
 
 /*
 	This is some fancy syscall magic to ask the Linux kernel for the RTDSC oscillator multiplier settings
-	so we can accurately convert from it's 3 GHZ "tick" monotonic clock to microseconds on the frontend.
+	so we can accurately convert from it's monotonic clock to microseconds on the frontend.
 	I highly encourage you get the correct multiplier settings for your platform, it can shrink event
 	overhead *considerably*. For my i7-8559U, it's the difference between ~20 ns and ~6 ns, which can be
 	huge.
