@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define SPALL_IMPLEMENTATION
 #include "../../spall.h"
 
 #if _WIN32
@@ -36,15 +35,15 @@ double get_time_in_micros() {
 static SpallProfile spall_ctx;
 static SpallBuffer  spall_buffer;
 void hello_world() {
-	SpallTraceBeginLenTidPid(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, 0, 0, get_time_in_micros());
+	spall_buffer_begin(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, get_time_in_micros());
 
 	printf("Hello World\n");
 
-	SpallTraceEndTidPid(&spall_ctx, &spall_buffer, 0, 0, get_time_in_micros());
+	spall_buffer_end(&spall_ctx, &spall_buffer, get_time_in_micros());
 }
 
 int main() {
-	spall_ctx = SpallInit("simple_sample.spall", 1);
+	spall_ctx = spall_init_file("simple_sample.spall", 1);
 
 	#define BUFFER_SIZE (1 * 1024 * 1024)
 	unsigned char *buffer = malloc(BUFFER_SIZE);
@@ -54,11 +53,11 @@ int main() {
 		.data = buffer,
 	};
 
-	SpallBufferInit(&spall_ctx, &spall_buffer);
+	spall_buffer_init(&spall_ctx, &spall_buffer);
 	for (int i = 0; i < 1000000; i++) {
 		hello_world();
 	}
 
-	SpallBufferQuit(&spall_ctx, &spall_buffer);
-	SpallQuit(&spall_ctx);
+	spall_buffer_quit(&spall_ctx, &spall_buffer);
+	spall_quit(&spall_ctx);
 }
