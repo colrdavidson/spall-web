@@ -4,9 +4,6 @@
 #include <dlfcn.h>
 #include <time.h>
 #include <pthread.h>
-#include <linux/perf_event.h>
-#include <sys/mman.h>
-#include <asm/unistd.h>
 #include <unistd.h>
 
 #include "../../spall.h"
@@ -125,6 +122,11 @@ static bool ah_get(AddrHash *ah, void *addr, Name *name_ret) {
 	return false;
 }
 
+#ifdef __linux__
+#include <linux/perf_event.h>
+#include <asm/unistd.h>
+#include <sys/mman.h>
+
 static uint64_t mul_u64_u32_shr(uint64_t cyc, uint32_t mult, uint32_t shift) {
     __uint128_t x = cyc;
     x *= mult;
@@ -165,6 +167,19 @@ static double get_rdtsc_multiplier() {
 	double nanos = (double)mul_u64_u32_shr(1000000, pc->time_mult, pc->time_shift);
 	return nanos / 1000000000;
 }
+#elif __APPLE__
+#include <sys/types.h>
+#include <sys/sysctl.h>
+
+static double get_rdtsc_multiplier() {
+	uint64_t freq;
+	size_t size = sizeof(freq);
+
+	sysctlbyname("machdep.tsc.frequency", &freq, &size, NULL, 0);
+
+	return 1000000.0 / (double)freq;
+}
+#endif
 
 extern void __attribute__((no_instrument_function)) init_thread(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size) {
 	uint8_t *buffer = (uint8_t *)malloc(buffer_size);

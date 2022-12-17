@@ -14,7 +14,7 @@ void wub() {
 }
 
 void *run_work(void *ptr) {
-	init_thread((uint32_t)pthread_self(), 10 * 1024 * 1024, 1000);
+	init_thread((uint32_t)(uint64_t)pthread_self(), 10 * 1024 * 1024, 1000);
 
 	for (int i = 0; i < 1000; i++) {
 		foo();

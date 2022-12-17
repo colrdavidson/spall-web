@@ -2,3 +2,4 @@ build/
 *.swp
 .vs/
 */.vs/
+.DS_Store
