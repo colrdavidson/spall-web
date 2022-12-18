@@ -25,8 +25,8 @@ TODO: Optional Helper APIs:
 
 #if !defined(_MSC_VER) || defined(__clang__)
 #define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
-#define _CRT_SECURE_NO_WARNINGS
 #else
+#define _CRT_SECURE_NO_WARNINGS
 #define SPALL_NOINSTRUMENT // Can't noinstrument on MSVC!
 #endif
 
