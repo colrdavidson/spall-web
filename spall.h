@@ -23,16 +23,17 @@ TODO: Optional Helper APIs:
 #ifndef SPALL_H
 #define SPALL_H
 
+#if !defined(_MSC_VER) || defined(__clang__)
+#define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
+#else
+#define _CRT_SECURE_NO_WARNINGS
+#define SPALL_NOINSTRUMENT // Can't noinstrument on MSVC!
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
-
-#if _MSC_VER
-#define SPALL_NOINSTRUMENT // Can't noinstrument on MSVC!
-#else
-#define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
-#endif
 
 #define SPALL_FN static inline SPALL_NOINSTRUMENT
 
@@ -243,8 +244,8 @@ SPALL_FN size_t spall_build_header(void *buffer, size_t rem_size, double timesta
 }
 SPALL_FN size_t spall_build_begin(void *buffer, size_t rem_size, const char *name, signed long name_len, const char *args, signed long args_len, double when, uint32_t tid, uint32_t pid) {
     SpallBeginEventMax *ev = (SpallBeginEventMax *)buffer;
-    uint8_t trunc_name_len = SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
-    uint8_t trunc_args_len = SPALL_MIN(args_len, 255); // will be interpreted as truncated in the app (?)
+    uint8_t trunc_name_len = (uint8_t)SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
+    uint8_t trunc_args_len = (uint8_t)SPALL_MIN(args_len, 255); // will be interpreted as truncated in the app (?)
 
     size_t ev_size = sizeof(SpallBeginEvent) + trunc_name_len + trunc_args_len;
     if (ev_size > rem_size) {
@@ -357,7 +358,7 @@ SPALL_FN bool spall_buffer_begin_args(SpallProfile *ctx, SpallBuffer *wb, const 
             }
         }
 
-        wb->head += spall_build_begin(wb->data + wb->head, wb->length - wb->head, name, name_len, args, args_len, when, tid, pid);
+        wb->head += spall_build_begin((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, args, args_len, when, tid, pid);
     }
 
     return true;
@@ -392,7 +393,7 @@ SPALL_FN bool spall_buffer_end_ex(SpallProfile *ctx, SpallBuffer *wb, double whe
             }
         }
 
-        wb->head += spall_build_end(wb->data + wb->head, wb->length - wb->head, when, tid, pid);
+        wb->head += spall_build_end((char *)wb->data + wb->head, wb->length - wb->head, when, tid, pid);
     }
 
     return true;
