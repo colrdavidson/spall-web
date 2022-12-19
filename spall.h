@@ -23,17 +23,17 @@ TODO: Optional Helper APIs:
 #ifndef SPALL_H
 #define SPALL_H
 
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+
 #if !defined(_MSC_VER) || defined(__clang__)
 #define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
 #else
 #define _CRT_SECURE_NO_WARNINGS
 #define SPALL_NOINSTRUMENT // Can't noinstrument on MSVC!
 #endif
-
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdbool.h>
 
 #define SPALL_FN static inline SPALL_NOINSTRUMENT
 
@@ -43,7 +43,7 @@ TODO: Optional Helper APIs:
 
 typedef struct SpallHeader {
     uint64_t magic_header; // = 0x0BADF00D
-    uint64_t version; // = 1
+    uint64_t version; // = 2
     double   timestamp_unit;
     uint64_t must_be_0;
 } SpallHeader;
@@ -56,8 +56,10 @@ enum {
     SpallEventType_Begin               = 3,
     SpallEventType_End                 = 4,
     SpallEventType_Instant             = 5,
+    SpallEventType_Counter             = 6,
 
-    SpallEventType_Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
+    SpallEventType_MicroBegin          = 7,
+    SpallEventType_MicroEnd            = 8,
 };
 
 typedef struct SpallBeginEvent {
@@ -84,6 +86,19 @@ typedef struct SpallEndEvent {
     uint32_t tid;
     double   when;
 } SpallEndEvent;
+
+typedef struct SpallMicroBeginEvent {
+    uint8_t type; // = SpallEventType_MicroBegin
+    uint32_t tid;
+    uint64_t addr;
+    uint64_t when;
+} SpallMicroBeginEvent;
+
+typedef struct SpallMicroEndEvent {
+    uint8_t type; // = SpallEventType_MicroEnd
+    uint32_t tid;
+    uint64_t when;
+} SpallMicroEndEvent;
 
 #pragma pack(pop)
 
@@ -275,6 +290,31 @@ SPALL_FN size_t spall_build_end(void *buffer, size_t rem_size, double when, uint
     ev->pid = pid;
     ev->tid = tid;
     ev->when = when;
+
+    return ev_size;
+}
+SPALL_FN size_t spall_build_micro_begin(void *buffer, size_t rem_size, uint64_t when, uint64_t addr, uint32_t tid) {
+    size_t ev_size = sizeof(SpallMicroBeginEvent);
+    if (ev_size > rem_size) {
+        return 0;
+    }
+
+    ev->event.type = SpallEventType_MicroBegin;
+    ev->event.tid = tid;
+    ev->event.when = when;
+    ev->event.addr = addr;
+
+    return ev_size;
+}
+SPALL_FN size_t spall_build_micro_end(void *buffer, size_t rem_size, uint64_t when, uint32_t tid) {
+    size_t ev_size = sizeof(SpallMicroEndEvent);
+    if (ev_size > rem_size) {
+        return 0;
+    }
+
+    ev->event.type = SpallEventType_MicroEnd;
+    ev->event.tid = tid;
+    ev->event.when = when;
 
     return ev_size;
 }
