@@ -43,12 +43,12 @@ static _Thread_local uint32_t tid;
 static _Thread_local bool spall_thread_running = false;
 
 // we're not checking overflow here...Don't do stupid things with input sizes
-static uint64_t next_pow2(uint64_t x) {
+SPALL_FN uint64_t next_pow2(uint64_t x) {
 	return 1 << (64 - __builtin_clz(x - 1));
 }
 
 // This is not thread-safe... Use one per thread!
-static AddrHash ah_init(int64_t size) {
+SPALL_FN AddrHash ah_init(int64_t size) {
 	AddrHash ah;
 
 	ah.entries.cap = size;
@@ -65,19 +65,19 @@ static AddrHash ah_init(int64_t size) {
 	return ah;
 }
 
-static void ah_free(AddrHash *ah) {
+SPALL_FN void ah_free(AddrHash *ah) {
 	free(ah->entries.arr);
 	free(ah->hashes.arr);
 	memset(ah, 0, sizeof(AddrHash));
 }
 
 // fibhash addresses
-static int ah_hash(void *addr) {
+SPALL_FN int ah_hash(void *addr) {
 	return (int)(((uint32_t)(uintptr_t)addr) * 2654435769);
 }
 
 // Replace me with your platform's addr->name resolver if needed
-static bool get_addr_name(void *addr, Name *name_ret) {
+SPALL_FN bool get_addr_name(void *addr, Name *name_ret) {
 	Dl_info info;
 	if (dladdr(addr, &info) != 0 && info.dli_sname != NULL) {
 		char *str = (char *)info.dli_sname;
@@ -88,7 +88,7 @@ static bool get_addr_name(void *addr, Name *name_ret) {
 	return false;
 }
 
-static bool ah_get(AddrHash *ah, void *addr, Name *name_ret) {
+SPALL_FN bool ah_get(AddrHash *ah, void *addr, Name *name_ret) {
 	int addr_hash = ah_hash(addr);
 	uint64_t hv = ((uint64_t)addr_hash) & (ah->hashes.len - 1);
 	for (uint64_t i = 0; i < ah->hashes.len; i++) {
@@ -127,19 +127,19 @@ static bool ah_get(AddrHash *ah, void *addr, Name *name_ret) {
 #include <asm/unistd.h>
 #include <sys/mman.h>
 
-static uint64_t mul_u64_u32_shr(uint64_t cyc, uint32_t mult, uint32_t shift) {
+SPALL_FN uint64_t mul_u64_u32_shr(uint64_t cyc, uint32_t mult, uint32_t shift) {
     __uint128_t x = cyc;
     x *= mult;
     x >>= shift;
     return x;
 }
 
-static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
+SPALL_FN long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
            int cpu, int group_fd, unsigned long flags) {
     return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
 }
 
-static double get_rdtsc_multiplier() {
+SPALL_FN double get_rdtsc_multiplier() {
 	struct perf_event_attr pe = {
         .type = PERF_TYPE_HARDWARE,
         .size = sizeof(struct perf_event_attr),
@@ -171,7 +171,7 @@ static double get_rdtsc_multiplier() {
 #include <sys/types.h>
 #include <sys/sysctl.h>
 
-static double get_rdtsc_multiplier() {
+SPALL_FN double get_rdtsc_multiplier() {
 	uint64_t freq;
 	size_t size = sizeof(freq);
 
@@ -181,7 +181,7 @@ static double get_rdtsc_multiplier() {
 }
 #endif
 
-extern void __attribute__((no_instrument_function)) init_thread(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size) {
+void init_thread(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size) {
 	uint8_t *buffer = (uint8_t *)malloc(buffer_size);
 	spall_buffer = (SpallBuffer){ .data = buffer, .length = buffer_size };
 
@@ -195,23 +195,23 @@ extern void __attribute__((no_instrument_function)) init_thread(uint32_t _tid, s
 	spall_thread_running = true;
 }
 
-extern void __attribute__((no_instrument_function)) exit_thread() {
+void exit_thread() {
 	spall_thread_running = false;
 	ah_free(&addr_map);
 	spall_buffer_quit(&spall_ctx, &spall_buffer);
 	free(spall_buffer.data);
 }
 
-extern void __attribute__((no_instrument_function)) init_profile(char *filename) {
+void init_profile(char *filename) {
 	spall_ctx = spall_init_file(filename, get_rdtsc_multiplier());
 }
 
-extern void __attribute__((no_instrument_function)) exit_profile(void) {
+void exit_profile(void) {
 	spall_quit(&spall_ctx);
 }
 
 char not_found[] = "(unknown name)";
-extern void __attribute__((no_instrument_function)) __cyg_profile_func_enter(void *fn, void *caller) {
+SPALL_FN void __cyg_profile_func_enter(void *fn, void *caller) {
 	if (!spall_thread_running) {
 		return;
 	}
@@ -224,7 +224,7 @@ extern void __attribute__((no_instrument_function)) __cyg_profile_func_enter(voi
 	spall_buffer_begin_ex(&spall_ctx, &spall_buffer, name.str, name.len, __rdtsc(), tid, 0);
 }
 
-extern void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void *fn, void *caller) {
+SPALL_FN void __cyg_profile_func_exit(void *fn, void *caller) {
 	if (!spall_thread_running) {
 		return;
 	}
