@@ -25,9 +25,11 @@ TODO: Optional Helper APIs:
 
 #if !defined(_MSC_VER) || defined(__clang__)
 #define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
+#define SPALL_FORCEINLINE __attribute__((always_inline))
 #else
 #define _CRT_SECURE_NO_WARNINGS
 #define SPALL_NOINSTRUMENT // Can't noinstrument on MSVC!
+#define SPALL_FORCEINLINE __forceinline
 #endif
 
 #include <stdint.h>
@@ -122,7 +124,7 @@ extern "C" {
 #error "You must #define SPALL_BUFFER_PROFILING_GET_TIME() to profile buffer flushes."
 #endif
 
-SPALL_FN void spall__buffer_profile(SpallProfile *ctx, SpallBuffer *wb, double spall_time_begin, double spall_time_end, const char *name, int name_len);
+SPALL_FN SPALL_FORCEINLINE void spall__buffer_profile(SpallProfile *ctx, SpallBuffer *wb, double spall_time_begin, double spall_time_end, const char *name, int name_len);
 #ifdef SPALL_BUFFER_PROFILING
 #define SPALL_BUFFER_PROFILE_BEGIN() double spall_time_begin = (SPALL_BUFFER_PROFILING_GET_TIME())
 // Don't call this with anything other than a string literal
@@ -132,7 +134,7 @@ SPALL_FN void spall__buffer_profile(SpallProfile *ctx, SpallBuffer *wb, double s
 #define SPALL_BUFFER_PROFILE_END(name)
 #endif
 
-SPALL_FN bool spall__file_write(SpallProfile *ctx, const void *p, size_t n) {
+SPALL_FN SPALL_FORCEINLINE bool spall__file_write(SpallProfile *ctx, const void *p, size_t n) {
     if (!ctx->data) return false;
 #ifdef SPALL_DEBUG
     if (feof((FILE *)ctx->data)) return false;
@@ -164,7 +166,7 @@ SPALL_FN void spall__file_close(SpallProfile *ctx) {
     ctx->data = NULL;
 }
 
-SPALL_FN bool spall__buffer_flush(SpallProfile *ctx, SpallBuffer *wb) {
+SPALL_FN SPALL_FORCEINLINE bool spall__buffer_flush(SpallProfile *ctx, SpallBuffer *wb) {
     // precon: wb
     // precon: wb->data
     // precon: wb->head <= wb->length
@@ -175,14 +177,19 @@ SPALL_FN bool spall__buffer_flush(SpallProfile *ctx, SpallBuffer *wb) {
 
     if (wb->head && ctx) {
         SPALL_BUFFER_PROFILE_BEGIN();
-        if (!ctx->write || !ctx->write(ctx, wb->data, wb->head)) return false;
+        if (!ctx->write) return false;
+        if (ctx->write == spall__file_write) {
+            if (!spall__file_write(ctx, wb->data, wb->head)) return false;
+        } else {
+            if (!ctx->write(ctx, wb->data, wb->head)) return false;
+        }
         SPALL_BUFFER_PROFILE_END("Buffer Flush");
     }
     wb->head = 0;
     return true;
 }
 
-SPALL_FN bool spall__buffer_write(SpallProfile *ctx, SpallBuffer *wb, void *p, size_t n) {
+SPALL_FN SPALL_FORCEINLINE bool spall__buffer_write(SpallProfile *ctx, SpallBuffer *wb, void *p, size_t n) {
     // precon: !wb || wb->head < wb->length
     // precon: !ctx || ctx->write
     if (!wb) return ctx->write && ctx->write(ctx, p, n);
@@ -242,7 +249,7 @@ SPALL_FN size_t spall_build_header(void *buffer, size_t rem_size, double timesta
     header->must_be_0 = 0;
     return header_size;
 }
-SPALL_FN size_t spall_build_begin(void *buffer, size_t rem_size, const char *name, signed long name_len, const char *args, signed long args_len, double when, uint32_t tid, uint32_t pid) {
+SPALL_FN SPALL_FORCEINLINE size_t spall_build_begin(void *buffer, size_t rem_size, const char *name, signed long name_len, const char *args, signed long args_len, double when, uint32_t tid, uint32_t pid) {
     SpallBeginEventMax *ev = (SpallBeginEventMax *)buffer;
     uint8_t trunc_name_len = (uint8_t)SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
     uint8_t trunc_args_len = (uint8_t)SPALL_MIN(args_len, 255); // will be interpreted as truncated in the app (?)
@@ -264,7 +271,7 @@ SPALL_FN size_t spall_build_begin(void *buffer, size_t rem_size, const char *nam
 
     return ev_size;
 }
-SPALL_FN size_t spall_build_end(void *buffer, size_t rem_size, double when, uint32_t tid, uint32_t pid) {
+SPALL_FN SPALL_FORCEINLINE size_t spall_build_end(void *buffer, size_t rem_size, double when, uint32_t tid, uint32_t pid) {
     size_t ev_size = sizeof(SpallEndEvent);
     if (ev_size > rem_size) {
         return 0;
@@ -290,12 +297,13 @@ SPALL_FN SpallProfile spall_init_callbacks(double timestamp_unit,
                                            SpallWriteCallback write,
                                            SpallFlushCallback flush,
                                            SpallCloseCallback close,
-                                           void *userdata) {
+                                           void *userdata,
+                                           bool is_json) {
     SpallProfile ctx;
     memset(&ctx, 0, sizeof(ctx));
     if (timestamp_unit < 0) return ctx;
     ctx.timestamp_unit = timestamp_unit;
-    ctx.is_json = false;
+    ctx.is_json = is_json;
     ctx.data = userdata;
     ctx.write = write;
     ctx.flush = flush;
@@ -312,7 +320,7 @@ SPALL_FN SpallProfile spall_init_callbacks(double timestamp_unit,
     return ctx;
 }
 
-SPALL_FN SpallProfile spall_init_file(const char *filename, double timestamp_unit) {
+SPALL_FN SpallProfile spall_init_file_ex(const char *filename, double timestamp_unit, bool is_json) {
     SpallProfile ctx;
     memset(&ctx, 0, sizeof(ctx));
     if (!filename) return ctx;
@@ -322,9 +330,12 @@ SPALL_FN SpallProfile spall_init_file(const char *filename, double timestamp_uni
         ctx.data = fopen(filename, "ab");
     }
     if (!ctx.data) { spall_quit(&ctx); return ctx; }
-    ctx = spall_init_callbacks(timestamp_unit, spall__file_write, spall__file_flush, spall__file_close, ctx.data);
+    ctx = spall_init_callbacks(timestamp_unit, spall__file_write, spall__file_flush, spall__file_close, ctx.data, is_json);
     return ctx;
 }
+
+SPALL_FN SpallProfile spall_init_file     (const char* filename, double timestamp_unit) { return spall_init_file_ex(filename, timestamp_unit, false); }
+SPALL_FN SpallProfile spall_init_file_json(const char* filename, double timestamp_unit) { return spall_init_file_ex(filename, timestamp_unit, true); }
 
 SPALL_FN bool spall_flush(SpallProfile *ctx) {
 #ifdef SPALL_DEBUG
@@ -335,7 +346,7 @@ SPALL_FN bool spall_flush(SpallProfile *ctx) {
     return true;
 }
 
-SPALL_FN bool spall_buffer_begin_args(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, const char *args, signed long args_len, double when, uint32_t tid, uint32_t pid) {
+SPALL_FN SPALL_FORCEINLINE bool spall_buffer_begin_args(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, const char *args, signed long args_len, double when, uint32_t tid, uint32_t pid) {
 #ifdef SPALL_DEBUG
     if (!ctx) return false;
     if (!name) return false;
@@ -364,7 +375,7 @@ SPALL_FN bool spall_buffer_begin_args(SpallProfile *ctx, SpallBuffer *wb, const 
     return true;
 }
 
-SPALL_FN bool spall_buffer_begin_ex(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, double when, uint32_t tid, uint32_t pid) {
+SPALL_FN SPALL_FORCEINLINE bool spall_buffer_begin_ex(SpallProfile *ctx, SpallBuffer *wb, const char *name, signed long name_len, double when, uint32_t tid, uint32_t pid) {
     return spall_buffer_begin_args(ctx, wb, name, name_len, "", 0, when, tid, pid);
 }
 
@@ -372,7 +383,7 @@ SPALL_FN bool spall_buffer_begin(SpallProfile *ctx, SpallBuffer *wb, const char 
     return spall_buffer_begin_args(ctx, wb, name, name_len, "", 0, when, 0, 0);
 }
 
-SPALL_FN bool spall_buffer_end_ex(SpallProfile *ctx, SpallBuffer *wb, double when, uint32_t tid, uint32_t pid) {
+SPALL_FN SPALL_FORCEINLINE bool spall_buffer_end_ex(SpallProfile *ctx, SpallBuffer *wb, double when, uint32_t tid, uint32_t pid) {
 #ifdef SPALL_DEBUG
     if (!ctx) return false;
     if (!wb) return false;
@@ -401,7 +412,7 @@ SPALL_FN bool spall_buffer_end_ex(SpallProfile *ctx, SpallBuffer *wb, double whe
 
 SPALL_FN bool spall_buffer_end(SpallProfile *ctx, SpallBuffer *wb, double when) { return spall_buffer_end_ex(ctx, wb, when, 0, 0); }
 
-SPALL_FN void spall__buffer_profile(SpallProfile *ctx, SpallBuffer *wb, double spall_time_begin, double spall_time_end, const char *name, int name_len) {
+SPALL_FN SPALL_FORCEINLINE void spall__buffer_profile(SpallProfile *ctx, SpallBuffer *wb, double spall_time_begin, double spall_time_end, const char *name, int name_len) {
     // precon: ctx
     // precon: ctx->write
     char temp_buffer_data[2048];
