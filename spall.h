@@ -357,8 +357,8 @@ SPALL_FN SPALL_FORCEINLINE bool spall_buffer_begin_args(SpallProfile *ctx, Spall
     if (ctx->is_json) {
         char buf[1024];
         int buf_len = snprintf(buf, sizeof(buf),
-                               "{\"args\":\"%.*s\",\"name\":\"%.*s\",\"ph\":\"B\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
-                               (int)(uint8_t)args_len, args, (int)(uint8_t)name_len, name, pid, tid, when * ctx->timestamp_unit);
+                               "{\"ph\":\"B\",\"ts\":%f,\"pid\":%u,\"tid\":%u,\"name\":\"%.*s\",\"args\":\"%.*s\"},\n",
+                               when * ctx->timestamp_unit, pid, tid, (int)(uint8_t)name_len, name, (int)(uint8_t)args_len, args);
         if (buf_len <= 0) return false;
         if (buf_len >= sizeof(buf)) return false;
         if (!spall__buffer_write(ctx, wb, buf, buf_len)) return false;
@@ -392,8 +392,8 @@ SPALL_FN SPALL_FORCEINLINE bool spall_buffer_end_ex(SpallProfile *ctx, SpallBuff
     if (ctx->is_json) {
         char buf[512];
         int buf_len = snprintf(buf, sizeof(buf),
-                               "{\"ph\":\"E\",\"pid\":%u,\"tid\":%u,\"ts\":%f},\n",
-                               pid, tid, when * ctx->timestamp_unit);
+                               "{\"ph\":\"E\",\"ts\":%f,\"pid\":%u,\"tid\":%u},\n",
+                               when * ctx->timestamp_unit, pid, tid);
         if (buf_len <= 0) return false;
         if (buf_len >= sizeof(buf)) return false;
         if (!spall__buffer_write(ctx, wb, buf, buf_len)) return false;
