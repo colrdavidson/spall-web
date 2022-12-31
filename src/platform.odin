@@ -84,8 +84,12 @@ key_up :: proc "contextless" (key: int) {
 text_input :: proc "contextless" (key, code: string) { }
 
 // release all control state if the user tabs away
+
+intentional_blur := false
 @export
 blur :: proc "contextless" () {
+	intentional_blur = true
+
 	shift_down = false
 	is_mouse_down = false
 	was_mouse_down = false
@@ -95,11 +99,15 @@ blur :: proc "contextless" () {
 
 @export
 focus :: proc "contextless" () {
-	shift_down = false
-	is_mouse_down = false
-	was_mouse_down = false
-	clicked = false
-	clicked_pos = Vec2{}
+	if intentional_blur {
+		shift_down = false
+		is_mouse_down = false
+		was_mouse_down = false
+		clicked = false
+		clicked_pos = Vec2{}
+	}
+
+	intentional_blur = false
 }
 
 @export
