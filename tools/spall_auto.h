@@ -46,6 +46,7 @@ extern __declspec(dllimport) int(__stdcall TlsSetValue)(unsigned long dwTlsIndex
 extern unsigned long spall_auto__tls_index; // DWORD
 #define spall__thread_on() TlsSetValue(spall_auto__tls_index, (void *)1)
 #define spall__thread_off() TlsSetValue(spall_auto__tls_index, (void *)0)
+#define _Thread_local __declspec( thread )
 #else
 #define spall__thread_off() 0
 #define spall__thread_on() 0
@@ -505,7 +506,9 @@ void load_self(AddrHash *map) {
 
 SPALL_NOINSTRUMENT SPALL_FORCEINLINE void (spall_auto_thread_init)(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size) {
     uint8_t *buffer = (uint8_t *)malloc(buffer_size);
-    spall_buffer = (SpallBuffer){ .data = buffer, .length = buffer_size };
+    spall_buffer = { 0 };
+    spall_buffer.data = buffer;
+    spall_buffer.length = buffer_size;
 
     // removing initial page-fault bubbles to make the data a little more accurate, at the cost of thread spin-up time
     memset(buffer, 1, buffer_size);
@@ -581,7 +584,9 @@ SPALL_NOINSTRUMENT void __cyg_profile_func_enter(void *fn, void *caller) {
         !ah_get(&global_addr_map, fn, &name) &&
 #endif
         !ah_get(&addr_map, fn, &name)) {
-        name = (Name){.str = (char *)not_found, .len = sizeof(not_found) - 1};
+      name = {0};
+      name.str = (char *)not_found;
+      name.len = sizeof(not_found) - 1;
     }
 
     // printf("Begin: \"%s\"\n", name.str);
