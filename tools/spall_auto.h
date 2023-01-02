@@ -194,7 +194,10 @@ SPALL_FN bool ah_insert(AddrHash *ah, void *addr, Name name) {
 
         int64_t e_idx = ah->hashes.arr[idx];
         if (e_idx == -1) {
-            SymEntry entry = {.addr = addr, .name = name};
+            SymEntry entry = { 0 };
+            entry.addr = addr;
+            entry.name = name;
+                
             ah->hashes.arr[idx] = ah->entries.len;
             ah->entries.arr[ah->entries.len] = entry;
             ah->entries.len += 1;
@@ -225,7 +228,10 @@ SPALL_FN bool ah_get(AddrHash *ah, void *addr, Name *name_ret) {
                 return false;
             }
 
-            SymEntry entry = {.addr = addr, .name = name};
+            SymEntry entry = { 0 };
+            entry.addr = addr;
+            entry.name = name;
+                
             ah->hashes.arr[idx] = ah->entries.len;
             ah->entries.arr[ah->entries.len] = entry;
             ah->entries.len += 1;
