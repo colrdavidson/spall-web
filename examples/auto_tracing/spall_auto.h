@@ -1,6 +1,9 @@
 #ifndef SPALL_AUTO_H
 #define SPALL_AUTO_H
 
+// THIS IS EXPERIMENTAL, BUT VERY HANDY
+// *should* work on clang/msvc on Windows, Mac, and Linux
+
 #ifdef __cplusplus
 extern "C" {
 #endif
