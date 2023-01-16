@@ -345,20 +345,33 @@ typedef struct {
 } ELF64_Sym;
 #pragma pack()
 
+#define round_size(addr, size) (((addr) + (size)) - ((addr) % (size)))
+uint64_t get_base_addr(void) {
+	char buffer[2048] = {0};
+	int maps_fd = open("/proc/self/maps", O_RDONLY);
+	ssize_t ret_size = read(maps_fd, buffer, sizeof(buffer));
+	close(maps_fd);
+
+	char *wut;
+	uint64_t base_addr = strtol(buffer, &wut, 16);
+	return base_addr;
+}
+
 int load_self(AddrHash *ah) {
-    int fd = open("/proc/self/exe", O_RDONLY);
-    uint64_t length = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
+	uint64_t base_addr = get_base_addr();
 
-    #define round_size(addr, size) (((addr) + (size)) - ((addr) % (size)))
-    uint64_t aligned_length = round_size(length, 0x1000);
-    uint8_t *self = (uint8_t *)mmap(NULL, aligned_length, PROT_READ, MAP_FILE | MAP_SHARED, fd, 0);
-    close(fd);
+    int exe_fd = open("/proc/self/exe", O_RDONLY);
+    uint64_t exe_length = lseek(exe_fd, 0, SEEK_END);
+    lseek(exe_fd, 0, SEEK_SET);
 
-    ELF64_Header *elf_hdr = (ELF64_Header *)self;
-    ELF64_Section_Header *section_hdr_table = (ELF64_Section_Header *)(self + elf_hdr->section_hdr_offset);
+    uint64_t exe_aligned_length = round_size(exe_length, 0x1000);
+    uint8_t *self_exe = (uint8_t *)mmap(NULL, exe_aligned_length, PROT_READ, MAP_FILE | MAP_SHARED, exe_fd, 0);
+    close(exe_fd);
+
+    ELF64_Header *elf_hdr = (ELF64_Header *)self_exe;
+    ELF64_Section_Header *section_hdr_table = (ELF64_Section_Header *)(self_exe + elf_hdr->section_hdr_offset);
     ELF64_Section_Header *section_strtable_hdr = &section_hdr_table[elf_hdr->section_hdr_str_idx];
-    char *strtable_ptr = (char *)self + section_strtable_hdr->offset;
+    char *strtable_ptr = (char *)self_exe + section_strtable_hdr->offset;
 
     size_t symtab_idx = 0;
     size_t symstrtab_idx = 0;
@@ -377,23 +390,23 @@ int load_self(AddrHash *ah) {
     if (i == elf_hdr->section_hdr_num) return 0;
 
     ELF64_Section_Header *symtab_section = (ELF64_Section_Header *)(
-        self + elf_hdr->section_hdr_offset + (symtab_idx * elf_hdr->section_hdr_entry_size)
+        self_exe + elf_hdr->section_hdr_offset + (symtab_idx * elf_hdr->section_hdr_entry_size)
     );
     ELF64_Section_Header *symtab_str_section = (ELF64_Section_Header *)(
-        self + elf_hdr->section_hdr_offset + (symstrtab_idx * elf_hdr->section_hdr_entry_size)
+        self_exe + elf_hdr->section_hdr_offset + (symstrtab_idx * elf_hdr->section_hdr_entry_size)
     );
 
     #define ELF64_ST_TYPE(info) ((info)&0xf)
     #define STT_FUNC 2
     for (size_t i = 0; i < symtab_section->size; i += symtab_section->entry_size) {
-        ELF64_Sym *sym = (ELF64_Sym *)(self + symtab_section->offset + i);
+        ELF64_Sym *sym = (ELF64_Sym *)(self_exe + symtab_section->offset + i);
 
         uint8_t type = ELF64_ST_TYPE(sym->info);
         if (type != STT_FUNC) {
             continue;
         }
 
-        char *name_str = (char *)&self[symtab_str_section->offset + sym->name];
+        char *name_str = (char *)&self_exe[symtab_str_section->offset + sym->name];
 
         // load global symbol cache!
         Name name;
@@ -419,7 +432,7 @@ int load_self(AddrHash *ah) {
             name.str = name.str + j;
             name.len = SPALL_MIN(name_len, 255);
         }
-        ah_insert(ah, (void *)sym->value, name);
+        ah_insert(ah, (void *)(base_addr + sym->value), name);
     }
 
     return 1;
@@ -598,7 +611,7 @@ SPALL_NOINSTRUMENT void __cyg_profile_func_enter(void *fn, void *caller) {
       name.len = sizeof(not_found) - 1;
     }
 
-    // printf("Begin: \"%s\"\n", name.str);
+    //printf("Begin: \"%s\"\n", name.str);
     spall_buffer_begin_ex(&spall_ctx, &spall_buffer, name.str, name.len, (double)__rdtsc(), tid, 0);
     // spall_buffer_flush(&spall_ctx, &spall_buffer);
     // spall_flush(&spall_ctx);
