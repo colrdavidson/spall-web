@@ -60,6 +60,7 @@ enum {
     SpallEventType_Instant             = 5,
 
     SpallEventType_Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
+    SpallEventType_Pad_Skip            = 7,
 };
 
 typedef struct SpallBeginEvent {
@@ -86,6 +87,11 @@ typedef struct SpallEndEvent {
     uint32_t tid;
     double   when;
 } SpallEndEvent;
+
+typedef struct SpallPadSkipEvent {
+    uint8_t  type; // = SpallEventType_Pad_Skip
+    uint32_t size;
+} SpallPadSkipEvent;
 
 #pragma pack(pop)
 
