@@ -412,7 +412,9 @@ async function init() {
 			return;
 		}
 
-		load_file(fd.files[0]);
+		let file = fd.files[0];
+		fd.value = null;
+		load_file(file);
 	}, false);
 
 	let awake = false;
