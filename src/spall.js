@@ -189,7 +189,7 @@ function set_error(code) {
 	switch (code) {
 		case 1: { // OutOfMemory
 			error_elem.innerHTML = 
-			`We're out of memory. WASM only supports up to 4 GB of memory *tops*, so files above 1-2 GB aren't always viable to load. If you need bigger file support, let me know! We've got a native version brewing that should run faster and let you use all the memory you can throw at it.`;
+			`We're out of memory. WASM only supports up to 4 GB of memory *tops*, so files above 1-2 GB aren't always viable to load. If your trace is smaller than ~1-2 GB, and you're running out of memory, you may have a runaway function stack. Make sure all your begins and ends match! If you need bigger file support, let me know! We've got a native version brewing that should run faster and let you use all the memory you can throw at it.`;
 		} break;
 		case 2: { // Bug
 			error_elem.innerHTML = "We hit a bug! Check the JS console for more details. In the meantime, you can try reloading the page and loading your file again.";
@@ -412,7 +412,9 @@ async function init() {
 			return;
 		}
 
-		load_file(fd.files[0]);
+		let file = fd.files[0];
+		fd.value = null;
+		load_file(file);
 	}, false);
 
 	let awake = false;
