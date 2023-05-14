@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: © 2022 Phillip Trudeau-Tavara <pmttavara@protonmail.com>
-// SPDX-License-Identifier: 0BSD
+// SPDX-FileCopyrightText: © 2023 Phillip Trudeau-Tavara <pmttavara@protonmail.com>
+// SPDX-License-Identifier: MIT
 
 /*
 
