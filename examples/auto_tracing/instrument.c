@@ -211,7 +211,7 @@ void exit_profile(void) {
 }
 
 char not_found[] = "(unknown name)";
-SPALL_FN void __cyg_profile_func_enter(void *fn, void *caller) {
+void __cyg_profile_func_enter(void *fn, void *caller) {
 	if (!spall_thread_running) {
 		return;
 	}
@@ -224,7 +224,7 @@ SPALL_FN void __cyg_profile_func_enter(void *fn, void *caller) {
 	spall_buffer_begin_ex(&spall_ctx, &spall_buffer, name.str, name.len, __rdtsc(), tid, 0);
 }
 
-SPALL_FN void __cyg_profile_func_exit(void *fn, void *caller) {
+void __cyg_profile_func_exit(void *fn, void *caller) {
 	if (!spall_thread_running) {
 		return;
 	}
