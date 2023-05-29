@@ -378,57 +378,21 @@ SPALL_FN SPALL_FORCEINLINE double get_rdtsc_multiplier(void) {
 
     uint64_t tsc_freq = 0;
 
-    // Fast path: Load kernel-mapped memory page
-    HMODULE ntdll = LoadLibraryA("ntdll.dll");
-    if (ntdll) {
+	// Get time before sleep
+	uint64_t qpc_begin = 0; QueryPerformanceCounter((LARGE_INTEGER *)&qpc_begin);
+	uint64_t tsc_begin = __rdtsc();
 
-        int (*NtQuerySystemInformation)(int, void *, unsigned int, unsigned int *) =
-        (int (*)(int, void *, unsigned int, unsigned int *))GetProcAddress(ntdll, "NtQuerySystemInformation");
-        if (NtQuerySystemInformation) {
+	Sleep(2);
 
-            volatile uint64_t *hypervisor_shared_page = NULL;
-            unsigned int size = 0;
+	// Get time after sleep
+	uint64_t qpc_end = qpc_begin + 1; QueryPerformanceCounter((LARGE_INTEGER *)&qpc_end);
+	uint64_t tsc_end = __rdtsc();
 
-            // SystemHypervisorSharedPageInformation == 0xc5
-            int result = (NtQuerySystemInformation)(0xc5, (void *)&hypervisor_shared_page, sizeof(hypervisor_shared_page), &size);
+	// Do the math to extrapolate the RDTSC ticks elapsed in 1 second
+	uint64_t qpc_freq = 0; QueryPerformanceFrequency((LARGE_INTEGER *)&qpc_freq);
+	tsc_freq = (tsc_end - tsc_begin) * qpc_freq / (qpc_end - qpc_begin);
 
-            // success
-            if (size == sizeof(hypervisor_shared_page) && result >= 0) {
-                // docs say ReferenceTime = ((VirtualTsc * TscScale) >> 64)
-                //      set ReferenceTime = 10000000 = 1 second @ 10MHz, solve for VirtualTsc
-                //       =>    VirtualTsc = 10000000 / (TscScale >> 64)
-                tsc_freq = (10000000ull << 32) / (hypervisor_shared_page[1] >> 32);
-                // If your build configuration supports 128 bit arithmetic, do this:
-                // tsc_freq = ((unsigned __int128)10000000ull << (unsigned __int128)64ull) / hypervisor_shared_page[1];
-            }
-        }
-        FreeLibrary(ntdll);
-    }
-
-    // Slow path
-    if (!tsc_freq) {
-
-        // Get time before sleep
-        uint64_t qpc_begin = 0; QueryPerformanceCounter((LARGE_INTEGER *)&qpc_begin);
-        uint64_t tsc_begin = __rdtsc();
-
-        Sleep(2);
-
-        // Get time after sleep
-        uint64_t qpc_end = qpc_begin + 1; QueryPerformanceCounter((LARGE_INTEGER *)&qpc_end);
-        uint64_t tsc_end = __rdtsc();
-
-        // Do the math to extrapolate the RDTSC ticks elapsed in 1 second
-        uint64_t qpc_freq = 0; QueryPerformanceFrequency((LARGE_INTEGER *)&qpc_freq);
-        tsc_freq = (tsc_end - tsc_begin) * qpc_freq / (qpc_end - qpc_begin);
-    }
-
-    // Failure case
-    if (!tsc_freq) {
-        tsc_freq = 1000000000;
-    }
-
-    multiplier = 1000000.0 / (double)tsc_freq;
+    multiplier = 1000000000.0 / (double)tsc_freq;
     return multiplier;
 }
 
