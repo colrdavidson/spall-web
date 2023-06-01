@@ -44,7 +44,7 @@ static _Thread_local bool spall_thread_running = false;
 
 // we're not checking overflow here...Don't do stupid things with input sizes
 SPALL_FN uint64_t next_pow2(uint64_t x) {
-	return 1 << (64 - __builtin_clz(x - 1));
+	return 1 << (64 - __builtin_clzll(x - 1));
 }
 
 // This is not thread-safe... Use one per thread!
