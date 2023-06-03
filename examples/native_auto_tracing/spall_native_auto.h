@@ -8,6 +8,13 @@
 #define SPALL_IS_MSVC    0
 #define SPALL_IS_DARWIN  0
 #define SPALL_IS_LINUX   0
+#define SPALL_IS_GCC     0
+#define SPALL_IS_CPP     0
+
+#ifdef __cplusplus
+	#undef SPALL_IS_CPP
+	#define SPALL_IS_CPP 1
+#endif
 
 #if defined(_WIN32)
     #undef SPALL_IS_WINDOWS
@@ -22,6 +29,10 @@
 #elif defined(__linux__)
     #undef SPALL_IS_LINUX
     #define SPALL_IS_LINUX 1
+#endif
+#ifdef __GNUC__
+	#undef SPALL_IS_GCC
+	#define SPALL_IS_GCC 1
 #endif
 
 #ifdef __cplusplus
@@ -47,6 +58,9 @@ void spall_auto_thread_quit(void);
     #define spall__thread_off() TlsSetValue(spall_auto__tls_index, (void *)0)
     #define _Thread_local __declspec( thread )
 #else
+#if SPALL_IS_GCC && SPALL_IS_CPP
+    #define _Thread_local thread_local
+#endif
     #define spall__thread_off() 0
     #define spall__thread_on() 0
 #endif
@@ -65,6 +79,14 @@ void spall_auto_thread_quit(void);
 #ifndef SPALL_AUTO_IMPLEMENTED_H
 #define SPALL_AUTO_IMPLEMENTED_H
 
+#if !SPALL_IS_WINDOWS
+    #if SPALL_IS_CPP
+        #include <atomic>
+    #else
+        #include <stdatomic.h>
+    #endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -76,7 +98,6 @@ extern "C" {
 #include <x86intrin.h>
 
 #if !SPALL_IS_WINDOWS
-    #include <stdatomic.h>
     #include <time.h>
     #include <pthread.h>
     #include <unistd.h>
@@ -105,13 +126,17 @@ extern "C" {
     #define SPALL_NOINSTRUMENT // Can't noinstrument on MSVC!
     #define SPALL_FORCEINLINE __forceinline
 
-    #define Spall_Atomic volatile
+    #define Spall_Atomic(X) volatile (X)
 #else
     #define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
     #define SPALL_FORCEINLINE __attribute__((always_inline))
-
-    #define Spall_Atomic _Atomic
     #define __debugbreak() __builtin_trap()
+
+    #if (SPALL_IS_GCC && SPALL_IS_CPP)
+        #define Spall_Atomic(X) std::atomic<X>
+    #else
+        #define Spall_Atomic(X) _Atomic (X)
+    #endif
 #endif
 
 #define SPALL_FN static inline SPALL_NOINSTRUMENT
@@ -155,7 +180,7 @@ typedef struct SpallProfile {
     FILE *file;
 } SpallProfile;
 
-typedef Spall_Atomic uint64_t Spall_Futex;
+typedef Spall_Atomic(uint64_t) Spall_Futex;
 typedef struct SpallBuffer {
     uint8_t *data;
     size_t   length;
@@ -165,10 +190,10 @@ typedef struct SpallBuffer {
     bool   write_half; 
 
     struct {
-        Spall_Atomic bool     is_running;
-        Spall_ThreadHandle    thread;
-        Spall_Atomic uint64_t ptr;
-        Spall_Atomic size_t   size;
+        Spall_Atomic(bool)     is_running;
+        Spall_ThreadHandle     thread;
+        Spall_Atomic(uint64_t) ptr;
+        Spall_Atomic(size_t)   size;
     } writer;
 
     size_t   head;
@@ -261,7 +286,7 @@ SPALL_FN SPALL_FORCEINLINE void spall_signal(Spall_Futex *addr) {
     }
 }
 
-SPALL_FN SPALL_FORCEINLINE void spall_wait(Spall_Futex *addr, Spall_Futex val) {
+SPALL_FN SPALL_FORCEINLINE void spall_wait(Spall_Futex *addr, uint64_t val) {
     for (;;) {
         long ret = syscall(SYS_futex, addr, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, val, NULL, NULL, 0);
         if (ret == -1) {
@@ -336,7 +361,7 @@ SPALL_FN SPALL_FORCEINLINE void spall_signal(Spall_Futex *addr) {
     }
 }
 
-SPALL_FN SPALL_FORCEINLINE void spall_wait(Spall_Futex *addr, Spall_Futex val) {
+SPALL_FN SPALL_FORCEINLINE void spall_wait(Spall_Futex *addr, uint64_t val) {
     for (;;) {
         int ret = __ulock_wait(UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, addr, val, 0);
         if (ret >= 0) {
@@ -378,19 +403,19 @@ SPALL_FN SPALL_FORCEINLINE double get_rdtsc_multiplier(void) {
 
     uint64_t tsc_freq = 0;
 
-	// Get time before sleep
-	uint64_t qpc_begin = 0; QueryPerformanceCounter((LARGE_INTEGER *)&qpc_begin);
-	uint64_t tsc_begin = __rdtsc();
+    // Get time before sleep
+    uint64_t qpc_begin = 0; QueryPerformanceCounter((LARGE_INTEGER *)&qpc_begin);
+    uint64_t tsc_begin = __rdtsc();
 
-	Sleep(2);
+    Sleep(2);
 
-	// Get time after sleep
-	uint64_t qpc_end = qpc_begin + 1; QueryPerformanceCounter((LARGE_INTEGER *)&qpc_end);
-	uint64_t tsc_end = __rdtsc();
+    // Get time after sleep
+    uint64_t qpc_end = qpc_begin + 1; QueryPerformanceCounter((LARGE_INTEGER *)&qpc_end);
+    uint64_t tsc_end = __rdtsc();
 
-	// Do the math to extrapolate the RDTSC ticks elapsed in 1 second
-	uint64_t qpc_freq = 0; QueryPerformanceFrequency((LARGE_INTEGER *)&qpc_freq);
-	tsc_freq = (tsc_end - tsc_begin) * qpc_freq / (qpc_end - qpc_begin);
+    // Do the math to extrapolate the RDTSC ticks elapsed in 1 second
+    uint64_t qpc_freq = 0; QueryPerformanceFrequency((LARGE_INTEGER *)&qpc_freq);
+    tsc_freq = (tsc_end - tsc_begin) * qpc_freq / (qpc_end - qpc_begin);
 
     multiplier = 1000000000.0 / (double)tsc_freq;
     return multiplier;
@@ -400,7 +425,7 @@ SPALL_FN SPALL_FORCEINLINE void spall_signal(Spall_Futex *addr) {
     WakeByAddressSingle((void *)addr);
 }
 
-SPALL_FN SPALL_FORCEINLINE void spall_wait(Spall_Futex *addr, Spall_Futex val) {
+SPALL_FN SPALL_FORCEINLINE void spall_wait(Spall_Futex *addr, uint64_t val) {
     WaitOnAddress(addr, (void *)&val, sizeof(val), INFINITE);
 }
 
@@ -424,7 +449,7 @@ SPALL_FN void *spall_writer(void *arg) {
         if (buffer->writer.ptr == 0) { continue; }
 
         size_t size = buffer->writer.size;
-        void *buffer_ptr = (void *)buffer->writer.ptr;
+        void *buffer_ptr = (void *)atomic_load(&buffer->writer.ptr);
         buffer->writer.ptr = 0;
 
         fwrite(buffer_ptr, size, 1, spall_ctx.file);

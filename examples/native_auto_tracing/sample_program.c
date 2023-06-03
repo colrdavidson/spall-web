@@ -20,7 +20,7 @@ void *run_work(void *ptr) {
 		foo();
 	}
 
-	spall_auto_quit();
+	spall_auto_thread_quit();
 	return NULL;
 }
 
