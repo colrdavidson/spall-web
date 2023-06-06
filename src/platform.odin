@@ -131,32 +131,35 @@ load_build_hash :: proc "contextless" (_hash: int) { build_hash = _hash }
 
 foreign import "js"
 
+@(default_calling_convention="contextless")
 foreign js {
-    _canvas_clear :: proc "contextless" () ---
-    _canvas_clip :: proc "contextless" (x, y, w, h: f64) ---
-    _canvas_rect :: proc "contextless" (x, y, w, h: f64, r, g, b, a: f32) ---
-    _canvas_rectc :: proc "contextless" (x, y, w, h, radius: f64, r, g, b, a: f32) ---
-    _canvas_circle :: proc "contextless" (x, y, radius: f64, r, g, b, a: f32) ---
-    _canvas_text :: proc "contextless" (str: string, x, y: f64, r, g, b, a: f32, scale: f64, font: string) ---
-    _canvas_line :: proc "contextless" (x1, y1, x2, y2: f64, r, g, b, a: f32, strokeWidth: f64) ---
-    _canvas_arc :: proc "contextless" (x, y, radius, angleStart, angleEnd: f64, r, g, b, a: f32, strokeWidth: f64) ---
-    _measure_text :: proc "contextless" (str: string, scale: f64, font: string) -> f64 ---
-    _get_text_height :: proc "contextless" (scale: f64, font: string) -> f64 ---
-	_pow :: proc "contextless" (x, power: f64) -> f64 ---
+    _canvas_clear  :: proc() ---
+    _canvas_clip   :: proc(x, y, w, h: f64) ---
+    _canvas_rect   :: proc(x, y, w, h: f64, r, g, b, a: f32) ---
+    _canvas_rectc  :: proc(x, y, w, h, radius: f64, r, g, b, a: f32) ---
+    _canvas_circle :: proc(x, y, radius: f64, r, g, b, a: f32) ---
+    _canvas_text   :: proc(str: string, x, y: f64, r, g, b, a: f32, scale: f64, font: string) ---
+    _canvas_line   :: proc(x1, y1, x2, y2: f64, r, g, b, a: f32, strokeWidth: f64) ---
+    _canvas_arc    :: proc(x, y, radius, angleStart, angleEnd: f64, r, g, b, a: f32, strokeWidth: f64) ---
 
-	_push_fatal :: proc "contextless" (code: int) ---
+    _measure_text  :: proc(str: string, scale: f64, font: string) -> f64 ---
+    _get_text_height :: proc(scale: f64, font: string) -> f64 ---
 
-	_gl_init_frame :: proc "contextless" (r, g, b, a: f32) ---
-	_gl_push_rects :: proc "contextless" (ptr: rawptr, byte_size, real_size: int, y, height: f64) ---
+	_pow :: proc(x, power: f64) -> f64 ---
 
-	get_session_storage :: proc "contextless" (key: string) ---
-	set_session_storage :: proc "contextless" (key: string, val: string) ---
-	get_time :: proc "contextless" () -> f64 ---
-	change_cursor :: proc "contextless" (cursor: string) ---
-	get_system_color :: proc "contextless" () -> bool ---
+	_push_fatal :: proc(code: int) ---
 
-	get_chunk :: proc "contextless" (offset, size: f64) ---
-	open_file_dialog :: proc "contextless" () ---
+	_gl_init_frame :: proc(r, g, b, a: f32) ---
+	_gl_push_rects :: proc(ptr: rawptr, byte_size, real_size: int, y, height: f64) ---
+
+	get_session_storage :: proc(key: string) ---
+	set_session_storage :: proc(key: string, val: string) ---
+	get_time :: proc() -> f64 ---
+	change_cursor :: proc(cursor: string) ---
+	get_system_color :: proc() -> bool ---
+
+	get_chunk :: proc(offset, size: f64) ---
+	open_file_dialog :: proc() ---
 }
 
 // a bunch of silly platform wrappers, so I can jam in dpr scaling
