@@ -377,11 +377,8 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 		}
 		magic := (^u64)(raw_data(chunk))^
 
-		is_json = magic != spall.MAGIC
-		if is_json {
-			stamp_scale = 1
-			jp = init_json_parser()
-		} else {
+		is_json = false
+		if magic == spall.MANUAL_MAGIC {
 			hdr := cast(^spall.Header)raw_data(chunk)
 			if hdr.version != 1 {
 				fmt.printf("Your file version (%d) is not supported!\n", hdr.version)
@@ -390,6 +387,13 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 
 			stamp_scale = hdr.timestamp_unit
 			bp.pos += i64(header_sz)
+		} else if magic == spall.NATIVE_MAGIC {
+			fmt.printf("You're trying to use a native-version file on the web!\n")
+			push_fatal(SpallError.NativeFileDetected)
+		} else {
+			is_json = true
+			stamp_scale = 1
+			jp = init_json_parser()
 		}
 
 		first_chunk = false
