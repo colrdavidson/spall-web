@@ -1,7 +1,12 @@
 package main
 
+import "core:intrinsics"
 import "core:mem"
 import "core:fmt"
+
+trap :: proc "contextless" () -> ! {
+	intrinsics.trap()
+}
 
 update_font_cache :: proc(width: f64) {
 	em = _p_font_size
@@ -80,9 +85,6 @@ key_up :: proc "contextless" (key: int) {
 	}
 }
 
-@export
-text_input :: proc "contextless" (key, code: string) { }
-
 // release all control state if the user tabs away
 
 intentional_blur := false
@@ -130,34 +132,31 @@ load_build_hash :: proc "contextless" (_hash: int) { build_hash = _hash }
 foreign import "js"
 
 foreign js {
-    _canvas_clear :: proc() ---
-    _canvas_clip :: proc(x, y, w, h: f64) ---
-    _canvas_rect :: proc(x, y, w, h: f64, r, g, b, a: f32) ---
-    _canvas_rectc :: proc(x, y, w, h, radius: f64, r, g, b, a: f32) ---
-    _canvas_circle :: proc(x, y, radius: f64, r, g, b, a: f32) ---
-    _canvas_text :: proc(str: string, x, y: f64, r, g, b, a: f32, scale: f64, font: string) ---
-    _canvas_line :: proc(x1, y1, x2, y2: f64, r, g, b, a: f32, strokeWidth: f64) ---
-    _canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f64, r, g, b, a: f32, strokeWidth: f64) ---
-    _measure_text :: proc(str: string, scale: f64, font: string) -> f64 ---
-    _get_text_height :: proc(scale: f64, font: string) -> f64 ---
-	_pow :: proc(x, power: f64) -> f64 ---
+    _canvas_clear :: proc "contextless" () ---
+    _canvas_clip :: proc "contextless" (x, y, w, h: f64) ---
+    _canvas_rect :: proc "contextless" (x, y, w, h: f64, r, g, b, a: f32) ---
+    _canvas_rectc :: proc "contextless" (x, y, w, h, radius: f64, r, g, b, a: f32) ---
+    _canvas_circle :: proc "contextless" (x, y, radius: f64, r, g, b, a: f32) ---
+    _canvas_text :: proc "contextless" (str: string, x, y: f64, r, g, b, a: f32, scale: f64, font: string) ---
+    _canvas_line :: proc "contextless" (x1, y1, x2, y2: f64, r, g, b, a: f32, strokeWidth: f64) ---
+    _canvas_arc :: proc "contextless" (x, y, radius, angleStart, angleEnd: f64, r, g, b, a: f32, strokeWidth: f64) ---
+    _measure_text :: proc "contextless" (str: string, scale: f64, font: string) -> f64 ---
+    _get_text_height :: proc "contextless" (scale: f64, font: string) -> f64 ---
+	_pow :: proc "contextless" (x, power: f64) -> f64 ---
 
-    debugger :: proc() ---
-    log_string :: proc(str: string) ---
-    log_error :: proc(str: string) ---
-	_push_fatal :: proc(code: int) ---
+	_push_fatal :: proc "contextless" (code: int) ---
 
-	_gl_init_frame :: proc(r, g, b, a: f32) ---
-	_gl_push_rects :: proc(ptr: rawptr, byte_size, real_size: int, y, height: f64) ---
+	_gl_init_frame :: proc "contextless" (r, g, b, a: f32) ---
+	_gl_push_rects :: proc "contextless" (ptr: rawptr, byte_size, real_size: int, y, height: f64) ---
 
-	get_session_storage :: proc(key: string) ---
-	set_session_storage :: proc(key: string, val: string) ---
-	get_time :: proc() -> f64 ---
-	change_cursor :: proc(cursor: string) ---
-	get_system_color :: proc() -> bool ---
+	get_session_storage :: proc "contextless" (key: string) ---
+	set_session_storage :: proc "contextless" (key: string, val: string) ---
+	get_time :: proc "contextless" () -> f64 ---
+	change_cursor :: proc "contextless" (cursor: string) ---
+	get_system_color :: proc "contextless" () -> bool ---
 
-	get_chunk :: proc(offset, size: f64) ---
-	open_file_dialog :: proc() ---
+	get_chunk :: proc "contextless" (offset, size: f64) ---
+	open_file_dialog :: proc "contextless" () ---
 }
 
 // a bunch of silly platform wrappers, so I can jam in dpr scaling
@@ -235,7 +234,7 @@ reset_cursor :: proc "contextless" () { change_cursor("auto") }
 @export
 set_dpr :: proc "contextless" (_dpr: f64) { dpr = _dpr }
 
-push_fatal :: proc(code: SpallError) -> ! {
+push_fatal :: proc "contextless" (code: SpallError) -> ! {
 	_push_fatal(int(code))
 	trap()
 }

@@ -328,14 +328,6 @@ async function init() {
 					gl_ctx.drawElementsInstanced(gl_ctx.TRIANGLES, idx_arr.length, gl_ctx.UNSIGNED_SHORT, 0, size);
 				},
 
-				// Debugging
-				debugger() { debugger; },
-				log_string(p, len) {
-					console.log(window.wasm.odinMem.loadString(p, len));
-				},
-				log_error(p, len) {
-					console.error(window.wasm.odinMem.loadString(p, len));
-				},
 				_push_fatal(code) {
 					set_error(code);
 				},
@@ -579,7 +571,6 @@ async function init() {
 		if (e.key.length > 1) {
 			specialKeyEvent('down', e);
 		} else if ( !(e.ctrlKey || e.metaKey) || e.code == 'KeyA' || e.code == 'KeyZ') {
-			window.wasm.text_input(...str(e.key), ...str(e.code));
 			e.preventDefault();
 		}
 		wakeUp();
@@ -588,12 +579,6 @@ async function init() {
 		if (e.key.length > 1) {
 			specialKeyEvent('up', e);
 		}
-		wakeUp();
-	});
-
-	window.addEventListener('paste', e => {
-		let clipdata = str(e.clipboardData.getData('text/plain'));
-		window.wasm.text_input(...clipdata);
 		wakeUp();
 	});
 	text_canvas.addEventListener('wheel', e => {
