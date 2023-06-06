@@ -35,6 +35,7 @@ SpallError :: enum int {
 	Bug = 2,
 	InvalidFile = 3,
 	InvalidFileVersion = 4,
+	NativeFileDetected = 5,
 }
 
 Camera :: struct {

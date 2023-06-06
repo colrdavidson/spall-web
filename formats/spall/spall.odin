@@ -1,6 +1,7 @@
 package spall
 
-MAGIC :: u64(0x0BADF00D)
+MANUAL_MAGIC :: u64(0x0BADF00D)
+NATIVE_MAGIC :: u64(0xABADF00D)
 
 Header :: struct #packed {
 	magic:          u64,

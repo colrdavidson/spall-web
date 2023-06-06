@@ -189,7 +189,7 @@ function set_error(code) {
 	switch (code) {
 		case 1: { // OutOfMemory
 			error_elem.innerHTML = 
-			`We're out of memory. WASM only supports up to 4 GB of memory *tops*, so files above 1-2 GB aren't always viable to load. If your trace is smaller than ~1-2 GB, and you're running out of memory, you may have a runaway function stack. Make sure all your begins and ends match! If you need bigger file support, let me know! We've got a native version brewing that should run faster and let you use all the memory you can throw at it.`;
+			`We're out of memory. WASM only supports up to 4 GB of memory *tops*, so files above 1-2 GB aren't always viable to load. If your trace is smaller than ~1-2 GB, and you're running out of memory, you may have a runaway function stack. Make sure all your begins and ends match! If you need bigger file support, you can grab the native version over at <a href=\"https://gravitymoth.itch.io/spall\">itch.io</a>"`;
 		} break;
 		case 2: { // Bug
 			error_elem.innerHTML = "We hit a bug! Check the JS console for more details. In the meantime, you can try reloading the page and loading your file again.";
@@ -199,6 +199,9 @@ function set_error(code) {
 		} break;
 		case 4: { // Invalid File Version
 			error_elem.innerHTML = "Your spall trace is out of date! Check tools/upconvert if you want to upgrade your file, or update to the newest header for next time.";
+		} break;
+		case 5: { // Native File Detected
+			error_elem.innerHTML = "You're trying to use the native version auto-tracer on the web version of Spall! If you want to try auto-tracing, you can try the one that works for web <a href=\"https://github.com/colrdavidson/spall-web/tree/master/examples/auto_tracing\">here</a> or if your traces are too big to load on the web, grab the native version over at <a href=\"https://gravitymoth.itch.io/spall\">itch.io</a>";
 		} break;
 	}
 }

@@ -113,7 +113,11 @@ focus :: proc "contextless" () {
 @export
 temp_allocate :: proc(n: int) -> rawptr {
     context = wasmContext
-    return mem.alloc(n, mem.DEFAULT_ALIGNMENT, context.temp_allocator)
+    ptr, err := mem.alloc(n, mem.DEFAULT_ALIGNMENT, context.temp_allocator)
+    if err != nil {
+	    push_fatal(SpallError.OutOfMemory)
+    }
+    return ptr
 }
 
 // This is gross..
