@@ -70,7 +70,7 @@ scroll :: proc "contextless" (x, y: f64) { scroll_val_y += y }
 zoom :: proc "contextless" (x, y: f64) { scroll_val_y += y }
 
 @export
-key_down :: proc "contextless" (key: int) { 
+key_down :: proc "contextless" (key: i32) { 
 	switch key {
 	case 1: // left-shift
 		shift_down = true
@@ -78,7 +78,7 @@ key_down :: proc "contextless" (key: int) {
 }
 
 @export
-key_up :: proc "contextless" (key: int) { 
+key_up :: proc "contextless" (key: i32) { 
 	switch key {
 	case 1: // left-shift
 		shift_down = false
@@ -113,9 +113,9 @@ focus :: proc "contextless" () {
 }
 
 @export
-temp_allocate :: proc(n: int) -> rawptr {
+temp_allocate :: proc(n: i32) -> rawptr {
     context = wasmContext
-    ptr, err := mem.alloc(n, mem.DEFAULT_ALIGNMENT, context.temp_allocator)
+    ptr, err := mem.alloc(int(n), mem.DEFAULT_ALIGNMENT, context.temp_allocator)
     if err != nil {
 	    push_fatal(SpallError.OutOfMemory)
     }
@@ -127,7 +127,7 @@ temp_allocate :: proc(n: int) -> rawptr {
 loaded_session_result :: proc "contextless" (key, val: string) { }
 
 @export
-load_build_hash :: proc "contextless" (_hash: int) { build_hash = _hash }
+load_build_hash :: proc "contextless" (_hash: i32) { build_hash = _hash }
 
 foreign import "js"
 
@@ -147,10 +147,10 @@ foreign js {
 
 	_pow :: proc(x, power: f64) -> f64 ---
 
-	_push_fatal :: proc(code: int) ---
+	_push_fatal :: proc(code: i32) ---
 
 	_gl_init_frame :: proc(r, g, b, a: f32) ---
-	_gl_push_rects :: proc(ptr: rawptr, byte_size, real_size: int, y, height: f64) ---
+	_gl_push_rects :: proc(ptr: rawptr, byte_size, real_size: i32, y, height: f64) ---
 
 	get_session_storage :: proc(key: string) ---
 	set_session_storage :: proc(key: string, val: string) ---
@@ -176,7 +176,7 @@ gl_init_frame :: #force_inline proc "contextless" (color: FVec4) {
 }
 
 gl_push_rects :: #force_inline proc "contextless" (rects: []DrawRect, y, height: f64) {
-	_gl_push_rects(raw_data(rects), len(rects) * size_of(DrawRect), len(rects), y, height)
+	_gl_push_rects(raw_data(rects), i32(len(rects) * size_of(DrawRect)), i32(len(rects)), y, height)
 }
 
 canvas_clear :: #force_inline proc "contextless" () {
@@ -238,6 +238,6 @@ reset_cursor :: proc "contextless" () { change_cursor("auto") }
 set_dpr :: proc "contextless" (_dpr: f64) { dpr = _dpr }
 
 push_fatal :: proc "contextless" (code: SpallError) -> ! {
-	_push_fatal(int(code))
+	_push_fatal(i32(code))
 	trap()
 }

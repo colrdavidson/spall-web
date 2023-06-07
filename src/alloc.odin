@@ -9,7 +9,7 @@ PAGE_SIZE :: 64 * 1024
 
 page_alloc :: proc(page_count: uint) -> (data: []byte, err: mem.Allocator_Error) {
 	prev_page_count := intrinsics.wasm_memory_grow(0, uintptr(page_count))
-	if prev_page_count < 0 {
+	if prev_page_count == -1 {
 		return nil, .Out_Of_Memory
 	}
 

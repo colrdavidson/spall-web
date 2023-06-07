@@ -44,7 +44,7 @@ subprocess.run([
     odin,
     'build', 'src',
     '-collection:formats=formats',
-    '-target:js_wasm32',
+    '-target:js_wasm64p32',
     '-target-features:+bulk-memory',
     f"-extra-linker-flags:--import-memory --initial-memory={initial_size} --max-memory={max_size}",
     f"-out:{wasm_out}",

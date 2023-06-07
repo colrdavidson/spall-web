@@ -61,11 +61,11 @@ class WasmMemoryInterface {
 	loadPtr(addr) { return this.loadUint(addr); }
 
 	loadBytes(ptr, len) {
-		return new Uint8Array(this.memory.buffer, ptr, len);
+		return new Uint8Array(this.memory.buffer, ptr, Number(len));
 	}
 
 	loadString(ptr, len) {
-		const bytes = this.loadBytes(ptr, len);
+		const bytes = this.loadBytes(ptr, Number(len));
 		return new TextDecoder("utf-8").decode(bytes);
 	}
 	putString(ptr, str) {
@@ -234,7 +234,7 @@ function odinSetupDefaultImports(wasmMemoryInterface, consoleElement, memory) {
 					writeToConsole(str, true);
 					return;
 				} else {
-					throw new Error("Invalid fd to 'write'" + stripNewline(str));
+					throw new Error("Invalid fd to 'write'" + str);
 				}
 			},
 			trap:  () => { throw new Error() },
@@ -296,19 +296,6 @@ async function runWasm(wasmPath, consoleElement, memory, extraForeignImports) {
 	};
 	delete jsExports._start;
 	delete jsExports._end;
-	delete jsExports.default_context_ptr;
-
-	for (const key of Object.keys(jsExports)) {
-		const func = jsExports[key];
-		if (typeof func !== 'function') {
-			continue;
-		}
-
-		Object.defineProperty(jsExports, key, {
-			value: (...args) => func(...args, exports.default_context_ptr()),
-			writable: false,
-		});
-	}
 
 	return jsExports;
 };

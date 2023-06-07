@@ -5,14 +5,14 @@ function str(s) {
 	const len = bytes.length;
 	const p = window.wasm.temp_allocate(len);
 	window.wasm.odinMem.loadBytes(p, len).set(bytes);
-	return [p, len];
+	return [p, BigInt(len)];
 }
 function bytes(b) {
 	const len = b.byteLength;
 	const p = window.wasm.temp_allocate(len);
 	let _b = window.wasm.odinMem.loadBytes(p, len)
 	_b.set(new Uint8Array(b));
-	return [p, len];
+	return [p, BigInt(len)];
 }
 
 const vert_src = `#version 300 es

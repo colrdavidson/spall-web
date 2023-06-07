@@ -99,7 +99,7 @@ ch_width       : f64 = 0
 thread_gap     : f64 = 8
 graph_size: f64 = 150
 
-build_hash := 0
+build_hash : i32 = 0
 enable_debug := false
 fps_history: queue.Queue(f64)
 
