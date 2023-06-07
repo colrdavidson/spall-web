@@ -39,7 +39,7 @@ JSONParser :: struct {
 
 	// skippy state
 	got_first_char: bool,
-	skipper_objs: int,
+	skipper_objs: i32,
 	event_start: bool,
 }
 
@@ -866,7 +866,7 @@ json_finish_loading :: proc(jp: ^JSONParser) {
 	finish_loading()
 }
 
-json_patch_end :: proc(p_idx, t_idx: int, e_idx: i64, end_time: f64) {
+json_patch_end :: proc(p_idx, t_idx: i32, e_idx: i64, end_time: f64) {
 	thread := &processes[p_idx].threads[t_idx]
 	jev := &thread.json_events[e_idx]
 	jev.duration = end_time - jev.timestamp
@@ -906,7 +906,7 @@ json_push_instant :: proc(event: ^TempEvent) {
 }
 
 
-json_push_event :: proc(process_id, thread_id: u32, event: ^JSONEvent) -> (int, int, int) {
+json_push_event :: proc(process_id, thread_id: u32, event: ^JSONEvent) -> (i32, i32, i32) {
 	p_idx := setup_pid(process_id)
 	t_idx := setup_tid(p_idx, thread_id)
 
@@ -923,7 +923,7 @@ json_push_event :: proc(process_id, thread_id: u32, event: ^JSONEvent) -> (int, 
 	total_max_time = max(total_max_time, event.timestamp + event.duration)
 
 	append(&t.json_events, event^)
-	return p_idx, t_idx, len(t.json_events)-1
+	return p_idx, t_idx, i32(len(t.json_events)-1)
 }
 
 pid_sort_proc :: proc(a, b: Process) -> bool { return a.min_time < b.min_time }
@@ -955,7 +955,7 @@ insertion_sort_events :: proc(events: []JSONEvent, max_time: f64) {
 }
 
 json_process_events :: proc() {
-	ev_stack: Stack(int)
+	ev_stack: Stack(i32)
 	stack_init(&ev_stack, context.temp_allocator)
 
 	slice.sort_by(global_instants[:], instant_rendersort_proc)
@@ -975,14 +975,14 @@ json_process_events :: proc() {
 			insertion_sort_events(tm.json_events[:], tm.max_time)
 
 			free_all(scratch2_allocator)
-			depth_counts := make([dynamic]uint, 0, 64, scratch2_allocator)
+			depth_counts := make([dynamic]u32, 0, 64, scratch2_allocator)
 
 			stack_clear(&ev_stack)
 			for event, e_idx in &tm.json_events {
 				cur_start := event.timestamp
 				cur_end   := event.timestamp + bound_duration(event, tm.max_time)
 				if ev_stack.len == 0 {
-					stack_push_back(&ev_stack, e_idx)
+					stack_push_back(&ev_stack, i32(e_idx))
 				} else {
 					prev_e_idx := stack_peek_back(&ev_stack)
 					prev_ev := tm.json_events[prev_e_idx]
@@ -992,7 +992,7 @@ json_process_events :: proc() {
 
 					// if it fits within the parent
 					if cur_start >= prev_start && cur_end <= prev_end {
-						stack_push_back(&ev_stack, e_idx)
+						stack_push_back(&ev_stack, i32(e_idx))
 					} else {
 
 						// while it doesn't overlap the parent
@@ -1009,7 +1009,7 @@ json_process_events :: proc() {
 								break;
 							}
 						}
-						stack_push_back(&ev_stack, e_idx)
+						stack_push_back(&ev_stack, i32(e_idx))
 					}
 				}
 
@@ -1021,14 +1021,14 @@ json_process_events :: proc() {
 				event.depth = u16(cur_depth)
 			}
 
-			depth_offsets := make([]uint, len(depth_counts), scratch2_allocator)
-			cur_offset : uint = 0
+			depth_offsets := make([]u32, len(depth_counts), scratch2_allocator)
+			cur_offset : u32 = 0
 			for i := 0; i < len(depth_counts); i += 1 {
 				depth_offsets[i] = cur_offset
 				cur_offset += depth_counts[i]
 			}
 
-			depth_counters := make([]uint, len(depth_counts), scratch2_allocator)
+			depth_counters := make([]u32, len(depth_counts), scratch2_allocator)
 			mem.zero_slice(depth_counters)
 
 			sorted_events := make([]Event, len(tm.json_events), big_global_allocator)
@@ -1048,7 +1048,7 @@ json_process_events :: proc() {
 				depth_counters[depth] += 1
 			}
 
-			ev_start : uint = 0
+			ev_start : u32 = 0
 			for i := 0; i < len(depth_counts); i += 1 {
 				count := depth_counts[i]
 				depth := Depth{

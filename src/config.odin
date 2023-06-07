@@ -77,10 +77,10 @@ gen_event_color :: proc(events: []Event, thread_max: f64) -> (FVec3, f64) {
 	return color, total_weight
 }
 
-print_tree :: proc(tree: []ChunkNode, head: uint) {
+print_tree :: proc(tree: []ChunkNode, head: u32) {
 	fmt.printf("mah tree!\n")
 	// If we blow this, we're in space
-	tree_stack := [128]uint{}
+	tree_stack := [128]u32{}
 	stack_len := 0
 	pad_buf := [?]u8{0..<64 = '\t',}
 
@@ -138,8 +138,8 @@ chunk_events :: proc() {
 					node := ChunkNode{}
 					node.start_time = start_ev.timestamp - total_min_time
 					node.end_time   = end_ev.timestamp + bound_duration(end_ev, tm.max_time) - total_min_time
-					node.start_idx  = uint(start_idx)
-					node.end_idx    = uint(end_idx)
+					node.start_idx  = u32(start_idx)
+					node.end_idx    = u32(end_idx)
 					node.arr_len = i8(len(scan_arr))
 
 					avg_color, weight := gen_event_color(scan_arr, tm.max_time)
@@ -172,7 +172,7 @@ chunk_events :: proc() {
 
 						avg_color := FVec3{}
 						for j := 0; j < len(children); j += 1 {
-							node.children[j] = uint(start_idx + j)
+							node.children[j] = u32(start_idx + j)
 							avg_color += children[j].avg_color * f32(children[j].weight)
 							node.weight += children[j].weight
 						}
@@ -188,7 +188,7 @@ chunk_events :: proc() {
 					parent_row_count = (row_count + (CHUNK_NARY_WIDTH - 1)) / CHUNK_NARY_WIDTH
 				}
 
-				depth.head = len(tree) - 1
+				depth.head = u32(len(tree) - 1)
 			}
 		}
 	}
@@ -213,7 +213,7 @@ generate_selftimes :: proc() {
 					depth := tm.depths[d_idx+1]
 					tree := depth.tree
 
-					tree_stack := [128]uint{}
+					tree_stack := [128]u32{}
 					stack_len := 0
 
 					start_time := ev.timestamp - total_min_time
@@ -237,7 +237,7 @@ generate_selftimes :: proc() {
 						}
 
 						if cur_node.child_count == 0 {
-							scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
+							scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+u32(cur_node.arr_len)]
 							weight := 0.0
 							scan_loop: for scan_ev in scan_arr {
 								scan_ev_start_time := scan_ev.timestamp - total_min_time

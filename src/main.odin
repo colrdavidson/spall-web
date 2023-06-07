@@ -560,7 +560,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 				cur_depth_off := 0
 				for depth, d_idx in &tm.depths {
-					render_tree(p_idx, t_idx, d_idx, cur_y, start_time, end_time)
+					render_tree(i32(p_idx), i32(t_idx), i32(d_idx), cur_y, start_time, end_time)
 					gl_push_rects(gl_rects[:], (cur_y + (rect_height * f64(d_idx))), rect_height)
 
 					resize(&gl_rects, 0)
@@ -639,7 +639,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		for proc_v, p_idx in &processes {
 			for tm, t_idx in &proc_v.threads {
 				for depth, d_idx in &tm.depths {
-					render_minitree(p_idx, t_idx, d_idx, mini_start_x + mini_graph_pad, x_scale)
+					render_minitree(i32(p_idx), i32(t_idx), i32(d_idx), mini_start_x + mini_graph_pad, x_scale)
 					gl_push_rects(gl_rects[:], (tree_y + (mini_rect_height * f64(d_idx))), mini_rect_height)
 					resize(&gl_rects, 0)
 				}
@@ -930,7 +930,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 						}
 
 						if real_start != -1 && real_end != -1 {
-							append(&selected_ranges, Range{p_idx, t_idx, d_idx, real_start, real_end})
+							append(&selected_ranges, Range{i32(p_idx), i32(t_idx), i32(d_idx), i32(real_start), i32(real_end)})
 						}
 					}
 					cur_y += thread_advance
@@ -948,9 +948,9 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			broke_early := false
 			range_loop: for range, r_idx in selected_ranges {
 				start_idx := range.start
-				if cur_stat_offset.range_idx > r_idx {
+				if cur_stat_offset.range_idx > i32(r_idx) {
 					continue
-				} else if cur_stat_offset.range_idx == r_idx {
+				} else if cur_stat_offset.range_idx == i32(r_idx) {
 					start_idx = max(start_idx, cur_stat_offset.event_idx)
 				}
 
@@ -959,7 +959,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 				for ev, e_idx in events {
 					if event_count > iter_max {
-						cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
+						cur_stat_offset = StatOffset{i32(r_idx), start_idx + i32(e_idx)}
 						broke_early = true
 						break range_loop
 					}
@@ -1026,10 +1026,10 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 				events := thread.depths[range.did].events
 
 				total_count += len(events)
-				if cur_stat_offset.range_idx > r_idx {
+				if cur_stat_offset.range_idx > i32(r_idx) {
 					cur_count += len(events)
-				} else if cur_stat_offset.range_idx == r_idx {
-					cur_count += cur_stat_offset.event_idx - range.start
+				} else if cur_stat_offset.range_idx == i32(r_idx) {
+					cur_count += int(cur_stat_offset.event_idx - range.start)
 				}
 			}
 
@@ -1316,7 +1316,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 			for proc_v, p_idx in processes {
 				for tm, t_idx in proc_v.threads {
 					for depth, d_idx in tm.depths {
-						append(&selected_ranges, Range{p_idx, t_idx, d_idx, 0, len(depth.events)})
+						append(&selected_ranges, Range{i32(p_idx), i32(t_idx), i32(d_idx), i32(0), i32(len(depth.events))})
 					}
 				}
 			}

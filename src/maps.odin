@@ -9,18 +9,18 @@ import "core:slice"
 // u32 -> u32 map for pids and tids
 PTEntry :: struct {
 	key: u32,
-	val: int,
+	val: i32,
 }
 ValHash :: struct {
 	entries: [dynamic]PTEntry,
-	hashes:  [dynamic]int,
+	hashes:  [dynamic]i32,
 	len_minus_one: u32,
 }
 
 vh_init :: proc(allocator := context.allocator) -> ValHash {
 	v := ValHash{}
 	v.entries = make([dynamic]PTEntry, 0, allocator)
-	v.hashes = make([dynamic]int, 32, allocator) // must be a power of two
+	v.hashes = make([dynamic]i32, 32, allocator) // must be a power of two
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
@@ -33,7 +33,7 @@ vh_hash :: proc "contextless" (key: u32) -> u32 {
 	return key * 2654435769
 }
 
-vh_find :: proc "contextless" (v: ^ValHash, key: u32, loc := #caller_location) -> (int, bool) {
+vh_find :: proc "contextless" (v: ^ValHash, key: u32, loc := #caller_location) -> (i32, bool) {
 	hv := vh_hash(key) & v.len_minus_one
 
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
@@ -60,11 +60,11 @@ vh_grow :: proc(v: ^ValHash) {
 	v.len_minus_one = u32(len(v.hashes) - 1)
 
 	for entry, idx in v.entries {
-		vh_reinsert(v, entry, idx)
+		vh_reinsert(v, entry, i32(idx))
 	}
 }
 
-vh_reinsert :: proc "contextless" (v: ^ValHash, entry: PTEntry, v_idx: int) {
+vh_reinsert :: proc "contextless" (v: ^ValHash, entry: PTEntry, v_idx: i32) {
 	hv := vh_hash(entry.key) & v.len_minus_one
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
 		idx := (hv + i) & v.len_minus_one
@@ -77,8 +77,8 @@ vh_reinsert :: proc "contextless" (v: ^ValHash, entry: PTEntry, v_idx: int) {
 	}
 }
 
-vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
-	if len(v.entries) >= int(f64(len(v.hashes)) * 0.75) {
+vh_insert :: proc(v: ^ValHash, key: u32, val: i32) {
+	if i32(len(v.entries)) >= i32(f64(len(v.hashes)) * 0.75) {
 		vh_grow(v)
 	}
 
@@ -88,7 +88,7 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
-			v.hashes[idx] = len(v.entries)
+			v.hashes[idx] = i32(len(v.entries))
 			append(&v.entries, PTEntry{key, val})
 			return
 		} else if v.entries[e_idx].key == key {
@@ -110,7 +110,7 @@ INStr :: struct #packed {
 // String interning
 INMap :: struct {
 	entries: [dynamic]INStr,
-	hashes:  [dynamic]int,
+	hashes:  [dynamic]i32,
 	resize_threshold: i64,
 	len_minus_one: u32,
 }
@@ -118,7 +118,7 @@ INMap :: struct {
 in_init :: proc(allocator := context.allocator) -> INMap {
 	v := INMap{}
 	v.entries = make([dynamic]INStr, 0, allocator)
-	v.hashes = make([dynamic]int, 32, allocator) // must be a power of two
+	v.hashes = make([dynamic]i32, 32, allocator) // must be a power of two
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
@@ -133,7 +133,7 @@ in_hash :: proc (key: string) -> u32 {
 }
 
 
-in_reinsert :: proc (v: ^INMap, entry: INStr, v_idx: int) {
+in_reinsert :: proc (v: ^INMap, entry: INStr, v_idx: i32) {
 	hv := in_hash(in_getstr(entry)) & v.len_minus_one
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
 		idx := (hv + i) & v.len_minus_one
@@ -155,7 +155,7 @@ in_grow :: proc(v: ^INMap) {
 	v.resize_threshold = i64(f64(len(v.hashes)) * INMAP_LOAD_FACTOR) 
 	v.len_minus_one = u32(len(v.hashes) - 1)
 	for entry, idx in v.entries {
-		in_reinsert(v, entry, idx)
+		in_reinsert(v, entry, i32(idx))
 	}
 }
 
@@ -170,7 +170,7 @@ in_get :: proc(v: ^INMap, key: string) -> INStr {
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
-			v.hashes[idx] = len(v.entries)
+			v.hashes[idx] = i32(len(v.entries))
 
 			str_start := u32(len(string_block))
 			in_str := INStr{str_start, u16(len(key))}
@@ -199,7 +199,7 @@ KM_CAP :: 32
 KeyMap :: struct {
 	keys:   [KM_CAP]string,
 	types: [KM_CAP]FieldType,
-	hashes: [KM_CAP]int,
+	hashes: [KM_CAP]i32,
 	len: int,
 }
 
@@ -224,7 +224,7 @@ km_insert :: proc(v: ^KeyMap, key: string, type: FieldType) {
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
-			v.hashes[idx] = v.len
+			v.hashes[idx] = i32(v.len)
 			v.keys[v.len] = key
 			v.types[v.len] = type
 			v.len += 1
@@ -264,13 +264,13 @@ StatEntry :: struct {
 }
 StatMap :: struct {
 	entries: [dynamic]StatEntry,
-	hashes:  [dynamic]int,
+	hashes:  [dynamic]i32,
 	resize_threshold: i64,
 }
 sm_init :: proc(allocator := context.allocator) -> StatMap {
 	v := StatMap{}
 	v.entries = make([dynamic]StatEntry, 0, allocator)
-	v.hashes = make([dynamic]int, 32, allocator) // must be a power of two
+	v.hashes = make([dynamic]i32, 32, allocator) // must be a power of two
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
@@ -279,7 +279,7 @@ sm_init :: proc(allocator := context.allocator) -> StatMap {
 sm_hash :: proc (key: INStr) -> u32 {
 	return key.start * 2654435769
 }
-sm_reinsert :: proc (v: ^StatMap, entry: StatEntry, v_idx: int) {
+sm_reinsert :: proc (v: ^StatMap, entry: StatEntry, v_idx: i32) {
 	hv := sm_hash(entry.key) & u32(len(v.hashes) - 1)
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
 		idx := (hv + i) & u32(len(v.hashes) - 1)
@@ -302,7 +302,7 @@ sm_grow :: proc(v: ^StatMap) {
 
 	v.resize_threshold = i64(f64(len(v.hashes)) * SMMAP_LOAD_FACTOR) 
 	for entry, idx in v.entries {
-		sm_reinsert(v, entry, idx)
+		sm_reinsert(v, entry, i32(idx))
 	}
 }
 
@@ -333,7 +333,7 @@ sm_insert :: proc(v: ^StatMap, key: INStr, val: Stats) -> ^Stats {
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
-			e_idx = len(v.entries)
+			e_idx = i32(len(v.entries))
 			v.hashes[idx] = e_idx
 			append(&v.entries, StatEntry{key, val})
 			return &v.entries[e_idx].val

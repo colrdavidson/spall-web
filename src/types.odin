@@ -62,12 +62,12 @@ Stats :: struct {
 	count: u32,
 }
 Range :: struct {
-	pid: int,
-	tid: int,
-	did: int,
+	pid: i32,
+	tid: i32,
+	did: i32,
 
-	start: int,
-	end: int,
+	start: i32,
+	end: i32,
 }
 StatState :: enum {
 	NoStats,
@@ -82,8 +82,8 @@ SortState :: enum {
 	AvgTime,
 }
 StatOffset :: struct {
-	range_idx: int,
-	event_idx: int,
+	range_idx: i32,
+	event_idx: i32,
 }
 
 EventType :: enum u8 {
@@ -140,23 +140,23 @@ ChunkNode :: struct #packed {
 	avg_color: FVec3,
 	weight: f64,
 
-	start_idx: uint,
-	end_idx: uint,
-	children: [CHUNK_NARY_WIDTH]uint,
+	start_idx: u32,
+	end_idx: u32,
+	children: [CHUNK_NARY_WIDTH]u32,
 
 	child_count: i8,
 	arr_len: i8,
 }
 
 Depth :: struct {
-	head: uint,
+	head: u32,
 	tree: [dynamic]ChunkNode,
 	bs_events: [dynamic]Event,
 	events: []Event,
 }
 
 EVData :: struct {
-	idx: int,
+	idx: i32,
 	depth: u16,
 	self_time: f64,
 }
@@ -222,8 +222,8 @@ stack_init :: proc(s: ^$Q/Stack($T), allocator := context.allocator) {
 }
 stack_push_back :: proc(s: ^$Q/Stack($T), elem: T) #no_bounds_check {
 	if s.len >= cap(s.arr) {
-		new_capacity := max(uint(8), uint(len(s.arr))*2)
-		resize(&s.arr, int(new_capacity))
+		new_capacity := max(8, len(s.arr)*2)
+		resize(&s.arr, new_capacity)
 	}
 	s.arr[s.len] = elem
 	s.len += 1

@@ -161,7 +161,7 @@ render_widetree :: proc(p_idx, t_idx: int, start_x: f64, scale: f64, layer_count
 	tree := depth.tree
 
 	// If we blow this, we're in space
-	tree_stack := [128]uint{}
+	tree_stack := [128]u32{}
 	stack_len := 0
 
 	alpha := u8(255.0 / f64(layer_count))
@@ -170,7 +170,7 @@ render_widetree :: proc(p_idx, t_idx: int, start_x: f64, scale: f64, layer_count
 		stack_len -= 1
 
 		tree_idx := tree_stack[stack_len]
-		if tree_idx >= len(tree) {
+		if tree_idx >= u32(len(tree)) {
 			fmt.printf("%d, %d\n", p_idx, t_idx)
 			fmt.printf("%d\n", depth.head)
 			fmt.printf("%d\n", stack_len)
@@ -207,7 +207,7 @@ render_widetree :: proc(p_idx, t_idx: int, start_x: f64, scale: f64, layer_count
 
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
-			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
+			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+u32(cur_node.arr_len)]
 			render_wideevents(scan_arr, thread.max_time, start_x, scale, alpha)
 			continue
 		}
@@ -243,7 +243,7 @@ render_wideevents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 	}
 }
 
-render_minitree :: proc(pid, tid: int, depth_idx: int, start_x: f64, scale: f64) {
+render_minitree :: proc(pid, tid, depth_idx: i32, start_x: f64, scale: f64) {
 	thread := processes[pid].threads[tid]
 	depth := thread.depths[depth_idx]
 	tree := depth.tree
@@ -262,7 +262,7 @@ render_minitree :: proc(pid, tid: int, depth_idx: int, start_x: f64, scale: f64)
 	}
 
 	// If we blow this, we're in space
-	tree_stack := [128]uint{}
+	tree_stack := [128]u32{}
 	stack_len := 0
 
 	tree_stack[0] = depth.head; stack_len += 1
@@ -298,7 +298,7 @@ render_minitree :: proc(pid, tid: int, depth_idx: int, start_x: f64, scale: f64)
 				else {
 					range := selected_ranges[found_rid]	
 					if !range_in_range(cur_node.start_idx, cur_node.end_idx, 
-									   uint(range.start), uint(range.end)) {
+									   u32(range.start), u32(range.end)) {
 						should_fade = true
 					}
 				}
@@ -320,7 +320,7 @@ render_minitree :: proc(pid, tid: int, depth_idx: int, start_x: f64, scale: f64)
 
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
-			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
+			scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+u32(cur_node.arr_len)]
 			render_minievents(scan_arr, thread.max_time, start_x, scale, int(cur_node.start_idx), found_rid)
 			continue
 		}
@@ -361,7 +361,7 @@ render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 			if found_rid == -1 { should_fade = true } 
 			else {
 				range := selected_ranges[found_rid]	
-				if !val_in_range(e_idx, range.start, range.end - 1) { should_fade = true }
+				if !val_in_range(i32(e_idx), range.start, range.end - 1) { should_fade = true }
 			}
 		}
 
@@ -380,7 +380,7 @@ render_minievents :: proc(scan_arr: []Event, thread_max_time: f64, start_x: f64,
 	}
 }
 
-render_tree :: proc(pid, tid, depth_idx: int, y_start: f64, start_time, end_time: f64) {
+render_tree :: proc(pid, tid, depth_idx: i32, y_start: f64, start_time, end_time: f64) {
 	thread := processes[pid].threads[tid]
 	depth := thread.depths[depth_idx]
 	tree := depth.tree
@@ -394,7 +394,7 @@ render_tree :: proc(pid, tid, depth_idx: int, y_start: f64, start_time, end_time
 	}
 
 	// If we blow this, we're in space
-	tree_stack := [128]uint{}
+	tree_stack := [128]u32{}
 	stack_len := 0
 
 	tree_stack[0] = depth.head; stack_len += 1
@@ -441,7 +441,7 @@ render_tree :: proc(pid, tid, depth_idx: int, y_start: f64, start_time, end_time
 				else {
 					range := selected_ranges[found_rid]	
 					if !range_in_range(cur_node.start_idx, cur_node.end_idx, 
-									   uint(range.start), uint(range.end)) {
+									   u32(range.start), u32(range.end)) {
 						should_fade = true
 					}
 				}
@@ -466,7 +466,7 @@ render_tree :: proc(pid, tid, depth_idx: int, y_start: f64, start_time, end_time
 
 		// we're at a bottom node, draw the whole thing
 		if cur_node.child_count == 0 {
-			render_events(pid, tid, depth_idx, depth.events, cur_node.start_idx, cur_node.arr_len, thread.max_time, depth_idx, y_start, found_rid)
+			render_events(i32(pid), i32(tid), i32(depth_idx), depth.events, cur_node.start_idx, cur_node.arr_len, thread.max_time, depth_idx, y_start, found_rid)
 			continue
 		}
 
@@ -476,8 +476,8 @@ render_tree :: proc(pid, tid, depth_idx: int, y_start: f64, start_time, end_time
 	}
 }
 
-render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint, arr_len: i8, thread_max_time: f64, y_depth: int, y_start: f64, found_rid: int) {
-	scan_arr := events[start_idx:start_idx+uint(arr_len)]
+render_events :: proc(p_idx, t_idx, d_idx: i32, events: []Event, start_idx: u32, arr_len: i8, thread_max_time: f64, y_depth: i32, y_start: f64, found_rid: int) {
+	scan_arr := events[start_idx:start_idx+u32(arr_len)]
 	y := rect_height * f64(y_depth)
 	h := rect_height
 
@@ -510,7 +510,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 		ev_name := in_getstr(ev.name)
 		idx := name_color_idx(ev_name)
 		rect_color := color_choices[idx]
-		e_idx := int(start_idx) + de_id
+		e_idx := i32(start_idx) + i32(de_id)
 
 		grey := greyscale(color_choices[idx])
 
@@ -519,7 +519,7 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 			if found_rid == -1 { should_fade = true } 
 			else {
 				range := selected_ranges[found_rid]	
-				if !val_in_range(e_idx, range.start, range.end - 1) { should_fade = true }
+				if !val_in_range(i32(e_idx), range.start, range.end - 1) { should_fade = true }
 			}
 		}
 
@@ -532,8 +532,8 @@ render_events :: proc(p_idx, t_idx, d_idx: int, events: []Event, start_idx: uint
 			}
 		}
 
-		if int(selected_event.pid) == p_idx && int(selected_event.tid) == t_idx &&
-		   int(selected_event.did) == d_idx && int(selected_event.eid) == e_idx {
+		if i32(selected_event.pid) == p_idx && i32(selected_event.tid) == t_idx &&
+		   i32(selected_event.did) == d_idx && i32(selected_event.eid) == e_idx {
 			rect_color.x += 30
 			rect_color.y += 30
 			rect_color.z += 30
