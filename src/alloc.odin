@@ -7,7 +7,7 @@ import "core:runtime"
 
 PAGE_SIZE :: 64 * 1024
 
-page_alloc :: proc(page_count: uint) -> (data: []byte, err: mem.Allocator_Error) {
+page_alloc :: proc(page_count: int) -> (data: []byte, err: mem.Allocator_Error) {
 	prev_page_count := intrinsics.wasm_memory_grow(0, uintptr(page_count))
 	if prev_page_count == -1 {
 		return nil, .Out_Of_Memory
@@ -57,16 +57,16 @@ arena_allocator_proc :: proc(
 	case .Alloc, .Alloc_Non_Zeroed:
 		#no_bounds_check end := &arena.data[arena.offset]
 		ptr := mem.align_forward(end, uintptr(alignment))
-		align_skip := uint(uintptr(ptr) - uintptr(end))
-		total_size := uint(size) + align_skip
+		align_skip := int(uintptr(ptr) - uintptr(end))
+		total_size := size + align_skip
 
-		if uint(arena.offset) + uint(total_size) > uint(len(arena.data)) {
+		if arena.offset + total_size > len(arena.data) {
 			fmt.printf("Out of memory @ %s\n", location)
 			push_fatal(SpallError.OutOfMemory)
 		}
 
-		arena.offset = int(uint(arena.offset) + uint(total_size))
-		arena.peak_used = int(max(arena.peak_used, arena.offset))
+		arena.offset = arena.offset + total_size
+		arena.peak_used = max(arena.peak_used, arena.offset)
 
 		if mode != .Alloc_Non_Zeroed {
 			mem.zero(ptr, size)
@@ -119,15 +119,6 @@ growing_arena_allocator :: proc(arena: ^Arena) -> mem.Allocator {
 	}
 }
 
-_byte_slice :: #force_inline proc "contextless" (data: rawptr, #any_int len: uint) -> []byte {
-	return ([^]u8)(data)[:len]
-}
-
-_align_formula :: proc "contextless" (size, align: uint) -> uint {
-	result := (size + align) - 1
-	return result - (result % align)
-}
-
 growing_arena_allocator_proc :: proc(
     allocator_data: rawptr,
     mode: mem.Allocator_Mode,
@@ -142,11 +133,11 @@ growing_arena_allocator_proc :: proc(
 	case .Alloc, .Alloc_Non_Zeroed:
 		#no_bounds_check end := &arena.data[uint(arena.offset)]
 		ptr := mem.align_forward(end, uintptr(alignment))
-		align_skip := uint(uintptr(ptr) - uintptr(end))
-		total_size := uint(size) + align_skip
+		align_skip := int(uintptr(ptr) - uintptr(end))
+		total_size := size + align_skip
 
-		if uint(arena.offset) + uint(total_size) > uint(len(arena.data)) {
-			page_count := _align_formula(total_size, PAGE_SIZE) / PAGE_SIZE
+		if arena.offset + total_size > len(arena.data) {
+			page_count := mem.align_formula(total_size, PAGE_SIZE) / PAGE_SIZE
 			new_tail, err := page_alloc(page_count)
 			if err != nil {
 				fmt.printf("tried to get %f MB\n", f64(u32(total_size)) / 1024 / 1024)
@@ -160,10 +151,10 @@ growing_arena_allocator_proc :: proc(
 			//fmt.printf("resized to %f MB\n", f64(u32(len(arena.data))) / 1024 / 1024)
 		}
 
-		arena.offset = int(uint(arena.offset) + uint(total_size))
-		arena.peak_used = int(max(uint(arena.peak_used), uint(arena.offset)))
+		arena.offset = arena.offset + total_size
+		arena.peak_used = max(arena.peak_used, arena.offset)
 
-		return _byte_slice(ptr, size), nil
+		return mem.byte_slice(ptr, size), nil
 
 	case .Free:
 		return nil, .Mode_Not_Implemented
@@ -172,7 +163,7 @@ growing_arena_allocator_proc :: proc(
 		arena.offset = 0
 
 	case .Resize:
-		return mem.default_resize_bytes_align(_byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena), location)
+		return mem.default_resize_bytes_align(mem.byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena), location)
 
 	case .Query_Features:
 		set := (^mem.Allocator_Mode_Set)(old_memory)
