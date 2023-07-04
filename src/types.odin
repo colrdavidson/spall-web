@@ -4,23 +4,67 @@ import "core:fmt"
 import "core:mem"
 import "core:runtime"
 
-Vec2 :: [2]f64
-Vec3 :: [3]f64
-FVec3 :: [3]f32
-FVec4 :: [4]f32
-Rect :: struct {
-	pos: Vec2,
-	size: Vec2,
-}
+Vec2  :: [2]f64
+FVec2 :: [2]f32
 
-rect :: #force_inline proc(x, y, w, h: f64) -> Rect {
-	return Rect{Vec2{x, y}, Vec2{w, h}}
+Vec3  :: [3]f64
+FVec3 :: [3]f32
+
+FVec4 :: [4]f32
+BVec4 :: [4]u8
+
+Rect :: struct {
+	x: f64,
+	y: f64,
+	w: f64,
+	h: f64,
 }
 
 DrawRect :: struct #packed {
 	start: f32,
 	width: f32,
-	color: [4]u8,
+	color: BVec4,
+}
+
+UIState :: struct {
+	width: f64,
+	height: f64,
+	side_pad: f64,
+	rect_height: f64,
+	top_line_gap: f64,
+	topbars_height: f64,
+	line_height: f64,
+
+	flamegraph_header_height: f64,
+	flamegraph_toptext_height: f64,
+	info_pane_height:     f64,
+
+	header_rect:          Rect,
+	global_activity_rect: Rect,
+	global_timebar_rect:  Rect,
+	local_timebar_rect:   Rect,
+
+	info_pane_rect:       Rect,
+	tab_rect:             Rect,
+
+	filter_pane_rect:      Rect,
+	filter_pane_scroll_pos: f64,
+	filter_pane_scroll_vel: f64,
+
+	stats_pane_rect:      Rect,
+	stats_pane_scroll_pos: f64,
+	stats_pane_scroll_vel: f64,
+
+	minimap_rect:         Rect,
+
+	full_flamegraph_rect:   Rect,
+	inner_flamegraph_rect:  Rect,
+	padded_flamegraph_rect: Rect,
+
+	render_one_more: bool,
+	multiselecting: bool,
+	resizing_pane: bool,
+	filters_open: bool,
 }
 
 ColorMode :: enum {

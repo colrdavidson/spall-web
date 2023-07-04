@@ -30,34 +30,7 @@ init_parser :: proc(total_size: u32) -> Parser {
 	return p
 }
 
-setup_pid :: proc(process_id: u32) -> i32 {
-	p_idx, ok := vh_find(&process_map, process_id)
-	if !ok {
-		append(&processes, init_process(process_id))
-		p_idx = i32(len(processes) - 1)
-		vh_insert(&process_map, process_id, p_idx)
-	}
-
-	return p_idx
-}
-
-setup_tid :: proc(p_idx: i32, thread_id: u32) -> i32 {
-	t_idx, ok := vh_find(&processes[p_idx].thread_map, thread_id)
-	if !ok {
-		threads := &processes[p_idx].threads
-
-		append(threads, init_thread(thread_id))
-
-		t_idx = i32(len(threads) - 1)
-		thread_map := &processes[p_idx].thread_map
-		vh_insert(thread_map, thread_id, t_idx)
-	}
-
-	return t_idx
-}
-
-get_next_event :: proc(chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
-
+ms_v1_get_next_event :: proc(chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
 	header_sz := i64(size_of(u64))
 	if chunk_pos() + header_sz > i64(len(chunk)) {
 		return .PartialRead
@@ -111,14 +84,14 @@ get_next_event :: proc(chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
 	return .PartialRead
 }
 
-load_binary_chunk :: proc(chunk: []u8) {
+ms_v1_load_binary_chunk :: proc(chunk: []u8) {
 	temp_ev := TempEvent{}
 	ev := Event{}
 
 	full_chunk := chunk
 	load_loop: for bp.pos < i64(bp.total_size) {
 		mem.zero(&temp_ev, size_of(TempEvent))
-		state := get_next_event(full_chunk, &temp_ev)
+		state := ms_v1_get_next_event(full_chunk, &temp_ev)
 
 		#partial switch state {
 		case .PartialRead:
@@ -144,7 +117,7 @@ load_binary_chunk :: proc(chunk: []u8) {
 			ev.self_time = 0 
 			ev.timestamp = temp_ev.timestamp * stamp_scale
 
-			p_idx, t_idx, e_idx := bin_push_event(temp_ev.process_id, temp_ev.thread_id, &ev)
+			p_idx, t_idx, e_idx := ms_v1_bin_push_event(temp_ev.process_id, temp_ev.thread_id, &ev)
 
 			thread := &processes[p_idx].threads[t_idx]
 			stack_push_back(&thread.bande_q, EVData{idx = e_idx, depth = thread.current_depth - 1, self_time = 0})
@@ -220,7 +193,7 @@ load_binary_chunk :: proc(chunk: []u8) {
 	return
 }
 
-bin_push_event :: proc(process_id, thread_id: u32, event: ^Event) -> (i32, i32, i32) {
+ms_v1_bin_push_event :: proc(process_id, thread_id: u32, event: ^Event) -> (i32, i32, i32) {
 	p_idx := setup_pid(process_id)
 	t_idx := setup_tid(p_idx, thread_id)
 
@@ -254,7 +227,7 @@ bin_push_event :: proc(process_id, thread_id: u32, event: ^Event) -> (i32, i32, 
 	return p_idx, t_idx, i32(len(depth.bs_events)-1)
 }
 
-bin_process_events :: proc() {
+ms_v1_bin_process_events :: proc() {
 	for process in &processes {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 		for tm in &process.threads {
@@ -265,5 +238,114 @@ bin_process_events :: proc() {
 	}
 
 	slice.sort_by(processes[:], pid_sort_proc)
+	return
+}
+
+ms_v2_load_binary_chunk :: proc(chunk: []u8) {
+	temp_ev := TempEvent{}
+	ev := Event{}
+
+	full_chunk := chunk
+	load_loop: for bp.pos < i64(bp.total_size) {
+		mem.zero(&temp_ev, size_of(TempEvent))
+		state := ms_v1_get_next_event(full_chunk, &temp_ev)
+
+		#partial switch state {
+		case .PartialRead:
+			if bp.pos == last_read {
+				fmt.printf("Invalid trailing data? dropping from [%d -> %d] (%d bytes)\n", bp.pos, bp.total_size, i64(bp.total_size) - bp.pos)
+				break load_loop
+			} else {
+				last_read = bp.pos
+			}
+
+			bp.offset = bp.pos
+			get_chunk(f64(bp.pos), f64(CHUNK_SIZE))
+			return
+		case .Failure:
+			push_fatal(SpallError.InvalidFile)
+		}
+
+		#partial switch temp_ev.type {
+		case .Begin:
+			ev.name = temp_ev.name
+			ev.args = temp_ev.args
+			ev.duration = -1
+			ev.self_time = 0 
+			ev.timestamp = temp_ev.timestamp * stamp_scale
+
+			p_idx, t_idx, e_idx := ms_v1_bin_push_event(temp_ev.process_id, temp_ev.thread_id, &ev)
+
+			thread := &processes[p_idx].threads[t_idx]
+			stack_push_back(&thread.bande_q, EVData{idx = e_idx, depth = thread.current_depth - 1, self_time = 0})
+
+			event_count += 1
+		case .End:
+			p_idx, ok1 := vh_find(&process_map, temp_ev.process_id)
+			if !ok1 {
+				fmt.printf("invalid end?\n")
+				continue
+			}
+			t_idx, ok2 := vh_find(&processes[p_idx].thread_map, temp_ev.thread_id)
+			if !ok1 {
+				fmt.printf("invalid end?\n")
+				continue
+			}
+
+			thread := &processes[p_idx].threads[t_idx]
+			if thread.bande_q.len > 0 {
+				jev_data := stack_pop_back(&thread.bande_q)
+				thread.current_depth -= 1
+
+				depth := &thread.depths[thread.current_depth]
+				jev := &depth.bs_events[jev_data.idx]
+				jev.duration = (temp_ev.timestamp * stamp_scale) - jev.timestamp
+				jev.self_time = jev.duration - jev.self_time
+				thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
+				total_max_time = max(total_max_time, jev.timestamp + jev.duration)
+
+				if thread.bande_q.len > 0 {
+					parent_depth := &thread.depths[thread.current_depth - 1]
+					parent_ev := stack_peek_back(&thread.bande_q)
+
+					pev := &parent_depth.bs_events[parent_ev.idx]
+
+					pev.self_time += jev.duration
+				}
+			} else {
+				fmt.printf("Got unexpected end event! [pid: %d, tid: %d, ts: %f]\n", temp_ev.process_id, temp_ev.thread_id, temp_ev.timestamp)
+			}
+		}
+	}
+
+	// cleanup unfinished events
+	for process in &processes {
+		for thread in &process.threads {
+			for thread.bande_q.len > 0 {
+				ev_data := stack_pop_back(&thread.bande_q)
+
+				depth := &thread.depths[ev_data.depth]
+				jev := &depth.bs_events[ev_data.idx]
+
+				thread.max_time = max(thread.max_time, jev.timestamp)
+				total_max_time = max(total_max_time, jev.timestamp)
+
+				duration := bound_duration(jev, thread.max_time)
+				jev.self_time = duration - jev.self_time
+				jev.self_time = max(jev.self_time, 0)
+
+				if thread.bande_q.len > 0 {
+					parent_depth := &thread.depths[ev_data.depth - 1]
+					parent_ev := stack_peek_back(&thread.bande_q)
+
+					pev := &parent_depth.bs_events[parent_ev.idx]
+					pev.self_time += duration
+					pev.self_time = max(pev.self_time, 0)
+				}
+			}
+		}
+	}
+
+	finish_loading()
 	return
 }

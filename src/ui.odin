@@ -4,21 +4,32 @@ import "core:fmt"
 import "core:math"
 import "core:container/queue"
 
+next_line :: proc(y: ^f64, h: f64) -> f64 {
+	res := y^
+	y^ += h + (h / 1.5)
+	return res
+}
+prev_line :: proc(y: ^f64, h: f64) -> f64 {
+	res := y^
+	y^ -= h + (h / 3)
+	return res
+}
+
 tooltip :: proc(pos: Vec2, min_x, max_x: f64, text: string) {
 	text_width := measure_text(text, p_font_size, default_font)
 	text_height := get_text_height(p_font_size, default_font)
 
-	tooltip_rect := rect(pos.x, pos.y - (em / 2), text_width + em, text_height + (1.25 * em))
-	if tooltip_rect.pos.x + tooltip_rect.size.x > max_x {
-		tooltip_rect.pos.x = max_x - tooltip_rect.size.x
+	tooltip_rect := Rect{pos.x, pos.y - (em / 2), text_width + em, text_height + (1.25 * em)}
+	if tooltip_rect.x + tooltip_rect.w > max_x {
+		tooltip_rect.x = max_x - tooltip_rect.w
 	}
-	if tooltip_rect.pos.x < min_x {
-		tooltip_rect.pos.x = min_x
+	if tooltip_rect.x < min_x {
+		tooltip_rect.x = min_x
 	}
 
 	draw_rect(tooltip_rect, bg_color)
 	draw_rect_outline(tooltip_rect, 1, line_color)
-	draw_text(text, Vec2{tooltip_rect.pos.x + (em / 2), tooltip_rect.pos.y + (em / 2)}, p_font_size, default_font, text_color)
+	draw_text(text, Vec2{tooltip_rect.x + (em / 2), tooltip_rect.y + (em / 2)}, p_font_size, default_font, text_color)
 }
 
 button :: proc(in_rect: Rect, label_text, tooltip_text, font: string, min_x, max_x: f64) -> bool {
@@ -27,8 +38,8 @@ button :: proc(in_rect: Rect, label_text, tooltip_text, font: string, min_x, max
 	label_height := get_text_height(p_font_size, font)
 	draw_text(label_text, 
 		Vec2{
-			in_rect.pos.x + (in_rect.size.x / 2) - (label_width / 2), 
-			in_rect.pos.y + (in_rect.size.y / 2) - (label_height / 2),
+			in_rect.x + (in_rect.w / 2) - (label_width / 2), 
+			in_rect.y + (in_rect.h / 2) - (label_height / 2),
 		}, p_font_size, font, toolbar_text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
@@ -36,7 +47,7 @@ button :: proc(in_rect: Rect, label_text, tooltip_text, font: string, min_x, max
 		if clicked {
 			return true
 		} else {
-			tip_pos := Vec2{in_rect.pos.x, in_rect.pos.y + in_rect.size.y + em}
+			tip_pos := Vec2{in_rect.x, in_rect.y + in_rect.h + em}
 			tooltip(tip_pos, min_x, max_x, tooltip_text)
 		}
 	}
@@ -65,8 +76,8 @@ draw_graph :: proc(header: string, history: ^queue.Queue(f64), pos: Vec2) {
 	draw_text(header, Vec2{pos.x + center_offset, pos.y}, p_font_size, default_font, text_color)
 
 	graph_top := pos.y + em + line_gap
-	draw_rect(rect(pos.x, graph_top, graph_size, graph_size), bg_color2)
-	draw_rect_outline(rect(pos.x, graph_top, graph_size, graph_size), 2, outline_color)
+	draw_rect(Rect{pos.x, graph_top, graph_size, graph_size}, bg_color2)
+	draw_rect_outline(Rect{pos.x, graph_top, graph_size, graph_size}, 2, outline_color)
 
 	draw_line(Vec2{pos.x - 5, graph_top + graph_size - graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_size - graph_edge_pad}, 1, graph_color)
 	draw_line(Vec2{pos.x - 5, graph_top + graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_edge_pad}, 1, graph_color)
@@ -424,13 +435,13 @@ render_tree :: proc(pid, tid, depth_idx: i32, y_start: f64, start_time, end_time
 			r_x   := x * cam.current_scale
 			end_x := r_x + w
 
-			r_x   += cam.pan.x + disp_rect.pos.x
-			end_x += cam.pan.x + disp_rect.pos.x
+			r_x   += cam.pan.x + disp_rect.x
+			end_x += cam.pan.x + disp_rect.x
 
 			r_x    = max(r_x, 0)
 
 			r_y := y_start + y
-			dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
+			dr := Rect{r_x, r_y, end_x - r_x, h}
 
 			rect_color := cur_node.avg_color
 
@@ -456,7 +467,7 @@ render_tree :: proc(pid, tid, depth_idx: i32, y_start: f64, start_time, end_time
 				}
 			}
 
-			draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
+			draw_rect := DrawRect{f32(dr.x), f32(dr.w), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 			append(&gl_rects, draw_rect)
 
 			rect_count += 1
@@ -495,13 +506,13 @@ render_events :: proc(p_idx, t_idx, d_idx: i32, events: []Event, start_idx: u32,
 		r_x   := x * cam.current_scale
 		end_x := r_x + w
 
-		r_x   += cam.pan.x + disp_rect.pos.x
-		end_x += cam.pan.x + disp_rect.pos.x
+		r_x   += cam.pan.x + disp_rect.x
+		end_x += cam.pan.x + disp_rect.x
 
 		r_x    = max(r_x, 0)
 
 		r_y := y_start + y
-		dr := Rect{Vec2{r_x, r_y}, Vec2{end_x - r_x, h}}
+		dr := Rect{r_x, r_y, end_x - r_x, h}
 
 		if !rect_in_rect(dr, graph_rect) {
 			continue
@@ -539,13 +550,13 @@ render_events :: proc(p_idx, t_idx, d_idx: i32, events: []Event, start_idx: u32,
 			rect_color.z += 30
 		}
 
-		draw_rect := DrawRect{f32(dr.pos.x), f32(dr.size.x), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
+		draw_rect := DrawRect{f32(dr.x), f32(dr.w), {u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255}}
 		append(&gl_rects, draw_rect)
 		rect_count += 1
 
-		underhang := disp_rect.pos.x - dr.pos.x
-		overhang := (disp_rect.pos.x + disp_rect.size.x) - dr.pos.x
-		disp_w := min(dr.size.x - underhang, dr.size.x, overhang)
+		underhang := disp_rect.x - dr.x
+		overhang := (disp_rect.x + disp_rect.w) - dr.x
+		disp_w := min(dr.w - underhang, dr.w, overhang)
 
 		display_name := ev_name
 		if ev.duration == -1 {
@@ -555,20 +566,20 @@ render_events :: proc(p_idx, t_idx, d_idx: i32, events: []Event, start_idx: u32,
 		text_width := int(math.floor((disp_w - (text_pad * 2)) / ch_width))
 		max_chars := max(0, min(len(display_name), text_width))
 		name_str := display_name[:max_chars]
-		str_x := max(dr.pos.x, disp_rect.pos.x) + text_pad
+		str_x := max(dr.x, disp_rect.x) + text_pad
 
 		if len(name_str) > 4 || max_chars == len(display_name) {
 			if max_chars != len(display_name) {
 				name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
 			}
 
-			draw_text(name_str, Vec2{str_x, dr.pos.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
+			draw_text(name_str, Vec2{str_x, dr.y + (rect_height / 2) - (em / 2)}, p_font_size, monospace_font, text_color3)
 		}
 
 		if pt_in_rect(mouse_pos, graph_rect) && pt_in_rect(mouse_pos, dr) {
 			set_cursor("pointer")
 			if !rendered_rect_tooltip && !shift_down {
-				rect_tooltip_pos = dr.pos
+				rect_tooltip_pos = Vec2{dr.x, dr.y}
 				rect_tooltip_rect = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
 				rendered_rect_tooltip = true
 			}

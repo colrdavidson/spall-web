@@ -326,7 +326,7 @@ finish_loading :: proc () {
 	if is_json {
 		json_process_events()
 	} else {
-		bin_process_events()
+		ms_v1_bin_process_events()
 	}
 	stop_bench("process and sort events")
 
@@ -402,7 +402,7 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 	if is_json {
 		load_json_chunk(&jp, chunk)
 	} else {
-		load_binary_chunk(chunk)
+		ms_v1_load_binary_chunk(chunk)
 	}
 
 	return
@@ -437,6 +437,32 @@ append_event :: proc(array: ^[dynamic]Event, arg: Event) {
 		data[a.len] = arg
 		a.len += 1
 	}
+}
+
+setup_pid :: proc(process_id: u32) -> i32 {
+	p_idx, ok := vh_find(&process_map, process_id)
+	if !ok {
+		append(&processes, init_process(process_id))
+		p_idx = i32(len(processes) - 1)
+		vh_insert(&process_map, process_id, p_idx)
+	}
+
+	return p_idx
+}
+
+setup_tid :: proc(p_idx: i32, thread_id: u32) -> i32 {
+	t_idx, ok := vh_find(&processes[p_idx].thread_map, thread_id)
+	if !ok {
+		threads := &processes[p_idx].threads
+
+		append(threads, init_thread(thread_id))
+
+		t_idx = i32(len(threads) - 1)
+		thread_map := &processes[p_idx].thread_map
+		vh_insert(thread_map, thread_id, t_idx)
+	}
+
+	return t_idx
 }
 
 default_config_name :: "../demos/cuik_c_compiler.json"

@@ -47,26 +47,26 @@ range_in_range :: proc(s1, e1, s2, e2: $T) -> bool {
 }
 
 pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
-	x1 := box.pos.x
-	y1 := box.pos.y
-	x2 := box.pos.x + box.size.x
-	y2 := box.pos.y + box.size.y
+	x1 := box.x
+	y1 := box.y
+	x2 := box.x + box.w
+	y2 := box.y + box.h
 
 	return x1 <= pt.x && pt.x <= x2 && y1 <= pt.y && pt.y <= y2
 }
 
 rect_in_rect :: proc(a, b: Rect) -> bool {
-	a_left := a.pos.x
-	a_right := a.pos.x + a.size.x
+	a_left := a.x
+	a_right := a.x + a.w
 
-	a_top := a.pos.y
-	a_bottom := a.pos.y + a.size.y
+	a_top := a.y
+	a_bottom := a.y + a.h
 
-	b_left := b.pos.x
-	b_right := b.pos.x + b.size.x
+	b_left := b.x
+	b_right := b.x + b.w
 
-	b_top := b.pos.y
-	b_bottom := b.pos.y + b.size.y
+	b_top := b.y
+	b_bottom := b.y + b.h
 
 	return !(b_left > a_right || a_left > b_right || a_top > b_bottom || b_top > a_bottom)
 }

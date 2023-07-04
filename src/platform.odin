@@ -186,10 +186,10 @@ draw_clip :: #force_inline proc "contextless" (x, y, w, h: f64) {
 	_canvas_clip(x * dpr, y * dpr, w * dpr, h * dpr)
 }
 draw_rect :: #force_inline proc "contextless" (rect: Rect, color: FVec4) {
-    _canvas_rect(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, color.x, color.y, color.z, color.w)
+    _canvas_rect(rect.x * dpr, rect.y * dpr, rect.w * dpr, rect.h * dpr, color.x, color.y, color.z, color.w)
 }
 draw_rectc :: #force_inline proc "contextless" (rect: Rect, radius: f64, color: FVec4) {
-    _canvas_rectc(rect.pos.x * dpr, rect.pos.y * dpr, rect.size.x * dpr, rect.size.y * dpr, radius * dpr, color.x, color.y, color.z, color.w)
+    _canvas_rectc(rect.x * dpr, rect.y * dpr, rect.w * dpr, rect.h * dpr, radius * dpr, color.x, color.y, color.z, color.w)
 }
 draw_circle :: #force_inline proc "contextless" (center: Vec2, radius: f64, color: FVec4) {
     _canvas_circle(center.x * dpr, center.y * dpr, radius * dpr, color.x, color.y, color.z, color.w)
@@ -205,10 +205,10 @@ draw_arc :: #force_inline proc "contextless" (center: Vec2, radius, angleStart, 
 }
 
 draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
-	x1 := rect.pos.x
-	y1 := rect.pos.y
-	x2 := rect.pos.x + rect.size.x
-	y2 := rect.pos.y + rect.size.y
+	x1 := rect.x
+	y1 := rect.y
+	x2 := rect.x + rect.w
+	y2 := rect.y + rect.h
 
 	draw_line(Vec2{x1, y1}, Vec2{x2, y1}, width, color)
 	draw_line(Vec2{x1, y1}, Vec2{x1, y2}, width, color)
@@ -217,10 +217,10 @@ draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
 }
 
 draw_rect_inline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
-	x1 := rect.pos.x + width
-	y1 := rect.pos.y + width
-	x2 := rect.pos.x + rect.size.x - width
-	y2 := rect.pos.y + rect.size.y - width
+	x1 := rect.x + width
+	y1 := rect.y + width
+	x2 := rect.x + rect.w - width
+	y2 := rect.y + rect.h - width
 
 	draw_line(Vec2{x1, y1}, Vec2{x2, y1}, width, color)
 	draw_line(Vec2{x1, y1}, Vec2{x1, y2}, width, color)
