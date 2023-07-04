@@ -272,8 +272,8 @@ SPALL_FN SPALL_FORCEINLINE size_t spall_build_begin(void *buffer, size_t rem_siz
     ev->event.when = when;
     ev->event.name_length = trunc_name_len;
     ev->event.args_length = trunc_args_len;
-    memcpy(ev->name_bytes,            name, trunc_name_len);
-    memcpy(ev->name_bytes + name_len, args, trunc_args_len);
+    memcpy(ev->name_bytes,                  name, trunc_name_len);
+    memcpy(ev->name_bytes + trunc_name_len, args, trunc_args_len);
 
     return ev_size;
 }
