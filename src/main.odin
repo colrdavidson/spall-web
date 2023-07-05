@@ -230,6 +230,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	// Set up all the display state we need to render the screen
 	update_font_cache(width)
 
+	ui_state.height = height
+	ui_state.width  = width
 	spall_x_pad     := 3 * em
 	header_height   := 3 * em
 	activity_height := 2 * em
@@ -246,8 +248,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	filter_pane_width := ui_state.filters_open ? (15 * em) : 0
 	stats_pane_x := filter_pane_width
 
-	ui_state.height = height
-	ui_state.width  = width
 	ui_state.side_pad                  = spall_x_pad
 	ui_state.rect_height               = rect_height
 	ui_state.topbars_height            = topbars_height
