@@ -339,7 +339,6 @@ init_loading_state :: proc(size: u32, name: string) {
 	b := strings.builder_from_slice(trace.file_name_store[:])
 	strings.write_string(&b, name)
 	trace.file_name = strings.to_string(b)
-	fmt.printf("%v\n", trace.file_name)
 
 	// reset selection state
 	clicked_on_rect = false

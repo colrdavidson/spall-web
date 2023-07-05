@@ -156,9 +156,17 @@ main :: proc() {
 @export
 frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	context = wasmContext
-	defer frame_count += 1
+	defer {
+		clicked = false
+		is_hovering = false
+		was_mouse_down = false
+		mouse_up_now = false
+		released_event = {-1, -1, -1, -1}
 
-	render_one_more := false
+		ui_state.render_one_more = false
+		frame_count += 1
+		free_all(context.temp_allocator)
+	}
 
 	rect_tooltip_rect = EventID{-1, -1, -1, -1}
 	rect_tooltip_pos = Vec2{}
@@ -203,14 +211,6 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		return true
 	}
 
-	defer {
-		free_all(context.temp_allocator)
-		clicked = false
-		is_hovering = false
-		was_mouse_down = false
-		mouse_up_now = false
-		released_event = {-1, -1, -1, -1}
-	}
 
 	dt := _dt
 
