@@ -9,15 +9,15 @@ trap :: proc "contextless" () -> ! {
 }
 
 update_font_cache :: proc(width: f64) {
-	em = _p_font_size
-	p_font_size = _p_font_size
-	h1_font_size = _h1_font_size
-	h2_font_size = _h2_font_size
+	em = p_height
+	p_font_size = p_height
+	h1_font_size = h1_height
+	h2_font_size = h2_height
 
 	p_height  = p_font_size
 	h1_height = h1_font_size
 	h2_height = h2_font_size
-	ch_width  = measure_text("a", p_font_size, monospace_font)
+	ch_width  = measure_text("a", .PSize, .MonoFont)
 }
 
 @export
@@ -163,16 +163,40 @@ foreign js {
 }
 
 // a bunch of silly platform wrappers, so I can jam in dpr scaling
-get_text_height :: #force_inline proc "contextless" (scale: f64, font: string) -> f64 {
-	return _get_text_height(scale, font)
+get_text_height :: #force_inline proc "contextless" (scale: FontSize, font: FontType) -> f64 {
+	font_scale, font_type := get_font(scale, font)
+	return _get_text_height(font_scale, font_type)
 }
 
-measure_text :: #force_inline proc "contextless" (str: string, scale: f64, font: string) -> f64 {
-	return _measure_text(str, scale, font)
+get_font :: proc "contextless" (scale: FontSize, type: FontType) -> (f64, string) {
+	size : f64 = 0
+	#partial switch scale {
+	case .PSize:  size = p_height
+	case .H1Size: size = h1_height
+	case .H2Size: size = h2_height
+	}
+
+	font_str := ""
+	#partial switch type {
+	case .DefaultFont: font_str = `'Montserrat',-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
+	case .MonoFont:    font_str = `'Fira Code', monospace`
+	case .IconFont:    font_str = `FontAwesome`
+	}
+
+	return size, font_str
 }
 
-gl_init_frame :: #force_inline proc "contextless" (color: FVec4) {
-	_gl_init_frame(color[0], color[1], color[2], color[3])
+measure_text :: #force_inline proc "contextless" (str: string, scale: FontSize, font: FontType) -> f64 {
+	if len(str) == 0 {
+		return 0
+	}
+
+	font_scale, font_type := get_font(scale, font)
+	return _measure_text(str, font_scale, font_type)
+}
+
+gl_init_frame :: #force_inline proc "contextless" (color: BVec4) {
+	_gl_init_frame(f32(color[0]), f32(color[1]), f32(color[2]), f32(color[3]))
 }
 
 gl_push_rects :: #force_inline proc "contextless" (rects: []DrawRect, y, height: f64) {
@@ -182,29 +206,18 @@ gl_push_rects :: #force_inline proc "contextless" (rects: []DrawRect, y, height:
 canvas_clear :: #force_inline proc "contextless" () {
 	_canvas_clear()
 }
-draw_clip :: #force_inline proc "contextless" (x, y, w, h: f64) {
-	_canvas_clip(x * dpr, y * dpr, w * dpr, h * dpr)
+draw_rect :: #force_inline proc "contextless" (rect: Rect, color: BVec4) {
+    _canvas_rect(rect.x * dpr, rect.y * dpr, rect.w * dpr, rect.h * dpr, f32(color.x), f32(color.y), f32(color.z), f32(color.w))
 }
-draw_rect :: #force_inline proc "contextless" (rect: Rect, color: FVec4) {
-    _canvas_rect(rect.x * dpr, rect.y * dpr, rect.w * dpr, rect.h * dpr, color.x, color.y, color.z, color.w)
+draw_text :: #force_inline proc "contextless" (str: string, pos: Vec2, scale: FontSize, font: FontType, color: BVec4) {
+	font_scale, font_type := get_font(scale, font)
+    _canvas_text(str, pos.x, pos.y, f32(color.x), f32(color.y), f32(color.z), f32(color.w), font_scale, font_type)
 }
-draw_rectc :: #force_inline proc "contextless" (rect: Rect, radius: f64, color: FVec4) {
-    _canvas_rectc(rect.x * dpr, rect.y * dpr, rect.w * dpr, rect.h * dpr, radius * dpr, color.x, color.y, color.z, color.w)
-}
-draw_circle :: #force_inline proc "contextless" (center: Vec2, radius: f64, color: FVec4) {
-    _canvas_circle(center.x * dpr, center.y * dpr, radius * dpr, color.x, color.y, color.z, color.w)
-}
-draw_text :: #force_inline proc "contextless" (str: string, pos: Vec2, scale: f64, font: string, color: FVec4) {
-    _canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, color.w, scale, font)
-}
-draw_line :: #force_inline proc "contextless" (start, end: Vec2, strokeWidth: f64, color: FVec4) {
-    _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, color.x, color.y, color.z, color.w, strokeWidth * dpr)
-}
-draw_arc :: #force_inline proc "contextless" (center: Vec2, radius, angleStart, angleEnd: f64, strokeWidth: f64, color: FVec4) {
-    _canvas_arc(center.x * dpr, center.y * dpr, radius * dpr, angleStart, angleEnd, color.x, color.y, color.z, color.w, strokeWidth * dpr)
+draw_line :: #force_inline proc "contextless" (start, end: Vec2, strokeWidth: f64, color: BVec4) {
+    _canvas_line(start.x * dpr, start.y * dpr, end.x * dpr, end.y * dpr, f32(color.x), f32(color.y), f32(color.z), f32(color.w), strokeWidth * dpr)
 }
 
-draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
+draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: BVec4) {
 	x1 := rect.x
 	y1 := rect.y
 	x2 := rect.x + rect.w
@@ -216,7 +229,7 @@ draw_rect_outline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
 	draw_line(Vec2{x1, y2}, Vec2{x2, y2}, width, color)
 }
 
-draw_rect_inline :: proc "contextless" (rect: Rect, width: f64, color: FVec4) {
+draw_rect_inline :: proc "contextless" (rect: Rect, width: f64, color: BVec4) {
 	x1 := rect.x + width
 	y1 := rect.y + width
 	x2 := rect.x + rect.w - width

@@ -31,7 +31,7 @@ build_str = []
 if RELEASE:
     build_str = ['-o:speed']
 else:
-    build_str = ['-debug']
+    build_str = ['-o:none', '-debug', '-keep-temp-files']
 
 wasm_out = f"build/{program_name}.wasm"
 
