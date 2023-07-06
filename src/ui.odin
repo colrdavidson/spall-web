@@ -954,7 +954,7 @@ draw_minimap :: proc(trace: ^Trace, ui_state: ^UIState) {
 
 	mini_rect_height := (em / 2)
 	trace_duration := trace.total_max_time - trace.total_min_time
-	x_scale := rescale(1.0, 0, f64(trace_duration), 0, minimap_rect.w)
+	x_scale := rescale(1.0, 0, f64(trace_duration), 0, minimap_rect.w - (2 * minimap_pad))
 	y_scale := mini_rect_height / ui_state.rect_height
 
 	tree_y : f64 = padded_flamegraph_rect.y - (cam.pan.y * y_scale)
@@ -985,9 +985,6 @@ draw_minimap :: proc(trace: ^Trace, ui_state: ^UIState) {
 				// If we blow this, we're in space
 				tree_stack := [128]int{}
 				stack_len := 0
-
-				//fmt.printf("Apple: %v\n", rawptr(&depth.tree[0]))
-				//fmt.printf("Pear: %v\n", depth.tree[0])
 
 				tree := &depth.tree
 				tree_stack[0] = 0; stack_len += 1

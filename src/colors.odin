@@ -57,23 +57,23 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		tabbar_color         = BVec4{0x3A, 0x3A, 0x3A, 255}
 
 		graph_color      = BVec4{180, 180, 180, 255}
-		highlight_color  = BVec4{ 64,  64, 255,   7}
+		highlight_color  = BVec4{  0,   0, 255,  32}
 		wide_rect_color  = BVec4{  0, 255,   0,   0}
 		wide_bg_color    = BVec4{  0,   0,   0, 255}
 		shadow_color     = BVec4{  0,   0,   0, 120}
 
-		subdivision_color = BVec4{ 30,  30, 30, 255}
+		subdivision_color = BVec4{ 30,  30,  30, 255}
 		division_color    = BVec4{100, 100, 100, 255}
 		xbar_color        = BVec4{180, 180, 180, 255}
-		grip_color        = BVec4{40, 40, 40, 255}
+		grip_color        = BVec4{ 40,  40,  40, 255}
 
-		rect_tooltip_stats_color = BVec4{80, 255, 80, 255}
+		rect_tooltip_stats_color = BVec4{150, 255, 150, 255}
 
 	// light mode
 	} else {
 		bg_color         = BVec4{254, 252, 248, 255}
 		bg_color2        = BVec4{255, 255, 255, 255}
-		text_color       = BVec4{20,   20,  20, 255}
+		text_color       = BVec4{0,     0,   0, 255}
 		text_color2      = BVec4{80,   80,  80, 255}
 		text_color3      = BVec4{0,     0,   0, 255}
 		line_color       = BVec4{200, 200, 200, 255}
@@ -81,13 +81,13 @@ default_colors :: proc "contextless" (is_dark: bool) {
 
 		subbar_color         = BVec4{235, 230, 225, 255}
 		subbar_split_color   = BVec4{150, 150, 150, 255}
-		tabbar_color         = BVec4{220, 215, 210, 255}
 		toolbar_button_color = BVec4{40, 40, 40, 255}
 		toolbar_color        = BVec4{0x00, 0x83, 0xb7, 255}
 		toolbar_text_color   = BVec4{0xF5, 0xF5, 0xF5, 255}
+		tabbar_color         = BVec4{220, 215, 210, 255}
 
 		graph_color      = BVec4{69,   49,  34, 255}
-		highlight_color  = BVec4{255, 255,   0,  64}
+		highlight_color  = BVec4{255, 255,   0,  32}
 		wide_rect_color  = BVec4{  0, 255,   0,   0}
 		wide_bg_color    = BVec4{  0,  0,    0, 255}
 		shadow_color     = BVec4{  0,   0,   0,  30}
@@ -97,7 +97,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		xbar_color        = BVec4{ 80,  80,  80, 255}
 		grip_color        = BVec4{180, 175, 170, 255}
 
-		rect_tooltip_stats_color = BVec4{20, 60, 20, 255}
+		rect_tooltip_stats_color = BVec4{20, 130, 20, 255}
 	}
 }
 

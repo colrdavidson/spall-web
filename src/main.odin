@@ -9,19 +9,19 @@ import "vendor:wasm/js"
 import "core:container/queue"
 
 // allocator state
-big_global_arena := Arena{}
-small_global_arena := Arena{}
 temp_arena := Arena{}
+debug_arena := Arena{}
 scratch_arena := Arena{}
 scratch2_arena := Arena{}
+small_global_arena := Arena{}
+big_global_arena := Arena{}
 
-big_global_allocator: mem.Allocator
-small_global_allocator: mem.Allocator
+temp_allocator: mem.Allocator
+debug_allocator: mem.Allocator
 scratch_allocator: mem.Allocator
 scratch2_allocator: mem.Allocator
-temp_allocator: mem.Allocator
-
-current_alloc_offset := 0
+small_global_allocator: mem.Allocator
+big_global_allocator: mem.Allocator
 
 wasmContext := runtime.default_context()
 
@@ -94,10 +94,11 @@ rect_count      : int
 bucket_count    : int
 was_sleeping    : bool
 random_seed     : u64
+lfc : int
 first_frame := true
 
 // loading / trace state
-trace: Trace
+_trace: Trace
 loading_config := false
 post_loading := true
 last_read: i64
@@ -113,11 +114,13 @@ main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
 	ONE_MB_PAGES :: 1 * 1024 * 1024 / js.PAGE_SIZE
 	temp_data, _         := js.page_alloc(ONE_MB_PAGES * 15)
+	debug_data, _        := js.page_alloc(1)
 	scratch_data, _      := js.page_alloc(ONE_MB_PAGES * 20)
 	scratch2_data, _     := js.page_alloc(ONE_MB_PAGES * 50)
 	small_global_data, _ := js.page_alloc(ONE_MB_PAGES * 1)
 
 	arena_init(&temp_arena,         temp_data)
+	arena_init(&debug_arena,        debug_data)
 	arena_init(&scratch_arena,      scratch_data)
 	arena_init(&scratch2_arena,     scratch2_data)
 	arena_init(&small_global_arena, small_global_data)
@@ -132,6 +135,7 @@ main :: proc() {
 	// normal render/frame space, I free_all temp once per frame, and I shouldn't
 	// need to touch scratch
 	temp_allocator         = arena_allocator(&temp_arena)
+	debug_allocator        = arena_allocator(&debug_arena)
 	scratch_allocator      = arena_allocator(&scratch_arena)
 	scratch2_allocator     = arena_allocator(&scratch2_arena)
 	small_global_allocator = arena_allocator(&small_global_arena)
@@ -147,7 +151,9 @@ main :: proc() {
 	random_seed = u64(get_time()) * 11400714819323198485
 	rand.set_global_seed(random_seed)
 
-	trace = Trace{}
+	queue.init(&fps_history, 0, debug_allocator)
+
+	_trace = Trace{}
 	ui_state = UIState{}
 	next_line(&ui_state.line_height, em)
 	ui_state.info_pane_height = ui_state.line_height * 8
@@ -165,6 +171,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 		ui_state.render_one_more = false
 		frame_count += 1
+		lfc += 1
 		free_all(context.temp_allocator)
 	}
 
@@ -192,7 +199,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		}
 
 		draw_rect(load_box, BVec4{30, 30, 30, 255})
-		chunk_count := int(rescale(f64(trace.parser.offset), 0, f64(trace.parser.total_size), 0, 100))
+		chunk_count := int(rescale(f64(_trace.parser.offset), 0, f64(_trace.parser.total_size), 0, 100))
 
 		chunk := Rect{0, 0, chunk_size, chunk_size}
 		start_x := load_box.x + pad_size
@@ -281,9 +288,8 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	ui_state.padded_flamegraph_rect.h -= em
 
 	if post_loading {
-		reset_flamegraph_camera(&trace, &ui_state)
-		arena := cast(^Arena)context.allocator.data
-		current_alloc_offset = arena.offset
+		reset_flamegraph_camera(&_trace, &ui_state)
+		lfc = 0
 		post_loading = false
 	}
 
@@ -293,7 +299,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		did_pan = false
 		pressed_event = {-1, -1, -1, -1} // so no stale events are tracked
 	}
-	start_time, end_time, pan_delta := process_inputs(&trace, dt, &ui_state)
+	start_time, end_time, pan_delta := process_inputs(&_trace, dt, &ui_state)
 
 	clicked_on_rect = false
 	rect_count = 0
@@ -304,26 +310,26 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	gl_init_frame(bg_color2)
 	gl_rects = make([dynamic]DrawRect, 0, int(width / 2), temp_allocator)
 
-	draw_flamegraphs(&trace, start_time, end_time, &ui_state)
+	draw_flamegraphs(&_trace, start_time, end_time, &ui_state)
 
-	draw_minimap(&trace, &ui_state)
-	draw_topbars(&trace, start_time, end_time, &ui_state)
+	draw_minimap(&_trace, &ui_state)
+	draw_topbars(&_trace, start_time, end_time, &ui_state)
 
 	// draw sidelines
 	draw_line(Vec2{ui_state.side_pad, header_height + timebar_height},       Vec2{ui_state.side_pad, ui_state.info_pane_rect.y}, 1, line_color)
 	draw_line(Vec2{ui_state.minimap_rect.x, header_height + timebar_height}, Vec2{ui_state.minimap_rect.x, ui_state.info_pane_rect.y}, 1, line_color)
 
-	process_multiselect(&trace, pan_delta, dt, &ui_state)
-	process_stats(&trace, &ui_state)
+	process_multiselect(&_trace, pan_delta, dt, &ui_state)
+	process_stats(&_trace, &ui_state)
 
-	draw_stats(&trace, &ui_state)
+	draw_stats(&_trace, &ui_state)
 	stats_just_started = false
 	if resort_stats {
-		sort_stats(&trace)
+		sort_stats(&_trace)
 		resort_stats = false
 	}
 
-	draw_header(&trace, &ui_state)
+	draw_header(&_trace, &ui_state)
 
 	// reset the cursor if we're not over a selectable thing
 	if !is_hovering {
@@ -336,11 +342,11 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	// if there's a rectangle tooltip to render, now's the time.
 	if rendered_rect_tooltip {
-		draw_rect_tooltip(&trace, &ui_state)
+		draw_rect_tooltip(&_trace, &ui_state)
 	}
 
-	if trace.error_message != "" {
-		draw_errorbox(&trace, &ui_state)
+	if _trace.error_message != "" {
+		draw_errorbox(&_trace, &ui_state)
 	}
 
 	// save me my battery, plz
@@ -351,13 +357,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		ui_state.stats_pane_scroll_vel = 0
 		ui_state.filter_pane_scroll_vel = 0
 
-		awake = false
+		was_sleeping = true
+		return false
 	} else {
-		awake = true
+		was_sleeping = false
+		return true
 	}
-
-	was_sleeping = false
-	return awake
 }
 
 should_sleep :: proc(cam: ^Camera, ui_state: ^UIState) -> bool {

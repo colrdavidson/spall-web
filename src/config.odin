@@ -36,13 +36,13 @@ find_idx :: proc(trace: ^Trace, events: []Event, val: i64) -> int {
 @export
 start_loading_file :: proc "contextless" (size: u32, name: string) {
 	context = wasmContext
-	init_loading_state(size, name)
+	init_loading_state(&_trace, size, name)
 	get_chunk(0.0, f64(CHUNK_SIZE))
 
 }
 
 manual_load :: proc(config, name: string) {
-	init_loading_state(u32(len(config)), name)
+	init_loading_state(&_trace, u32(len(config)), name)
 	load_config_chunk(transmute([]u8)config)
 }
 
@@ -333,7 +333,7 @@ get_event_range :: proc(depth: ^Depth, idx: int) -> (int, int) {
 
 instant_count := 0
 first_chunk: bool
-init_loading_state :: proc(size: u32, name: string) {
+init_loading_state :: proc(trace: ^Trace, size: u32, name: string) {
 	ingest_start_time = u64(get_time())
 
 	b := strings.builder_from_slice(trace.file_name_store[:])
@@ -419,7 +419,6 @@ finish_loading :: proc (trace: ^Trace) {
 
 	free_all(temp_allocator)
 	free_all(scratch_allocator)
-	queue.init(&fps_history, 0, small_global_allocator)
 
 	loading_config = false
 	post_loading = true
@@ -439,7 +438,7 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 		header_sz := size_of(spall.Header)
 		if len(chunk) < header_sz {
 			fmt.printf("Uh, you passed me an empty file?\n")
-			finish_loading(&trace)
+			finish_loading(&_trace)
 			return
 		}
 		magic := (^u64)(raw_data(chunk))^
@@ -452,24 +451,24 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 				push_fatal(SpallError.InvalidFileVersion)
 			}
 
-			trace.stamp_scale = hdr.timestamp_unit
-			trace.parser.pos += i64(header_sz)
+			_trace.stamp_scale = hdr.timestamp_unit
+			_trace.parser.pos += i64(header_sz)
 		} else if magic == spall.NATIVE_MAGIC {
 			fmt.printf("You're trying to use a native-version file on the web!\n")
 			push_fatal(SpallError.NativeFileDetected)
 		} else {
 			is_json = true
-			trace.stamp_scale = 1
-			trace.json_parser = init_json_parser()
+			_trace.stamp_scale = 1
+			_trace.json_parser = init_json_parser()
 		}
 
 		first_chunk = false
 	}
 
 	if is_json {
-		load_json_chunk(&trace, chunk)
+		load_json_chunk(&_trace, chunk)
 	} else {
-		ms_v1_load_binary_chunk(&trace, chunk)
+		ms_v1_load_binary_chunk(&_trace, chunk)
 	}
 
 	return
