@@ -452,6 +452,7 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 			}
 
 			_trace.stamp_scale = hdr.timestamp_unit
+			_trace.stamp_scale *= 1000
 			_trace.parser.pos += i64(header_sz)
 		} else if magic == spall.NATIVE_MAGIC {
 			fmt.printf("You're trying to use a native-version file on the web!\n")

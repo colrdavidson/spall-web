@@ -406,14 +406,14 @@ process_key_value :: proc(trace: ^Trace, ev: ^TempEvent, key: FieldType, value: 
 			fmt.printf("Invalid number!\n")
 			push_fatal(SpallError.InvalidFile)
 		}
-		ev.duration = i64(dur * 1000 * trace.stamp_scale)
+		ev.duration = i64(dur * 1000)
 	case .Ts: 
 		ts, ok := parse_f64(value)
 		if !ok {
 			fmt.printf("Invalid number!\n")
 			push_fatal(SpallError.InvalidFile)
 		}
-		ev.timestamp = i64(ts * 1000 * trace.stamp_scale)
+		ev.timestamp = i64(ts * 1000)
 	case .Tid: 
 		tid, ok := parse_u32(value)
 		if !ok {
@@ -475,7 +475,7 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 		ps := ProfileState{
 			pid = ev.process_id,
 			tid = ev.thread_id,
-			time = i64(start_time_us * 1000 * trace.stamp_scale),
+			time = i64(start_time_us * 1000),
 			nodes = make(map[i64]SampleNode, 16, big_global_allocator),
 		}
 		stack_init(&ps.id_stack, scratch_allocator)
@@ -526,7 +526,7 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 				continue
 			}
 
-			profile.time += i64(f64(delta * 1000) * trace.stamp_scale)
+			profile.time += i64(delta * 1000)
 			stack_top_id : i64 = 0
 			if profile.id_stack.len > 0 {
 				tmp := stack_peek_back(&profile.id_stack)
