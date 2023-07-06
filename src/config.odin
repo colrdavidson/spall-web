@@ -423,6 +423,7 @@ finish_loading :: proc (trace: ^Trace) {
 	loading_config = false
 	post_loading = true
 
+
 	ingest_end_time := u64(get_time())
 	time_range := ingest_end_time - ingest_start_time
 	fmt.printf("runtime: %fs (%dms)\n", f32(time_range) / 1000, time_range)

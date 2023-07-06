@@ -79,41 +79,41 @@ ease_in_out :: proc(t: f32) -> f32 {
     return -(math.cos(math.PI * t) - 1) / 2;
 }
 
-ONE_DAY    :: 1000 * 1000 * 60 * 60 * 24
-ONE_HOUR   :: 1000 * 1000 * 60 * 60
-ONE_MINUTE :: 1000 * 1000 * 60
-ONE_SECOND :: 1000 * 1000
-ONE_MILLI :: 1000
-ONE_MICRO :: 1
-ONE_NANO :: 0.001
+ONE_DAY    :: 1000 * 1000 * 1000 * 60 * 60 * 24
+ONE_HOUR   :: 1000 * 1000 * 1000 * 60 * 60
+ONE_MINUTE :: 1000 * 1000 * 1000 * 60
+ONE_SECOND :: 1000 * 1000 * 1000
+ONE_MILLI  :: 1000 * 1000
+ONE_MICRO  :: 1000
+ONE_NANO   :: 1
 
 tooltip_fmt :: proc(time: f64) -> string {
-	if time > ONE_SECOND {
+	if time >= ONE_SECOND {
 		cur_time := time / ONE_SECOND
 		return fmt.tprintf("%.1f s ", cur_time)
-	} else if time > ONE_MILLI {
+	} else if time >= ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.1f ms", cur_time)
 	} else if time >= ONE_MICRO {
-		return fmt.tprintf("%.1f μs", time)
+		cur_time := time / ONE_MICRO
+		return fmt.tprintf("%.1f μs", cur_time)
 	} else {
-		cur_time := time / ONE_NANO
-		return fmt.tprintf("%.1f ns", cur_time)
+		return fmt.tprintf("%.0f ns", time)
 	}
 }
 
 stat_fmt :: proc(time: f64) -> string {
-	if time > ONE_SECOND {
+	if time >= ONE_SECOND {
 		cur_time := time / ONE_SECOND
 		return fmt.tprintf("%.1f s ", cur_time)
-	} else if time > ONE_MILLI {
+	} else if time >= ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.1f ms", cur_time)
 	} else if time >= ONE_MICRO {
-		return fmt.tprintf("%.1f us", time) // μs
+		cur_time := time / ONE_MICRO
+		return fmt.tprintf("%.1f us", cur_time) // μs
 	} else {
-		cur_time := time / ONE_NANO
-		return fmt.tprintf("%.1f ns", cur_time)
+		return fmt.tprintf("%.1f ns", time)
 	}
 }
 
