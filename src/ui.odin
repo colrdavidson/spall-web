@@ -37,7 +37,7 @@ prev_line :: proc(y: ^f64, h: f64) -> f64 {
 
 reset_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState) {
 	cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
-	if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 100000000000000; trace.stamp_scale = 1; }
+	if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 10000; trace.stamp_scale = 1; }
 
 	start_time: f64 = 0
 	end_time  := f64(trace.total_max_time - trace.total_min_time)
@@ -1242,7 +1242,7 @@ draw_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
 	tab_bar_x += handle_pad
 	filter_text := ui_state.filters_open ? "\uf150" : "\uf152"
 	filter_width := measure_text(filter_text, .H2Size, .IconFont)
-	draw_text(filter_text, Vec2{tab_bar_x, handle_y}, .H2Size, .IconFont, toolbar_text_color)
+	draw_text(filter_text, Vec2{tab_bar_x, handle_y}, .H2Size, .IconFont, tabbar_text_color)
 	tab_filter_rect := Rect{tab_bar_x, handle_y, filter_width, h2_height}
 	if pt_in_rect(mouse_pos, tab_filter_rect) {
 		set_cursor("pointer")
@@ -1310,8 +1310,8 @@ draw_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
 					build_selected_ranges(trace, ui_state)
 				}
 
-				draw_text(checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
-				draw_text(get_proc_name(trace, &proc_v), Vec2{x_offset + checkbox_width + checkbox_gap, y - (em / 4)}, .PSize, .DefaultFont, toolbar_text_color)
+				draw_text(checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, tabbar_text_color)
+				draw_text(get_proc_name(trace, &proc_v), Vec2{x_offset + checkbox_width + checkbox_gap, y}, .PSize, .DefaultFont, tabbar_text_color)
 			}
 
 
@@ -1327,8 +1327,8 @@ draw_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
 				}
 
 				checkbox_rect := Rect{x_offset + thread_pad, y, em, em}
-				draw_text(checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
-				draw_text(get_thread_name(trace, &thread), Vec2{x_offset + thread_pad + checkbox_width + checkbox_gap, y - (em / 4)}, .PSize, .DefaultFont, toolbar_text_color)
+				draw_text(checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, tabbar_text_color)
+				draw_text(get_thread_name(trace, &thread), Vec2{x_offset + thread_pad + checkbox_width + checkbox_gap, y}, .PSize, .DefaultFont, tabbar_text_color)
 
 				if pt_in_rect(mouse_pos, checkbox_rect) {
 					set_cursor("pointer")

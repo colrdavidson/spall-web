@@ -23,6 +23,7 @@ toolbar_button_color  := BVec4{}
 toolbar_text_color := BVec4{}
 loading_block_color := BVec4{}
 tabbar_color := BVec4{}
+tabbar_text_color := BVec4{}
 
 graph_color   := BVec4{}
 highlight_color := BVec4{}
@@ -55,6 +56,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		toolbar_color        = BVec4{0x00, 0x83, 0xb7, 255}
 		toolbar_text_color   = BVec4{0xF5, 0xF5, 0xF5, 255}
 		tabbar_color         = BVec4{0x3A, 0x3A, 0x3A, 255}
+		tabbar_text_color    = BVec4{ 180,  180,  180, 255}
 
 		graph_color      = BVec4{180, 180, 180, 255}
 		highlight_color  = BVec4{  0,   0, 255,  32}
@@ -85,6 +87,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		toolbar_color        = BVec4{0x00, 0x83, 0xb7, 255}
 		toolbar_text_color   = BVec4{0xF5, 0xF5, 0xF5, 255}
 		tabbar_color         = BVec4{220, 215, 210, 255}
+		tabbar_text_color    = BVec4{80,    80, 80, 255}
 
 		graph_color      = BVec4{69,   49,  34, 255}
 		highlight_color  = BVec4{255, 255,   0,  32}
@@ -95,7 +98,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		subdivision_color = BVec4{230, 230, 230, 255}
 		division_color    = BVec4{180, 180, 180, 255}
 		xbar_color        = BVec4{ 80,  80,  80, 255}
-		grip_color        = BVec4{180, 175, 170, 255}
+		grip_color        = BVec4{ 80,  80,  80, 255}
 
 		rect_tooltip_stats_color = BVec4{20, 130, 20, 255}
 	}

@@ -68,16 +68,21 @@ total_tracked_time: i64 = 0.0
 // drawing state
 colormode      := ColorMode.Dark
 
-dpr:       f64 = 1
-p_height:  f64 = 14
-h1_height: f64 = 18
-h2_height: f64 = 16
-em:        f64 = p_height
-p_font_size:  f64 = p_height
-h1_font_size: f64 = h1_height
-h2_font_size: f64 = h2_height
-ch_width:   f64 = 0
-thread_gap: f64 = 8
+dpr          : f64 = 1
+_p_font_size : f64 = 13
+_h1_font_size: f64 = 17
+_h2_font_size: f64 = 15
+
+em            :f64 = _p_font_size
+p_font_size   :f64 = 0
+h1_font_size  :f64 = 0
+h2_font_size  :f64 = 0
+p_height      :f64 = 0
+h1_height     :f64 = 0
+h2_height     :f64 = 0
+
+ch_width      :f64 = 0
+thread_gap    :f64 = 8
 
 build_hash : i32 = 0
 enable_debug := false
@@ -235,14 +240,14 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 	greymotion = ease_in_out(greyanim_t)
 
 	// Set up all the display state we need to render the screen
-	update_font_cache(width)
+	update_font_cache()
 
 	ui_state.height = height
 	ui_state.width  = width
 	spall_x_pad     := 3 * em
 	header_height   := 3 * em
 	activity_height := 2 * em
-	timebar_height  := 3 * em
+	timebar_height  := 2.25 * em
 	rect_height     := em + (0.75 * em)
 	top_line_gap    := (em / 1.5)
 

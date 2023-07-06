@@ -153,7 +153,7 @@ gl_ctx.bindBuffer(gl_ctx.ELEMENT_ARRAY_BUFFER, rect_idx_buffer);
 gl_ctx.bufferData(gl_ctx.ELEMENT_ARRAY_BUFFER, idx_arr, gl_ctx.STATIC_DRAW);
 //
 
-let dpr;
+let dpr = 1;
 let cached_font = "";
 let cached_cursor = "";
 let cached_size = 0;
@@ -667,7 +667,9 @@ async function init() {
 
 			let animating;
 			try {
-				animating = window.wasm.frame(text_canvas.width / dpr, text_canvas.height / dpr, currentTime - lastTime);
+				let width = text_canvas.width / dpr;
+				let height = text_canvas.height / dpr;
+				animating = window.wasm.frame(width, height, currentTime - lastTime);
 			} catch (e) {
 				console.error(e);
 				implode();

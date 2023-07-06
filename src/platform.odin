@@ -8,11 +8,11 @@ trap :: proc "contextless" () -> ! {
 	intrinsics.trap()
 }
 
-update_font_cache :: proc(width: f64) {
-	em = p_height
-	p_font_size = p_height
-	h1_font_size = h1_height
-	h2_font_size = h2_height
+update_font_cache :: proc() {
+	em = _p_font_size
+	p_font_size = _p_font_size
+	h1_font_size = _h1_font_size
+	h2_font_size = _h2_font_size
 
 	p_height  = p_font_size
 	h1_height = h1_font_size
@@ -171,9 +171,9 @@ get_text_height :: #force_inline proc "contextless" (scale: FontSize, font: Font
 get_font :: proc "contextless" (scale: FontSize, type: FontType) -> (f64, string) {
 	size : f64 = 0
 	#partial switch scale {
-	case .PSize:  size = p_height
-	case .H1Size: size = h1_height
-	case .H2Size: size = h2_height
+	case .PSize:  size = p_font_size
+	case .H1Size: size = h1_font_size
+	case .H2Size: size = h2_font_size
 	}
 
 	font_str := ""
@@ -248,7 +248,9 @@ set_cursor :: proc "contextless" (cursor: string) {
 reset_cursor :: proc "contextless" () { change_cursor("auto") }
 
 @export
-set_dpr :: proc "contextless" (_dpr: f64) { dpr = _dpr }
+set_dpr :: proc "contextless" (_dpr: f64) {
+	dpr = _dpr 
+}
 
 push_fatal :: proc "contextless" (code: SpallError) -> ! {
 	_push_fatal(i32(code))
