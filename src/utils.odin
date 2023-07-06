@@ -7,6 +7,7 @@ import "core:fmt"
 import "core:c"
 import "core:strings"
 import "core:runtime"
+import "core:intrinsics"
 
 rand_int :: proc(min, max: int) -> int {
     return int(rand.int31()) % (max-min) + min
@@ -477,4 +478,8 @@ save_offset :: proc(alloc: ^mem.Allocator) -> int {
 restore_offset :: proc(alloc: ^mem.Allocator, offset: int) {
 	arena := cast(^Arena)scratch_allocator.data
 	arena.offset = offset
+}
+
+zero_slice :: proc(array: $T/[]$E) #no_bounds_check {
+	intrinsics.mem_zero(raw_data(array), size_of(E)*len(array))
 }

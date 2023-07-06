@@ -130,6 +130,7 @@ chunk_events :: proc(trace: ^Trace) {
 				total_node_count := internal_node_count + leaf_count
 
 				tm.depths[d_idx].tree = make([]ChunkNode, total_node_count, big_global_allocator)
+				zero_slice(tm.depths[d_idx].tree)
 
 				lod_mem_usage += size_of(ChunkNode) * total_node_count
 				ev_mem_usage += size_of(Event) * len(depth.events)
