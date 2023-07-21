@@ -7,7 +7,7 @@ import "core:math/rand"
 import "core:strconv"
 import "core:container/queue"
 import "core:runtime"
-import "formats:spall"
+import "formats:spall_fmt"
 
 find_idx :: proc(trace: ^Trace, events: []Event, val: i64) -> int {
 	low := 0
@@ -332,8 +332,42 @@ get_event_range :: proc(depth: ^Depth, idx: int) -> (int, int) {
 	return start, end
 }
 
-instant_count := 0
+TraceType :: enum {
+	Invalid,
+	JSON,
+	Manual_V1,
+	Manual_V2,
+	Auto,
+}
+
+BinaryState :: enum {
+	PartialRead,
+	EventRead,
+	Finished,
+	Failure,
+}
+
+Parser :: struct {
+	pos: i64,
+	offset: i64,
+	total_size: u32,
+
+	buffer_start: i64,
+	buffer_header: spall_fmt.Buffer_Header{},
+	process: ^Process,
+	thread: ^Thread,
+}
+
+real_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos }
+chunk_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos - p.offset }
+
+init_parser :: proc(total_size: u32) -> Parser {
+	p := Parser{total_size = total_size}
+	return p
+}
+
 first_chunk: bool
+trace_type: TraceType
 init_loading_state :: proc(trace: ^Trace, size: u32, name: string) {
 	ingest_start_time = u64(get_time())
 
@@ -375,6 +409,7 @@ init_loading_state :: proc(trace: ^Trace, size: u32, name: string) {
 
 	last_read = 0
 	first_chunk = true
+	trace_type = Invalid
 	
 	loading_config = true
 	post_loading = false
@@ -383,7 +418,6 @@ init_loading_state :: proc(trace: ^Trace, size: u32, name: string) {
 	start_bench("parse config")
 }
 
-is_json := false
 finish_loading :: proc (trace: ^Trace) {
 	stop_bench("parse config")
 	fmt.printf("Got %d events, %d instants\n", trace.event_count, trace.instant_count)
@@ -437,7 +471,7 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 	defer free_all(context.temp_allocator)
 
 	if first_chunk {
-		header_sz := size_of(spall.Header)
+		header_sz := size_of(spall_fmt.Manual_Header)
 		if len(chunk) < header_sz {
 			fmt.printf("Uh, you passed me an empty file?\n")
 			finish_loading(&_trace)
@@ -445,22 +479,35 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 		}
 		magic := (^u64)(raw_data(chunk))^
 
-		is_json = false
-		if magic == spall.MANUAL_MAGIC {
-			hdr := cast(^spall.Header)raw_data(chunk)
-			if hdr.version != 1 {
+		if magic == spall_fmt.MANUAL_MAGIC {
+			hdr := cast(^spall_fmt.Manual_Header)raw_data(chunk)
+			if hdr.version != 1 && hdr.version != 2 {
 				fmt.printf("Your file version (%d) is not supported!\n", hdr.version)
 				push_fatal(SpallError.InvalidFileVersion)
 			}
 
 			_trace.stamp_scale = hdr.timestamp_unit
-			_trace.stamp_scale *= 1000
 			_trace.parser.pos += i64(header_sz)
-		} else if magic == spall.NATIVE_MAGIC {
+
+			if hdr.version == 1 {
+				trace_type = Manual_V1
+
+				_trace.stamp_scale *= 1000
+			} else {
+				_trace.parser.buffer_start = -1
+				proc_idx := setup_pid(trace, 0)
+				_trace.parser.process := &trace.processes[proc_idx]
+
+				trace_type = Manual_V2
+			}
+		} else if magic == spall_fmt.AUTO_MAGIC {
+			trace_type = Auto
+
 			fmt.printf("You're trying to use a native-version file on the web!\n")
 			push_fatal(SpallError.NativeFileDetected)
 		} else {
-			is_json = true
+			trace_type = JSON
+
 			_trace.stamp_scale = 1
 			_trace.json_parser = init_json_parser()
 		}
@@ -468,10 +515,10 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 		first_chunk = false
 	}
 
-	if is_json {
-		load_json_chunk(&_trace, chunk)
-	} else {
-		ms_v1_load_binary_chunk(&_trace, chunk)
+	switch trace_type {
+		case JSON:      load_json_chunk(&_trace, chunk)
+		case Manual_V1: ms_v1_load_binary_chunk(&_trace, chunk)
+		case Manual_V2: ms_v2_load_binary_chunk(&_trace, chunk)
 	}
 
 	return

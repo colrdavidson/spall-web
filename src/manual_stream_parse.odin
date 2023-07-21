@@ -4,28 +4,7 @@ import "core:fmt"
 import "core:strings"
 import "core:slice"
 import "core:mem"
-import "formats:spall"
-
-BinaryState :: enum {
-	PartialRead,
-	EventRead,
-	Finished,
-	Failure,
-}
-
-Parser :: struct {
-	pos: i64,
-	offset: i64,
-	total_size: u32,
-}
-
-real_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos }
-chunk_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos - p.offset }
-
-init_parser :: proc(total_size: u32) -> Parser {
-	p := Parser{total_size = total_size}
-	return p
-}
+import "formats:spall_fmt"
 
 ms_v1_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
 	p := &trace.parser
@@ -36,14 +15,14 @@ ms_v1_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) ->
 	}
 
 	data_start := chunk[chunk_pos(p):]
-	type := (^spall.Event_Type)(raw_data(data_start))^
+	type := (^spall_fmt.Manual_Event_Type)(raw_data(data_start))^
 	#partial switch type {
 	case .Begin:
-		event_sz := i64(size_of(spall.Begin_Event))
+		event_sz := i64(size_of(spall_fmt.Begin_Event_V1))
 		if chunk_pos(p) + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
-		event := (^spall.Begin_Event)(raw_data(data_start))
+		event := (^spall_fmt.Begin_Event_V1)(raw_data(data_start))
 
 		event_tail := i64(event.name_len) + i64(event.args_len)
 		if (chunk_pos(p) + event_sz + event_tail) > i64(len(chunk)) {
@@ -63,11 +42,11 @@ ms_v1_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) ->
 		p.pos += event_sz + event_tail
 		return .EventRead
 	case .End:
-		event_sz := i64(size_of(spall.End_Event))
+		event_sz := i64(size_of(spall_fmt.End_Event_V1))
 		if chunk_pos(p) + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
-		event := (^spall.End_Event)(raw_data(data_start))
+		event := (^spall_fmt.End_Event_V1)(raw_data(data_start))
 
 		temp_ev.type = .End
 		temp_ev.timestamp = i64(event.time)
@@ -237,6 +216,73 @@ ms_v1_bin_process_events :: proc(trace: ^Trace) {
 	return
 }
 
+ms_v2_get_next_buffer :: proc(trace: ^Trace, chunk: []u8, buffer_header: ^spall_fmt.Buffer_Header) -> BinaryState {
+	p := &trace.parser
+
+	if chunk_pos(p) + size_of(spall_fmt.Buffer_Header) > i64(len(chunk)) {
+		return .PartialRead
+	}
+
+	data_start := chunk[chunk_pos(p):]
+	tmp_header := (^spall_fmt.Buffer_Header)(raw_data(data_start))^
+	buffer_header^ = tmp_header
+
+	p.pos += size_of(spall_fmt.Buffer_Header)
+	return .EventRead
+}
+
+ms_v2_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
+	p := &trace.parser
+
+	header_sz := i64(size_of(u64))
+	if chunk_pos(p) + header_sz > i64(len(chunk)) {
+		return .PartialRead
+	}
+
+	data_start := chunk[chunk_pos(p):]
+	type := (^spall_fmt.Manual_Event_Type)(raw_data(data_start))^
+	#partial switch type {
+	case .Begin:
+		event_sz := i64(size_of(spall_fmt.Begin_Event_V2))
+		if chunk_pos(p) + event_sz > i64(len(chunk)) {
+			return .PartialRead
+		}
+		event := (^spall_fmt.Begin_Event_V2)(raw_data(data_start))
+
+		event_tail := i64(event.name_len) + i64(event.args_len)
+		if (chunk_pos(p) + event_sz + event_tail) > i64(len(chunk)) {
+			return .PartialRead
+		}
+
+		name := string(data_start[event_sz:event_sz+i64(event.name_len)])
+		args := string(data_start[event_sz+i64(event.name_len):event_sz+i64(event.name_len)+i64(event.args_len)])
+
+		temp_ev.type = .Begin
+		temp_ev.timestamp = i64(event.time)
+		temp_ev.name = in_get(&trace.intern, &trace.string_block, name)
+		temp_ev.args = in_get(&trace.intern, &trace.string_block, args)
+
+		p.pos += event_sz + event_tail
+		return .EventRead
+	case .End:
+		event_sz := i64(size_of(spall_fmt.End_Event_V2))
+		if chunk_pos(p) + event_sz > i64(len(chunk)) {
+			return .PartialRead
+		}
+		event := (^spall_fmt.End_Event_V2)(raw_data(data_start))
+
+		temp_ev.type = .End
+		temp_ev.timestamp = i64(event.time)
+		
+		p.pos += event_sz
+		return .EventRead
+	case:
+		return .Failure
+	}
+
+	return .PartialRead
+}
+
 ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 	p := &trace.parser
 	temp_ev := TempEvent{}
@@ -244,8 +290,9 @@ ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 
 	full_chunk := chunk
 	load_loop: for p.pos < i64(p.total_size) {
+		ms_v2_get_next_buffer(trace, full_chunk, &p.buffer_header)
 		mem.zero(&temp_ev, size_of(TempEvent))
-		state := ms_v1_get_next_event(trace, full_chunk, &temp_ev)
+		state := ms_v2_get_next_event(trace, full_chunk, &temp_ev)
 
 		#partial switch state {
 		case .PartialRead:
