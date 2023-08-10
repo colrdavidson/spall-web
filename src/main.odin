@@ -294,6 +294,7 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 
 	if post_loading {
 		reset_flamegraph_camera(&_trace, &ui_state)
+		ui_state.multiselecting = false
 		lfc = 0
 		post_loading = false
 	}

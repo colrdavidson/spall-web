@@ -59,6 +59,8 @@ UIState :: struct {
 	multiselecting: bool,
 	resizing_pane: bool,
 	filters_open: bool,
+
+	grip_delta: f64,
 }
 
 DrawRect :: struct #packed {
