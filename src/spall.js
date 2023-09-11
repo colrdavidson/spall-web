@@ -669,7 +669,7 @@ async function init() {
 			try {
 				let width = text_canvas.width / dpr;
 				let height = text_canvas.height / dpr;
-				animating = window.wasm.frame(width, height, currentTime - lastTime);
+				animating = window.wasm.frame(width, height, currentTime - lastTime, currentTime);
 			} catch (e) {
 				console.error(e);
 				implode();

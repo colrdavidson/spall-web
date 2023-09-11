@@ -35,22 +35,6 @@ prev_line :: proc(y: ^f64, h: f64) -> f64 {
 	return res
 }
 
-reset_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState) {
-	cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
-	if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 10000; trace.stamp_scale = 1; }
-
-	start_time: f64 = 0
-	end_time  := f64(trace.total_max_time - trace.total_min_time)
-
-	side_pad  := 2 * em
-
-	cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, ui_state.full_flamegraph_rect.w - (side_pad * 2))
-	cam.target_scale = cam.current_scale
-
-	cam.pan.x += side_pad
-	cam.target_pan_x = cam.pan.x
-}
-
 tooltip :: proc(pos: Vec2, min_x, max_x: f64, text: string) {
 	text_width := measure_text(text, .PSize, .DefaultFont)
 	text_height := get_text_height(.PSize, .DefaultFont)
@@ -760,6 +744,9 @@ draw_flamegraphs :: proc(trace: ^Trace, start_time, end_time: i64, ui_state: ^UI
 								}
 								if mouse_up_now && !shift_down {
 									released_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
+								}
+								if double_clicked && !shift_down {
+									trace.zoom_event = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
 								}
 							}
 						}

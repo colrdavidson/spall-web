@@ -46,6 +46,18 @@ mouse_down :: proc "contextless" (x, y: f64) {
 
 	clicked = true
 	clicked_pos = mouse_pos
+
+	cur_time := t
+	click_window := (cur_time - clicked_t) * 1000
+	double_click_window_ms := 400.0
+
+	if click_window < double_click_window_ms {
+		double_clicked = true
+	} else {
+		double_clicked = false
+	}
+
+	clicked_t = cur_time
 }
 
 @export

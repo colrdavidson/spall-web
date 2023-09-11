@@ -109,6 +109,24 @@ EventID :: struct {
 	did: i64,
 	eid: i64,
 }
+empty_event := EventID{-1, -1, -1, -1}
+event_cmp :: proc(ev1, ev2: EventID) -> bool {
+	return (
+	   ev1.pid == ev2.pid &&
+	   ev1.tid == ev2.tid &&
+	   ev1.did == ev2.did &&
+	   ev1.eid == ev2.eid
+	)
+}
+get_event :: proc(trace: ^Trace, ev_id: EventID) -> ^Event {
+	p_idx := ev_id.pid
+	t_idx := ev_id.tid
+	d_idx := ev_id.did
+	e_idx := ev_id.eid
+
+	return &trace.processes[p_idx].threads[t_idx].depths[d_idx].events[e_idx]
+}
+
 Stats :: struct {
 	total_time: i64,
 	self_time:  i64,
@@ -213,6 +231,8 @@ Trace :: struct {
 	event_count: u64,
 	instant_count: u64,
 	stamp_scale: f64,
+
+	zoom_event: EventID,
 
 	file_name: string,
 	file_name_store: [1024]u8,

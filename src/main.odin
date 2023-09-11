@@ -29,6 +29,7 @@ wasmContext := runtime.default_context()
 is_mouse_down  := false
 was_mouse_down := false
 clicked        := false
+double_clicked := false
 mouse_up_now   := false
 is_hovering    := false
 shift_down     := false
@@ -37,21 +38,23 @@ ctrl_down      := false
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
-scroll_val_y: f64 = 0
+
+scroll_val_y:        f64 = 0
 velocity_multiplier: f64 = 0
+clicked_t:           f64 = 0
 
 cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
 
 // selection state
 selected_func : u32 = 0
-selected_event := EventID{-1, -1, -1, -1}
-pressed_event  := EventID{-1, -1, -1, -1}
-released_event := EventID{-1, -1, -1, -1}
+selected_event := empty_event
+pressed_event  := empty_event
+released_event := empty_event
 
 clicked_on_rect := false
 
 // tooltip-state
-rect_tooltip_rect := EventID{-1, -1, -1, -1}
+rect_tooltip_rect := empty_event
 rect_tooltip_pos := Vec2{}
 rendered_rect_tooltip := false
 
@@ -114,6 +117,34 @@ ui_state: UIState
 gl_rects: [dynamic]DrawRect
 awake := true
 
+set_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState, start_ticks, duration_ticks: i64) {
+	cam.vel = Vec2{}
+
+	cam.current_scale = rescale(1.0, 0, f64(duration_ticks), 0, ui_state.full_flamegraph_rect.w)
+	cam.target_scale = cam.current_scale
+
+	adj_start_ticks := f64(start_ticks - trace.total_min_time)
+
+	cam.pan.x = -(adj_start_ticks * cam.current_scale)
+	cam.target_pan_x = cam.pan.x
+}
+
+reset_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState) {
+	cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
+	if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 10000; trace.stamp_scale = 1; }
+
+	start_time: f64 = 0
+	end_time  := f64(trace.total_max_time - trace.total_min_time)
+
+	side_pad  := 2 * em
+
+	cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, ui_state.full_flamegraph_rect.w - (side_pad * 2))
+	cam.target_scale = cam.current_scale
+
+	cam.pan.x += side_pad
+	cam.target_pan_x = cam.pan.x
+}
+
 // Most of the action happens in frame(), this is just to set up for the JS/WASM platform layer
 main :: proc() {
 	ONE_GB_PAGES :: 1 * 1024 * 1024 * 1024 / js.PAGE_SIZE
@@ -165,10 +196,11 @@ main :: proc() {
 }
 
 @export
-frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
+frame :: proc "contextless" (width, height: f64, _dt: f64, current_time: f64) -> bool {
 	context = wasmContext
 	defer {
 		clicked = false
+		double_clicked = false
 		is_hovering = false
 		was_mouse_down = false
 		mouse_up_now = false
@@ -180,11 +212,12 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		free_all(context.temp_allocator)
 	}
 
-	rect_tooltip_rect = EventID{-1, -1, -1, -1}
+	rect_tooltip_rect = empty_event
 	rect_tooltip_pos = Vec2{}
 	rendered_rect_tooltip = false
 
 	if first_frame {
+		clicked_t = current_time
 		manual_load(default_config, default_config_name)
 		first_frame = false
 		return true
@@ -233,7 +266,16 @@ frame :: proc "contextless" (width, height: f64, _dt: f64) -> bool {
 		dt = 0.001
 		was_sleeping = false
 	}
-	t += dt
+	t = current_time
+
+	if !event_cmp(_trace.zoom_event, empty_event) {
+		ev := get_event(&_trace, _trace.zoom_event)
+		thread := _trace.processes[_trace.zoom_event.pid].threads[_trace.zoom_event.tid]
+		duration := bound_duration(ev, thread.max_time)
+
+		set_flamegraph_camera(&_trace, &ui_state, ev.timestamp, duration)
+		_trace.zoom_event = empty_event
+	}
 
 	// update animation timers
 	greyanim_t = f32((t - multiselect_t) * 5)
