@@ -1217,9 +1217,10 @@ draw_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
 
 	if clicked && pt_in_rect(clicked_pos, tab_handle_rect) {
 		ui_state.resizing_pane = true
+		ui_state.grip_delta = clicked_pos.y - tab_handle_rect.y
 	}
 	if is_mouse_down && ui_state.resizing_pane {
-		pos_y := max((ui_state.header_rect.y + ui_state.header_rect.h), mouse_pos.y)
+		pos_y := max((ui_state.header_rect.y + ui_state.header_rect.h), mouse_pos.y - ui_state.grip_delta)
 		ui_state.info_pane_height = max(ui_state.height - pos_y, tab_rect.h)
 	}
 	if mouse_up_now && ui_state.resizing_pane {
