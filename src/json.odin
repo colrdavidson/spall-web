@@ -228,7 +228,7 @@ dfa := [?][10]PS{
 
 	// -, ., 0-9, t, f, n
 	[?]PS{
-		PS.Primitive, PS.ArrOpen,  PS.ArrClose, 
+		PS.Starting, PS.ArrOpen,  PS.ArrClose, 
 		PS.Starting,  PS.ObjOpen,  PS.ObjClose, 
 		PS.Starting,  PS.Starting, PS.Comma, PS.Primitive,
 	},
