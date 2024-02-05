@@ -80,7 +80,7 @@ arena_allocator_proc :: proc(
 	case .Free_All:
 		arena.offset = 0
 
-	case .Resize:
+	case .Resize, .Resize_Non_Zeroed:
 		return mem.default_resize_bytes_align(
             mem.byte_slice(old_memory, old_size), size, alignment, arena_allocator(arena), location,
         )
@@ -162,7 +162,7 @@ growing_arena_allocator_proc :: proc(
 	case .Free_All:
 		arena.offset = 0
 
-	case .Resize:
+	case .Resize, .Resize_Non_Zeroed:
 		return mem.default_resize_bytes_align(mem.byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena), location)
 
 	case .Query_Features:

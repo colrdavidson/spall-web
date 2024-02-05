@@ -241,14 +241,19 @@ function odinSetupDefaultImports(wasmMemoryInterface, consoleElement, memory) {
 			alert: (ptr, len) => { alert(wasmMemoryInterface.loadString(ptr, len)) },
 			abort: () => { Module.abort() },
 
-			sqrt:    (x) => Math.sqrt(x),
-			sin:     (x) => Math.sin(x),
-			cos:     (x) => Math.cos(x),
-			pow:     (x, y) => Math.pow(x, y),
+			sqrt:    Math.sqrt,
+			sin:     Math.sin,
+			cos:     Math.cos,
+			pow:     Math.pow,
 			fmuladd: (x, y, z) => x*y + z,
-			ln:      (x) => Math.log(x),
-			exp:     (x) => Math.exp(x),
-			ldexp:   (x) => Math.ldexp(x),
+			ln:      Math.log,
+			exp:     Math.exp,
+			ldexp:   (x, exp) => x * Math.pow(2, exp),
+
+			rand_bytes: (ptr, len) => {
+				const view = new uint8array(wasmmemoryinterface.memory.buffer, ptr, len)
+				crypto.getrandomvalues(view)
+			},
 		},
 		"odin_dom": { init_event_raw: (ep) => { }, },
 	};
