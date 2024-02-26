@@ -620,8 +620,9 @@ async function init() {
 	});
 
 	let color_ret = sessionStorage.getItem("colormode");
-	if (color_ret === "") {
+	if (color_ret === "" || color_ret === null) {
 		sessionStorage.setItem("colormode", "auto");
+		color_ret = "auto";
 	}
 	window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
 		let color_ret = sessionStorage.getItem("colormode");
