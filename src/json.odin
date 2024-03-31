@@ -1075,21 +1075,21 @@ json_process_events :: proc(trace: ^Trace) {
 }
 
 json_generate_selftimes :: proc(trace: ^Trace) {
-	for proc_v, p_idx in &trace.processes {
-		for tm, t_idx in &proc_v.threads {
+	for &proc_v, p_idx in trace.processes {
+		for &tm, t_idx in proc_v.threads {
 
 			// skip the bottom rank, it's already set up correctly
 			if len(tm.depths) == 1 {
 				continue
 			}
 
-			for depth, d_idx in &tm.depths {
+			for &depth, d_idx in tm.depths {
 				// skip the last depth
 				if d_idx == (len(tm.depths) - 1) {
 					continue
 				}
 
-				for ev, e_idx in &depth.events {
+				for &ev, e_idx in depth.events {
 					depth := &tm.depths[d_idx+1]
 					tree := &depth.tree
 
@@ -1122,7 +1122,7 @@ json_generate_selftimes :: proc(trace: ^Trace) {
 							event_start_idx := get_event_start_idx(depth, tree_idx)
 							scan_arr := depth.events[event_start_idx:event_start_idx+event_count]
 							weight : i64 = 0
-							scan_loop: for scan_ev in &scan_arr {
+							scan_loop: for &scan_ev in scan_arr {
 								scan_ev_start_time := scan_ev.timestamp - trace.total_min_time
 								if scan_ev_start_time < start_time {
 									continue

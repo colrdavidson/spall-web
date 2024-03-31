@@ -65,7 +65,7 @@ gen_event_color :: proc(trace: ^Trace, _events: []Event, thread_max: i64, node: 
 
 	color := FVec3{}
 	color_weights := [COLOR_CHOICES]i64{}
-	for ev in &events {
+	for &ev in events {
 		idx := name_color_idx(ev.name)
 		duration := bound_duration(&ev, thread_max)
 
@@ -119,9 +119,9 @@ chunk_events :: proc(trace: ^Trace) {
 	ev_mem_usage := 0
 
 	// using an eytzinger LOD tree for each depth array
-	for proc_v, p_idx in &trace.processes {
-		for tm, t_idx in &proc_v.threads {
-			for depth, d_idx in &tm.depths {
+	for &proc_v, p_idx in trace.processes {
+		for &tm, t_idx in proc_v.threads {
+			for &depth, d_idx in tm.depths {
 				leaf_count := i_round_up(len(depth.events), BUCKET_SIZE) / BUCKET_SIZE
 				depth.leaf_count = leaf_count
 
