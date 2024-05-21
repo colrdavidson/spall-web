@@ -163,8 +163,8 @@ ms_v1_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 	}
 
 	// cleanup unfinished events
-	for process in &trace.processes {
-		for thread in &process.threads {
+	for &process in trace.processes {
+		for &thread in process.threads {
 			for thread.bande_q.len > 0 {
 				ev_data := stack_pop_back(&thread.bande_q)
 
@@ -229,7 +229,7 @@ ms_v1_bin_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^
 }
 
 ms_v1_bin_process_events :: proc(trace: ^Trace) {
-	for process in &trace.processes {
+	for &process in trace.processes {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 	}
 
@@ -316,8 +316,8 @@ ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 	}
 
 	// cleanup unfinished events
-	for process in &trace.processes {
-		for thread in &process.threads {
+	for &process in trace.processes {
+		for &thread in process.threads {
 			for thread.bande_q.len > 0 {
 				ev_data := stack_pop_back(&thread.bande_q)
 

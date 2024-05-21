@@ -1,9 +1,10 @@
 package main
 
+import "base:runtime"
+
 import "core:container/queue"
 import "core:fmt"
 import "core:math"
-import "core:runtime"
 import "core:slice"
 import "core:strings"
 import "core:os"

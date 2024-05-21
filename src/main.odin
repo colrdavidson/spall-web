@@ -1,9 +1,10 @@
 package main
 
+import "base:runtime"
+
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
-import "core:runtime"
 import "core:mem"
 import "vendor:wasm/js"
 import "core:container/queue"

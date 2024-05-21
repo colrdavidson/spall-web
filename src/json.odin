@@ -849,7 +849,7 @@ load_json_chunk :: proc (trace: ^Trace, chunk: []u8) {
 		}
 	}
 
-	for _, profile in &jp.profiles {
+	for _, &profile in jp.profiles {
 		p_idx, ok1 := vh_find(&trace.process_map, profile.pid)
 		if !ok1 {
 			fmt.printf("finish_loading | invalid end in profile?\n")
@@ -976,7 +976,7 @@ json_process_events :: proc(trace: ^Trace) {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 
 		// generate depth mapping
-		for tm in &process.threads {
+		for &tm in process.threads {
 			if len(tm.json_events) == 0 {
 				continue
 			}
@@ -987,7 +987,7 @@ json_process_events :: proc(trace: ^Trace) {
 			depth_counts := make([dynamic]u32, 0, 64, scratch2_allocator)
 
 			stack_clear(&ev_stack)
-			for event, e_idx in &tm.json_events {
+			for &event, e_idx in tm.json_events {
 				cur_start := event.timestamp
 				cur_end   := event.timestamp + bound_duration(event, tm.max_time)
 				if ev_stack.len == 0 {

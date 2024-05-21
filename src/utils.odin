@@ -1,13 +1,14 @@
 package main
 
+import "base:runtime"
+import "base:intrinsics"
+
 import "core:mem"
 import "core:math/rand"
 import "core:math"
 import "core:fmt"
 import "core:c"
 import "core:strings"
-import "core:runtime"
-import "core:intrinsics"
 
 rand_int :: proc(min, max: int) -> int {
     return int(rand.int31()) % (max-min) + min

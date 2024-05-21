@@ -1,9 +1,10 @@
 package main
 
+import "base:intrinsics"
+import "base:runtime"
+
 import "core:fmt"
-import "core:intrinsics"
 import "core:mem"
-import "core:runtime"
 
 PAGE_SIZE :: 64 * 1024
 

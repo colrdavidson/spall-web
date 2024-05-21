@@ -1,12 +1,13 @@
 package main
 
+import "base:runtime"
+
 import "core:fmt"
 import "core:strings"
 import "core:mem"
 import "core:math/rand"
 import "core:strconv"
 import "core:container/queue"
-import "core:runtime"
 import "formats:spall"
 
 find_idx :: proc(trace: ^Trace, events: []Event, val: i64) -> int {
