@@ -186,7 +186,7 @@ main :: proc() {
 
 	// fibhashing the time to get better seed distribution
 	random_seed = u64(get_time()) * 11400714819323198485
-	rand.set_global_seed(random_seed)
+	rand.reset(random_seed)
 
 	queue.init(&fps_history, 0, debug_allocator)
 
