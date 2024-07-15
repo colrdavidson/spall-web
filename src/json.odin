@@ -578,7 +578,7 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 							}
 						}
 
-						append(&nodes_to_begin, cur_node_id)
+						non_zero_append(&nodes_to_begin, cur_node_id)
 						cur_node_id = profile.nodes[cur_node_id].parent
 
 						if cycle_count > 1000 {
@@ -893,7 +893,7 @@ json_push_instant :: proc(trace: ^Trace, event: ^TempEvent) {
 	instant_count += 1
 
 	if event.scope == .Global {
-		append(&trace.global_instants, instant)
+		non_zero_append(&trace.global_instants, instant)
 		return
 	}
 
@@ -901,7 +901,7 @@ json_push_instant :: proc(trace: ^Trace, event: ^TempEvent) {
 	p := &trace.processes[p_idx]
 
 	if event.scope == .Process {
-		append(&p.instants, instant)
+		non_zero_append(&p.instants, instant)
 		return
 	}
 
@@ -909,7 +909,7 @@ json_push_instant :: proc(trace: ^Trace, event: ^TempEvent) {
 
 	t := &p.threads[t_idx]
 	if event.scope == .Thread {
-		append(&t.instants, instant)
+		non_zero_append(&t.instants, instant)
 		return
 	}
 }
@@ -931,7 +931,7 @@ json_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^JSONE
 	trace.total_min_time = min(trace.total_min_time, event.timestamp)
 	trace.total_max_time = max(trace.total_max_time, event.timestamp + event.duration)
 
-	append(&t.json_events, event^)
+	non_zero_append(&t.json_events, event^)
 	return p_idx, t_idx, i32(len(t.json_events)-1)
 }
 
@@ -1024,7 +1024,7 @@ json_process_events :: proc(trace: ^Trace) {
 
 				cur_depth := ev_stack.len - 1
 				if len(depth_counts) <= cur_depth {
-					append(&depth_counts, 0)
+					non_zero_append(&depth_counts, 0)
 				}
 				depth_counts[cur_depth] += 1
 				event.depth = u16(cur_depth)
@@ -1065,7 +1065,7 @@ json_process_events :: proc(trace: ^Trace) {
 					events = temp_events,
 				}
 				ev_start += count
-				append(&tm.depths, depth)
+				non_zero_append(&tm.depths, depth)
 			}
 		}
 	}

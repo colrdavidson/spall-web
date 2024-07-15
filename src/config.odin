@@ -371,8 +371,8 @@ init_loading_state :: proc(trace: ^Trace, size: u32, name: string) {
 	trace.error_message = ""
 
 	// deliberately setting the first elem to 0, to simplify string interactions
-	append_elem(&trace.string_block, 0)
-	append_elem(&trace.string_block, 0)
+	non_zero_append_elem(&trace.string_block, 0)
+	non_zero_append_elem(&trace.string_block, 0)
 
 	last_read = 0
 	first_chunk = true
@@ -485,7 +485,7 @@ bound_duration :: proc(ev: $T, max_ts: i64) -> i64 {
 append_event :: proc(array: ^[dynamic]Event, arg: Event) {
 	if cap(array) < (len(array) + 1) {
 
-		capacity := 2 * cap(array)
+		capacity := max(2 * cap(array), 8)
 		a := (^runtime.Raw_Dynamic_Array)(array)
 
 		old_size  := a.cap * size_of(Event)
@@ -494,7 +494,7 @@ append_event :: proc(array: ^[dynamic]Event, arg: Event) {
 		allocator := a.allocator
 
 		new_data, err := allocator.procedure(
-			allocator.data, .Resize, new_size, align_of(Event),
+			allocator.data, .Resize_Non_Zeroed, new_size, align_of(Event),
 			a.data, old_size)
 
 		a.data = raw_data(new_data)
@@ -512,7 +512,7 @@ append_event :: proc(array: ^[dynamic]Event, arg: Event) {
 setup_pid :: proc(trace: ^Trace, process_id: u32) -> i32 {
 	p_idx, ok := vh_find(&trace.process_map, process_id)
 	if !ok {
-		append(&trace.processes, init_process(process_id))
+		non_zero_append(&trace.processes, init_process(process_id))
 		p_idx = i32(len(trace.processes) - 1)
 		vh_insert(&trace.process_map, process_id, p_idx)
 	}
@@ -525,7 +525,7 @@ setup_tid :: proc(trace: ^Trace, p_idx: i32, thread_id: u32) -> i32 {
 	if !ok {
 		threads := &trace.processes[p_idx].threads
 
-		append(threads, init_thread(thread_id))
+		non_zero_append(threads, init_thread(thread_id))
 
 		t_idx = i32(len(threads) - 1)
 		thread_map := &trace.processes[p_idx].thread_map

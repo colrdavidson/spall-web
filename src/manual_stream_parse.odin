@@ -218,7 +218,7 @@ ms_v1_bin_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^
 		depth := Depth{
 			events = make([dynamic]Event, big_global_allocator),
 		}
-		append(&t.depths, depth)
+		non_zero_append(&t.depths, depth)
 	}
 
 	depth := &t.depths[t.current_depth]

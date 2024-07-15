@@ -348,7 +348,7 @@ stack_init :: proc(s: ^$Q/Stack($T), allocator := context.allocator) {
 stack_push_back :: proc(s: ^$Q/Stack($T), elem: T) #no_bounds_check {
 	if s.len >= cap(s.arr) {
 		new_capacity := max(8, len(s.arr)*2)
-		resize(&s.arr, new_capacity)
+		non_zero_resize(&s.arr, new_capacity)
 	}
 	s.arr[s.len] = elem
 	s.len += 1

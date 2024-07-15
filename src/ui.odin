@@ -538,7 +538,7 @@ draw_flamegraphs :: proc(trace: ^Trace, start_time, end_time: i64, ui_state: ^UI
 		}
 
 		gl_push_rects(gl_rects[:], line_start, line_height)
-		resize(&gl_rects, 0)
+		non_zero_resize(&gl_rects, 0)
 	}
 
 	// graph
@@ -761,7 +761,7 @@ draw_flamegraphs :: proc(trace: ^Trace, start_time, end_time: i64, ui_state: ^UI
 				}
 
 				gl_push_rects(gl_rects[:], (cur_y + (ui_state.rect_height * f64(d_idx))), ui_state.rect_height)
-				resize(&gl_rects, 0)
+				non_zero_resize(&gl_rects, 0)
 			}
 			cur_y += thread_advance
 		}
@@ -829,7 +829,7 @@ draw_global_activity :: proc(trace: ^Trace, highlight_start_x, highlight_end_x: 
 
 	append(&gl_rects, DrawRect{f32(global_activity_rect.x), f32(global_activity_rect.w), BVec4{u8(wide_bg_color.x), u8(wide_bg_color.y), u8(wide_bg_color.z), u8(wide_bg_color.w)}})
 	gl_push_rects(gl_rects[:], global_activity_rect.y, global_activity_rect.h)
-	resize(&gl_rects, 0)
+	non_zero_resize(&gl_rects, 0)
 
 	for &proc_v, p_idx in trace.processes {
 		for &tm, t_idx in proc_v.threads {
@@ -913,7 +913,7 @@ draw_global_activity :: proc(trace: ^Trace, highlight_start_x, highlight_end_x: 
 			}
 
 			gl_push_rects(gl_rects[:], global_activity_rect.y, global_activity_rect.h)
-			resize(&gl_rects, 0)
+			non_zero_resize(&gl_rects, 0)
 		}
 	}
 
@@ -938,7 +938,7 @@ draw_minimap :: proc(trace: ^Trace, ui_state: ^UIState) {
 	// draw back-covers
 	append(&gl_rects, DrawRect{f32(minimap_rect.x), f32(minimap_rect.w), bg_color})
 	gl_push_rects(gl_rects[:], minimap_rect.y, minimap_rect.h)
-	resize(&gl_rects, 0)
+	non_zero_resize(&gl_rects, 0)
 
 	mini_rect_height := (em / 2)
 	trace_duration := trace.total_max_time - trace.total_min_time
@@ -1070,7 +1070,7 @@ draw_minimap :: proc(trace: ^Trace, ui_state: ^UIState) {
 				}
 
 				gl_push_rects(gl_rects[:], y, mini_rect_height)
-				resize(&gl_rects, 0)
+				non_zero_resize(&gl_rects, 0)
 			}
 
 			tree_y += thread_advance
@@ -1615,7 +1615,7 @@ process_multiselect :: proc(trace: ^Trace, pan_delta: Vec2, dt: f64, ui_state: ^
 	// Handle de-select
 	if mouse_up_now && !did_pan && pt_in_rect(clicked_pos, inner_flamegraph_rect) && !clicked_on_rect && !shift_down {
 		selected_event = {-1, -1, -1, -1}
-		resize(&trace.selected_ranges, 0)
+		non_zero_resize(&trace.selected_ranges, 0)
 
 		multiselect_t = 0
 		ui_state.multiselecting = false
@@ -1968,7 +1968,7 @@ init_stat_state :: proc(trace: ^Trace, ui_state: ^UIState) {
 	stats_just_started = true
 
 	sm_clear(&trace.stats)
-	resize(&trace.selected_ranges, 0)
+	non_zero_resize(&trace.selected_ranges, 0)
 }
 
 process_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
