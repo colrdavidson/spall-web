@@ -81,15 +81,20 @@ arena_allocator_proc :: proc(
 	case .Free_All:
 		arena.offset = 0
 
-	case .Resize, .Resize_Non_Zeroed:
+	case .Resize:
 		return mem.default_resize_bytes_align(
+            mem.byte_slice(old_memory, old_size), size, alignment, arena_allocator(arena), location,
+        )
+
+	case .Resize_Non_Zeroed:
+		return mem.default_resize_bytes_align_non_zeroed(
             mem.byte_slice(old_memory, old_size), size, alignment, arena_allocator(arena), location,
         )
 
 	case .Query_Features:
 		set := (^mem.Allocator_Mode_Set)(old_memory)
 		if set != nil {
-			set^ = {.Alloc, .Alloc_Non_Zeroed, .Free_All, .Resize, .Query_Features}
+			set^ = {.Alloc, .Alloc_Non_Zeroed, .Free_All, .Resize, .Resize_Non_Zeroed, .Query_Features}
 		}
 		return nil, nil
 
@@ -141,8 +146,8 @@ growing_arena_allocator_proc :: proc(
 			page_count := mem.align_formula(total_size, PAGE_SIZE) / PAGE_SIZE
 			new_tail, err := page_alloc(page_count)
 			if err != nil {
-				fmt.printf("tried to get %f MB\n", f64(u32(total_size)) / 1024 / 1024)
-				fmt.printf("OOM'd @ %f MB | %s\n", f64(u32(len(arena.data))) / 1024 / 1024, location)
+				fmt.printf("tried to get %M\n", total_size)
+				fmt.printf("OOM'd @ %M | %s\n", len(arena.data), location)
 
 				push_fatal(SpallError.OutOfMemory)
 			}
@@ -163,13 +168,16 @@ growing_arena_allocator_proc :: proc(
 	case .Free_All:
 		arena.offset = 0
 
-	case .Resize, .Resize_Non_Zeroed:
+	case .Resize:
 		return mem.default_resize_bytes_align(mem.byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena), location)
+
+	case .Resize_Non_Zeroed:
+		return mem.default_resize_bytes_align_non_zeroed(mem.byte_slice(old_memory, old_size), size, alignment, growing_arena_allocator(arena), location)
 
 	case .Query_Features:
 		set := (^mem.Allocator_Mode_Set)(old_memory)
 		if set != nil {
-			set^ = {.Alloc, .Free_All, .Resize, .Query_Features}
+			set^ = {.Alloc, .Free_All, .Resize, .Resize_Non_Zeroed, .Query_Features}
 		}
 		return nil, nil
 

@@ -222,7 +222,7 @@ chunk_events :: proc(trace: ^Trace) {
 		}
 	}
 
-	fmt.printf("LOD memory: %v MB | Event memory: %v MB\n", f64(lod_mem_usage) / 1024 / 1024, f64(ev_mem_usage) / 1024 / 1024)
+	fmt.printf("LOD memory: %M | Event memory: %M\n", lod_mem_usage, ev_mem_usage)
 }
 
 get_left_child :: #force_inline proc(idx: int) -> int {
@@ -380,7 +380,7 @@ init_loading_state :: proc(trace: ^Trace, size: u32, name: string) {
 	loading_config = true
 	post_loading = false
 
-	fmt.printf("Loading a %.1f MB config\n", f64(size) / 1024 / 1024)
+	fmt.printf("Loading a %M config\n", size)
 	start_bench("parse config")
 }
 
