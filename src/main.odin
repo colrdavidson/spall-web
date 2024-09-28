@@ -6,7 +6,7 @@ import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "core:mem"
-import "vendor:wasm/js"
+import "core:sys/wasm/js"
 import "core:container/queue"
 
 // allocator state
