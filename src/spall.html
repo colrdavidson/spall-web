@@ -106,11 +106,11 @@
 		</style>
 	</head>
 	<body>
-		<script src="./wasm_runtime.js"></script>
+		<script type="module" src="./wasm_runtime.js"></script>
 		<div style="display:none">
 			<input type="file" id="file-dialog" />
 		</div>
-		<div id="rect-display" class="rect-container"><canvas id="rect-canvas"></canvas></div>
+		<div id="rect-display" class="rect-container" style="visibility: hidden"><canvas id="rect-canvas"></canvas></div>
 		<div id="text-display" class="text-container"><canvas id="text-canvas"></canvas></div>
 		<div id="error" class="error-box hide">
 			<div class="sub-box">

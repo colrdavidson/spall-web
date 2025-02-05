@@ -298,7 +298,7 @@ async function runWasm(wasmPath, consoleElement, memory, extraForeignImports) {
 	return jsExports;
 };
 
-window.odin = {
+let odin = {
 	// Interface Types
 	WasmMemoryInterface: WasmMemoryInterface,
 
