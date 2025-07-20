@@ -10,6 +10,14 @@ import "core:strconv"
 import "core:container/queue"
 import "formats:spall"
 
+FileType :: enum {
+	Invalid,
+	Json,
+	ManualStreamV1,
+	ManualStreamV2,
+	AutoStream,
+}
+
 find_idx :: proc(trace: ^Trace, events: []Event, val: i64) -> int {
 	low := 0
 	max := len(events)
@@ -384,7 +392,7 @@ init_loading_state :: proc(trace: ^Trace, size: u32, name: string) {
 	start_bench("parse config")
 }
 
-is_json := false
+file_type := FileType.Invalid
 finish_loading :: proc (trace: ^Trace) {
 	stop_bench("parse config")
 	fmt.printf("Got %d events, %d instants\n", trace.event_count, trace.instant_count)
@@ -394,10 +402,13 @@ finish_loading :: proc (trace: ^Trace) {
 	free_all(scratch2_allocator)
 
 	start_bench("process and sort events")
-	if is_json {
-		json_process_events(trace)
-	} else {
-		ms_v1_bin_process_events(trace)
+	#partial switch file_type {
+		case .Json:
+			json_process_events(trace)
+		case .ManualStreamV1:
+			ms_v1_bin_process_events(trace)
+		case .ManualStreamV2:
+			ms_v1_bin_process_events(trace)
 	}
 	stop_bench("process and sort events")
 
@@ -411,7 +422,7 @@ finish_loading :: proc (trace: ^Trace) {
 	stop_bench("generate spatial partitions")
 
 	start_bench("generate self-time")
-	if is_json {
+	if file_type == .Json {
 		json_generate_selftimes(trace)
 	}
 	stop_bench("generate self-time")
@@ -438,7 +449,7 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 	defer free_all(context.temp_allocator)
 
 	if first_chunk {
-		header_sz := size_of(spall.Header)
+		header_sz := size_of(spall.Manual_Header)
 		if len(chunk) < header_sz {
 			fmt.printf("Uh, you passed me an empty file?\n")
 			finish_loading(&_trace)
@@ -446,22 +457,27 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 		}
 		magic := (^u64)(raw_data(chunk))^
 
-		is_json = false
 		if magic == spall.MANUAL_MAGIC {
-			hdr := cast(^spall.Header)raw_data(chunk)
-			if hdr.version != 1 {
+			hdr := cast(^spall.Manual_Header)raw_data(chunk)
+			if hdr.version != 1 && hdr.version != 3 {
 				fmt.printf("Your file version (%d) is not supported!\n", hdr.version)
 				push_fatal(SpallError.InvalidFileVersion)
 			}
 
-			_trace.stamp_scale = hdr.timestamp_unit
-			_trace.stamp_scale *= 1000
 			_trace.parser.pos += i64(header_sz)
+			_trace.stamp_scale = hdr.timestamp_unit
+			if hdr.version == 1 {
+				_trace.stamp_scale *= 1000
+				file_type = .ManualStreamV1
+			} else if hdr.version == 3 {
+				_trace.stamp_scale = hdr.timestamp_unit
+				file_type = .ManualStreamV2
+			}
 		} else if magic == spall.NATIVE_MAGIC {
 			fmt.printf("You're trying to use a native-version file on the web!\n")
 			push_fatal(SpallError.NativeFileDetected)
 		} else {
-			is_json = true
+			file_type = .Json
 			_trace.stamp_scale = 1
 			_trace.json_parser = init_json_parser()
 		}
@@ -469,10 +485,13 @@ load_config_chunk :: proc "contextless" (chunk: []u8) {
 		first_chunk = false
 	}
 
-	if is_json {
-		load_json_chunk(&_trace, chunk)
-	} else {
-		ms_v1_load_binary_chunk(&_trace, chunk)
+	#partial switch file_type {
+		case .Json:
+			load_json_chunk(&_trace, chunk)
+		case .ManualStreamV1:
+			ms_v1_load_binary_chunk(&_trace, chunk)
+		case .ManualStreamV2:
+			ms_v2_load_binary_chunk(&_trace, chunk)
 	}
 
 	return

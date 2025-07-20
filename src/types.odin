@@ -283,6 +283,7 @@ Thread :: struct {
 	instants: [dynamic]Instant,
 
 	bande_q: Stack(EVData),
+	zero_patchup: i64,
 }
 
 Process :: struct {
@@ -323,6 +324,7 @@ init_thread :: proc(thread_id: u32) -> Thread {
 		depths = make([dynamic]Depth, small_global_allocator),
 		instants = make([dynamic]Instant, big_global_allocator),
 		in_stats = true,
+		zero_patchup = -1,
 	}
 
 	stack_init(&t.bande_q, scratch_allocator)

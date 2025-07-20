@@ -18,7 +18,7 @@
 	- A timing function of your choice
 		- bring your own timer for maximum portability to your weird embedded platform
 */
-double get_time_in_micros(void);
+uint64_t get_time_in_nanos(void);
 void hello_world(void);
 
 static SpallProfile spall_ctx;
@@ -29,13 +29,16 @@ int main() {
 		Start with spall_init_file
 		init_file takes 2 things:
 		- the name of your trace, ex: "hello_world.spall"
-		- the multiplier to convert from your timer's timestamps to microseconds
+		- the multiplier to convert from your timer's timestamps to nanoseconds
 
-		The timer functions in this example provide timestamps in microseconds so we use 1
+		The timer functions in this example provide timestamps in nanoseconds so we use 1
 		If you want to use something more accurate like RDTSC, you can probe your OS for the multiplier,
 		or approximate it with sleep. We'll go into it more in the advanced thread example
 	*/
-	spall_ctx = spall_init_file("hello_world.spall", 1);
+	if (!spall_init_file("hello_world.spall", 1, &spall_ctx)) {
+		printf("Failed to setup spall?\n");
+		return 1;
+	}
 
 	/* 
 		Next, we'll make a buffer to log events into.
@@ -50,8 +53,10 @@ int main() {
 		.length = buffer_size,
 		.data = buffer,
 	};
-
-	spall_buffer_init(&spall_ctx, &spall_buffer);
+	if (!spall_buffer_init(&spall_buffer)) {
+		printf("Failed to init spall buffer?\n");
+		return 1;
+	}
 
 	/*
 		Ok, we're ready to trace, time to call our hello world function!
@@ -77,14 +82,14 @@ void hello_world(void) {
 	spall_buffer_begin(&spall_ctx, &spall_buffer, 
 		__FUNCTION__,             // name of your function
 		sizeof(__FUNCTION__) - 1, // name len minus the null terminator
-		get_time_in_micros()      // timestamp in microseconds -- start of your timing block
+		get_time_in_nanos()      // timestamp in nanoseconds -- start of your timing block
 	);
 
 	printf("Hello World\n");
 
 	// Log the end of your function
 	spall_buffer_end(&spall_ctx, &spall_buffer, 
-		get_time_in_micros() // timestamp in microseconds -- end of your timing block
+		get_time_in_nanos() // timestamp in nanoseconds -- end of your timing block
 	);
 }
 
@@ -93,22 +98,24 @@ void hello_world(void) {
 
 #if _WIN32
 #include <Windows.h>
-double get_time_in_micros(void) {
+uint64_t get_time_in_nanos(void) {
 	static double invfreq;
 	if (!invfreq) {
 		LARGE_INTEGER frequency;
 		QueryPerformanceFrequency(&frequency);
-		invfreq = 1000000.0 / frequency.QuadPart;
+		invfreq = 1000000000.0 / frequency.QuadPart;
 	}
 	LARGE_INTEGER counter;
 	QueryPerformanceCounter(&counter);
-	return counter.QuadPart * invfreq;
+	uint64_t ts = (uint64_t)((double)counter.QuadPart * invfreq);
+	return ts;
 }
 #else
 #include <unistd.h>
-double get_time_in_micros(void) {
+uint64_t get_time_in_nanos(void) {
 	struct timespec spec;
 	clock_gettime(CLOCK_MONOTONIC, &spec);
-	return (((double)spec.tv_sec) * 1000000) + (((double)spec.tv_nsec) / 1000);
+	uint64_t ts = ((uint64_t)spec.tv_sec * 1000000000ull) + (uint64_t)spec.tv_nsec;
+	return ts;
 }
 #endif
