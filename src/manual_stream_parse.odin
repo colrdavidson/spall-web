@@ -301,6 +301,29 @@ ms_v2_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) ->
 		
 		p.pos += event_sz
 		return .EventRead
+	case .Name_Thread: fallthrough
+	case .Name_Process:
+		event_sz := i64(size_of(spall.Name_Container))
+		if chunk_pos(p) + event_sz > i64(len(chunk)) {
+			return .PartialRead
+		}
+		event := (^spall.Name_Container)(raw_data(data_start))
+		event_tail := i64(event.name_len)
+		if (chunk_pos(p) + event_sz + event_tail) > i64(len(chunk)) {
+			return .PartialRead
+		}
+
+		name := string(data_start[event_sz:event_sz+i64(event.name_len)])
+
+		temp_ev.type = .SetName
+		temp_ev.scope = .Thread
+		if type == .Name_Process {
+			temp_ev.scope = .Process
+		}
+		temp_ev.name = in_get(&trace.intern, &trace.string_block, name)
+
+		p.pos += event_sz + event_tail
+		return .EventRead
 	case:
 		return .Failure
 	}
@@ -425,6 +448,13 @@ ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 					}
 				} else {
 					fmt.printf("Got unexpected end event! [pid: %d, tid: %d, ts: %f]\n", temp_ev.process_id, temp_ev.thread_id, temp_ev.timestamp)
+				}
+			case .SetName:
+				#partial switch temp_ev.scope {
+				case .Process:
+					process.name = temp_ev.name
+				case .Thread:
+					thread.name = temp_ev.name
 				}
 			}
 		}

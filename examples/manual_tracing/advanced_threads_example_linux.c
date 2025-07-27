@@ -12,7 +12,6 @@
 
 static SpallProfile spall_ctx;
 static _Thread_local SpallBuffer spall_buffer;
-static _Thread_local uint32_t tid;
 
 void *run_work(void *ptr);
 void foo(void);
@@ -20,7 +19,7 @@ void bar(void);
 double get_rdtsc_multiplier(void);
 
 int main() {
-	spall_ctx = spall_init_file("spall_sample.spall", get_rdtsc_multiplier());
+	spall_init_file("spall_sample.spall", get_rdtsc_multiplier(), &spall_ctx);
 
 	pthread_t thread_1, thread_2;
 	pthread_create(&thread_1, NULL, run_work, NULL);
@@ -38,8 +37,6 @@ int main() {
 }
 
 void *run_work(void *ptr) {
-	tid = (uint32_t)pthread_self();
-
 	/*
 		Fun fact: You don't actually *need* a buffer, you can just pass NULL!
 		Passing a buffer clumps flushing overhead, so individual functions are faster and less noisy
@@ -50,6 +47,8 @@ void *run_work(void *ptr) {
 	#define BUFFER_SIZE (100 * 1024 * 1024)
 	unsigned char *buffer = malloc(BUFFER_SIZE);
 	spall_buffer = (SpallBuffer){
+		.pid = 0,
+		.tid = (uint32_t)pthread_self(),
 		.length = BUFFER_SIZE,
 		.data = buffer,
 	};

@@ -50,7 +50,7 @@ typedef struct SpallHeader {
     uint64_t must_be_0;
 } SpallHeader;
 
-enum {
+typedef enum {
     SpallEventType_Invalid             = 0,
     SpallEventType_Custom_Data         = 1, // Basic readers can skip this.
     SpallEventType_StreamOver          = 2,
@@ -62,9 +62,9 @@ enum {
     SpallEventType_Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
     SpallEventType_Pad_Skip            = 7,
 
-	SpallEventType_NameThread          = 8,
-	SpallEventType_NameProcess         = 9,
-};
+	SpallEventType_NameProcess         = 8,
+	SpallEventType_NameThread          = 9,
+} SpallEventType;
 
 typedef struct SpallBufferHeader {
 	uint32_t size;
@@ -224,6 +224,21 @@ SPALL_FN SPALL_FORCEINLINE size_t spall_build_end(void *buffer, size_t rem_size,
 
     return ev_size;
 }
+SPALL_FN SPALL_FORCEINLINE size_t spall_build_name(void *buffer, size_t rem_size, const char *name, int32_t name_len, SpallEventType type) {
+    SpallNameContainerEventMax *ev = (SpallNameContainerEventMax *)buffer;
+    uint8_t trunc_name_len = (uint8_t)SPALL_MIN(name_len, 255); // will be interpreted as truncated in the app (?)
+
+    size_t ev_size = sizeof(SpallNameContainerEvent) + trunc_name_len;
+    if (ev_size > rem_size) {
+        return 0;
+    }
+
+    ev->event.type = type;
+    ev->event.name_length = trunc_name_len;
+    memcpy(ev->name_bytes, name, trunc_name_len);
+
+    return ev_size;
+}
 
 SPALL_FN void spall_quit(SpallProfile *ctx) {
     if (!ctx) return;
@@ -311,6 +326,28 @@ SPALL_FN bool spall_buffer_end(SpallProfile *ctx, SpallBuffer *wb, uint64_t when
 	}
 
 	wb->head += spall_build_end((char *)wb->data + wb->head, wb->length - wb->head, when);
+	return true;
+}
+
+SPALL_FN bool spall_buffer_name_thread(SpallProfile *ctx, SpallBuffer *wb, const char *name, int32_t name_len) {
+	if ((wb->head + sizeof(SpallNameContainerEvent)) > wb->length) {
+		if (!spall__buffer_flush(ctx, wb, 0)) {
+			return false;
+		}
+	}
+
+	wb->head += spall_build_name((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, SpallEventType_NameThread);
+	return true;
+}
+
+SPALL_FN bool spall_buffer_name_process(SpallProfile *ctx, SpallBuffer *wb, const char *name, int32_t name_len) {
+	if ((wb->head + sizeof(SpallNameContainerEvent)) > wb->length) {
+		if (!spall__buffer_flush(ctx, wb, 0)) {
+			return false;
+		}
+	}
+
+	wb->head += spall_build_name((char *)wb->data + wb->head, wb->length - wb->head, name, name_len, SpallEventType_NameProcess);
 	return true;
 }
 

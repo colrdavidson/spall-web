@@ -21,6 +21,9 @@ Manual_Event_Type :: enum u8 {
 
 	Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
 	Pad_Skip            = 7,
+
+	Name_Process        = 8,
+	Name_Thread         = 9,
 }
 
 Manual_Buffer_Header :: struct #packed {
@@ -63,4 +66,9 @@ End_Event_V2 :: struct #packed {
 Pad_Skip :: struct #packed {
 	type: Manual_Event_Type,
 	size: u32,
+}
+
+Name_Container :: struct #packed {
+	type: Manual_Event_Type,
+	name_len: u8,
 }

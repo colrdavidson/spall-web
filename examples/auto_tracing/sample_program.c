@@ -17,8 +17,18 @@ void wub() {
 #define SPALL_BUFFER_SIZE 10 * 1024 * 1024
 #define LOOP_ITERATIONS 5000000
 
+typedef struct {
+	uint32_t tid;
+} ThreadCtx;
+
 void *run_work(void *ptr) {
-	init_thread((uint32_t)(uint64_t)pthread_self(), SPALL_BUFFER_SIZE, MAX_CACHED_SYMBOLS);
+	ThreadCtx *ctx = (ThreadCtx *)ptr;
+
+	char *worker_prefix = "worker";
+	char name_buffer[sizeof(worker_prefix) + 3] = {};
+	snprintf(name_buffer, sizeof(name_buffer), "%s-%u", worker_prefix, ctx->tid);
+
+	init_thread(ctx->tid, SPALL_BUFFER_SIZE, MAX_CACHED_SYMBOLS, name_buffer);
 
 	for (int i = 0; i < LOOP_ITERATIONS; i++) {
 		foo();
@@ -30,11 +40,13 @@ void *run_work(void *ptr) {
 
 int main() {
 	init_profile("profile.spall");
-	init_thread(0, SPALL_BUFFER_SIZE, MAX_CACHED_SYMBOLS);
+	init_thread(0, SPALL_BUFFER_SIZE, MAX_CACHED_SYMBOLS, "main");
 
 	pthread_t thread_1, thread_2;
-	pthread_create(&thread_1, NULL, run_work, NULL);
-	pthread_create(&thread_2, NULL, run_work, NULL);
+	ThreadCtx ctx_1 = (ThreadCtx){.tid = 1};
+	ThreadCtx ctx_2 = (ThreadCtx){.tid = 2};
+	pthread_create(&thread_1, NULL, run_work, &ctx_1);
+	pthread_create(&thread_2, NULL, run_work, &ctx_2);
 
 	for (int i = 0; i < LOOP_ITERATIONS; i++) {
 		foo();

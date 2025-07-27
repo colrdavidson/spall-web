@@ -201,7 +201,7 @@ SPALL_FN double get_tick_multiplier(void) {
 }
 #endif
 
-void init_thread(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size) {
+void init_thread(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size, char *thread_name) {
 	uint8_t *buffer = (uint8_t *)malloc(buffer_size);
 	spall_buffer = (SpallBuffer){ .pid = 0, .tid = _tid, .data = buffer, .length = buffer_size };
 
@@ -209,6 +209,7 @@ void init_thread(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size) {
 	memset(buffer, 1, buffer_size);
 
 	spall_buffer_init(&spall_ctx, &spall_buffer);
+	spall_buffer_name_thread(&spall_ctx, &spall_buffer, thread_name, strlen(thread_name));
 
 	addr_map = ah_init(symbol_cache_size);
 	spall_thread_running = true;
