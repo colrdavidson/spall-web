@@ -39,7 +39,6 @@ typedef struct {
 static SpallProfile spall_ctx;
 static _Thread_local SpallBuffer spall_buffer;
 static _Thread_local AddrHash addr_map;
-static _Thread_local uint32_t tid;
 static _Thread_local bool spall_thread_running = false;
 
 // we're not checking overflow here...Don't do stupid things with input sizes
@@ -127,6 +126,10 @@ SPALL_FN bool ah_get(AddrHash *ah, void *addr, Name *name_ret) {
 #include <asm/unistd.h>
 #include <sys/mman.h>
 
+SPALL_FN uint64_t get_ticks(void) {
+	return __rdtsc();
+}
+
 SPALL_FN uint64_t mul_u64_u32_shr(uint64_t cyc, uint32_t mult, uint32_t shift) {
     __uint128_t x = cyc;
     x *= mult;
@@ -139,7 +142,7 @@ SPALL_FN long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
     return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
 }
 
-SPALL_FN double get_rdtsc_multiplier() {
+SPALL_FN double get_tick_multiplier() {
 	struct perf_event_attr pe = {
         .type = PERF_TYPE_HARDWARE,
         .size = sizeof(struct perf_event_attr),
@@ -171,26 +174,43 @@ SPALL_FN double get_rdtsc_multiplier() {
 #include <sys/types.h>
 #include <sys/sysctl.h>
 
-SPALL_FN double get_rdtsc_multiplier() {
-	uint64_t freq;
+SPALL_FN uint64_t get_ticks(void) {
+    uint64_t timer_val;
+
+#if defined(__x86_64__)
+	timer_val = __rdtsc();
+#elif defined(__aarch64__)
+    asm volatile("mrs %0, cntvct_el0;" : "=r"(timer_val) :: "memory");
+#endif
+
+    return timer_val;
+}
+
+SPALL_FN double get_tick_multiplier(void) {
+    uint64_t freq;
+
+#if defined(__x86_64)
 	size_t size = sizeof(freq);
-
 	sysctlbyname("machdep.tsc.frequency", &freq, &size, NULL, 0);
+#elif defined(__aarch64__)
+    asm volatile("mrs %0, cntfrq_el0" : "=r"(freq));
+#endif
 
-	return 1000000.0 / (double)freq;
+    double multiplier = 1000000000.0 / (double)freq;
+	return multiplier;
 }
 #endif
 
-void init_thread(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size) {
+void init_thread(uint32_t _tid, size_t buffer_size, int64_t symbol_cache_size, char *thread_name) {
 	uint8_t *buffer = (uint8_t *)malloc(buffer_size);
-	spall_buffer = (SpallBuffer){ .data = buffer, .length = buffer_size };
+	spall_buffer = (SpallBuffer){ .pid = 0, .tid = _tid, .data = buffer, .length = buffer_size };
 
 	// removing initial page-fault bubbles to make the data a little more accurate, at the cost of thread spin-up time
 	memset(buffer, 1, buffer_size);
 
 	spall_buffer_init(&spall_ctx, &spall_buffer);
+	spall_buffer_name_thread(&spall_ctx, &spall_buffer, thread_name, strlen(thread_name));
 
-	tid = _tid;
 	addr_map = ah_init(symbol_cache_size);
 	spall_thread_running = true;
 }
@@ -203,7 +223,7 @@ void exit_thread() {
 }
 
 void init_profile(char *filename) {
-	spall_ctx = spall_init_file(filename, get_rdtsc_multiplier());
+	spall_init_file(filename, get_tick_multiplier(), &spall_ctx);
 }
 
 void exit_profile(void) {
@@ -221,7 +241,7 @@ void __cyg_profile_func_enter(void *fn, void *caller) {
 		name = (Name){.str = not_found, .len = sizeof(not_found) - 1};
 	}
 
-	spall_buffer_begin_ex(&spall_ctx, &spall_buffer, name.str, name.len, __rdtsc(), tid, 0);
+	spall_buffer_begin(&spall_ctx, &spall_buffer, name.str, name.len, get_ticks());
 }
 
 void __cyg_profile_func_exit(void *fn, void *caller) {
@@ -229,5 +249,5 @@ void __cyg_profile_func_exit(void *fn, void *caller) {
 		return;
 	}
 
-	spall_buffer_end_ex(&spall_ctx, &spall_buffer, __rdtsc(), tid, 0);
+	spall_buffer_end(&spall_ctx, &spall_buffer, get_ticks());
 }
