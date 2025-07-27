@@ -3,3 +3,7 @@ build/
 .vs/
 */.vs/
 .DS_Store
+*.ll
+*.spall
+examples/manual_tracing/build.sh
+examples/manual_tracing/hello

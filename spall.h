@@ -276,7 +276,7 @@ SPALL_FN bool spall_flush(SpallProfile *ctx) {
     return true;
 }
 
-SPALL_FN bool spall_buffer_init(SpallBuffer *wb) {
+SPALL_FN bool spall_buffer_init(SpallProfile *ctx, SpallBuffer *wb) {
 	// Fails if buffer is not big enough to contain at least one event!
 	if (wb->length < sizeof(SpallBufferHeader) + sizeof(SpallBeginEventMax)) {
 		return false;

@@ -366,10 +366,7 @@ ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 				ev.args = temp_ev.args
 				ev.duration = -1
 				ev.self_time = 0 
-				ev.timestamp = max(temp_ev.timestamp, thread.zero_patchup)
-				if ev.timestamp > thread.zero_patchup {
-					thread.zero_patchup = -1
-				}
+				ev.timestamp = max(i64(temp_ev.timestamp), thread.zero_patchup)
 
 				if thread.max_time > ev.timestamp {
 					fmt.printf("Woah, time-travel? You just had a begin event that started before a previous one; [pid: %d, tid: %d, name: %s]\n", 
@@ -407,15 +404,11 @@ ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 
 					depth := &thread.depths[thread.current_depth]
 					jev := &depth.events[jev_data.idx]
-					jev.duration = temp_ev.timestamp - jev.timestamp
+					jev.duration = i64(temp_ev.timestamp) - jev.timestamp
 					if jev.duration == 0 {
-						if thread.zero_patchup == -1 {
-							thread.zero_patchup = i64(temp_ev.timestamp)
-						}
+						thread.zero_patchup = i64(temp_ev.timestamp)
 						thread.zero_patchup += 1
 						jev.duration = 1
-					} else {
-						thread.zero_patchup = -1
 					}
 
 					jev.self_time = jev.duration - jev.self_time

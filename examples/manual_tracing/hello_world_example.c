@@ -53,7 +53,7 @@ int main() {
 		.length = buffer_size,
 		.data = buffer,
 	};
-	if (!spall_buffer_init(&spall_buffer)) {
+	if (!spall_buffer_init(&spall_ctx, &spall_buffer)) {
 		printf("Failed to init spall buffer?\n");
 		return 1;
 	}
