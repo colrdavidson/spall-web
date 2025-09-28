@@ -27,7 +27,9 @@ TODO: Optional Helper APIs:
 #define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
 #define SPALL_FORCEINLINE __attribute__((always_inline))
 #else
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 #define SPALL_NOINSTRUMENT // Can't noinstrument on MSVC!
 #define SPALL_FORCEINLINE __forceinline
 #endif
