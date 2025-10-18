@@ -1,12 +1,13 @@
-#include <asm/unistd.h>
 #include <inttypes.h>
-#include <linux/perf_event.h>
 #include <stdio.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <pthread.h>
+
+#include <linux/perf_event.h>
+#include <asm/unistd.h>
 
 #include "../../spall.h"
 
@@ -16,10 +17,11 @@ static _Thread_local SpallBuffer spall_buffer;
 void *run_work(void *ptr);
 void foo(void);
 void bar(void);
-double get_rdtsc_multiplier(void);
+static double get_clock_multiplier(void);
+static uint64_t get_clock(void);
 
 int main() {
-	spall_init_file("spall_sample.spall", get_rdtsc_multiplier(), &spall_ctx);
+	spall_init_file("spall_sample.spall", get_clock_multiplier(), &spall_ctx);
 
 	pthread_t thread_1, thread_2;
 	pthread_create(&thread_1, NULL, run_work, NULL);
@@ -48,7 +50,7 @@ void *run_work(void *ptr) {
 	unsigned char *buffer = malloc(BUFFER_SIZE);
 	spall_buffer = (SpallBuffer){
 		.pid = 0,
-		.tid = (uint32_t)pthread_self(),
+		.tid = (uint32_t)(uint64_t)pthread_self(),
 		.length = BUFFER_SIZE,
 		.data = buffer,
 	};
@@ -80,10 +82,10 @@ void *run_work(void *ptr) {
 	explicitly, but I expect most users to write tracing wrappers that fit their needs
 */
 #define BEGIN_FUNC() do { \
-	spall_buffer_begin_ex(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, __rdtsc(), tid, 0); \
+	spall_buffer_begin(&spall_ctx, &spall_buffer, __FUNCTION__, sizeof(__FUNCTION__) - 1, get_clock()); \
 } while(0)
 #define END_FUNC() do { \
-	spall_buffer_end_ex(&spall_ctx, &spall_buffer, __rdtsc(), tid, 0); \
+	spall_buffer_end(&spall_ctx, &spall_buffer, get_clock()); \
 } while(0)
 
 void bar(void) {
@@ -96,7 +98,6 @@ void foo(void) {
 	bar();
 	END_FUNC();
 }
-
 
 /*
 	This is supporting code to read the RDTSC multiplier from perf on Linux,
@@ -118,8 +119,8 @@ static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid, int cpu
     return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
 }
 
-static double get_rdtsc_multiplier(void) {
-	struct perf_event_attr pe = {
+static double get_clock_multiplier(void) {
+    struct perf_event_attr pe = {
         .type = PERF_TYPE_HARDWARE,
         .size = sizeof(struct perf_event_attr),
         .config = PERF_COUNT_HW_INSTRUCTIONS,
@@ -128,7 +129,7 @@ static double get_rdtsc_multiplier(void) {
         .exclude_hv = 1
     };
 
-    int fd = perf_event_open(&pe, 0, -1, -1, 0);
+    int fd = (int)perf_event_open(&pe, 0, -1, -1, 0);
     if (fd == -1) {
         perror("perf_event_open failed");
         return 1;
@@ -138,12 +139,15 @@ static double get_rdtsc_multiplier(void) {
         perror("mmap failed");
         return 1;
     }
-    struct perf_event_mmap_page *pc = addr;
+    struct perf_event_mmap_page *pc = (struct perf_event_mmap_page *)addr;
     if (pc->cap_user_time != 1) {
         fprintf(stderr, "Perf system doesn't support user time\n");
         return 1;
     }
-
-	double nanos = (double)mul_u64_u32_shr(1000000, pc->time_mult, pc->time_shift);
-	return nanos / 1000000000;
+    double nanos = (double)mul_u64_u32_shr(1000000000000000ull, pc->time_mult, pc->time_shift);
+    double multiplier = nanos / 1000000000000000.0;
+    return multiplier;
+}
+static uint64_t get_clock(void) {
+	return __rdtsc();
 }

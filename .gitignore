@@ -5,5 +5,5 @@ build/
 .DS_Store
 *.ll
 *.spall
-examples/manual_tracing/build.sh
 examples/manual_tracing/hello
+examples/manual_tracing/advanced_example
