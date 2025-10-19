@@ -45,13 +45,13 @@ find_idx :: proc(trace: ^Trace, events: []Event, val: i64) -> int {
 @export
 start_loading_file :: proc "contextless" (size: u32, name: string) {
 	context = wasmContext
-	init_loading_state(&_trace, size, name)
+	init_loading_state(&_trace, u64(size), name)
 	get_chunk(0.0, f64(CHUNK_SIZE))
 
 }
 
 manual_load :: proc(config, name: string) {
-	init_loading_state(&_trace, u32(len(config)), name)
+	init_loading_state(&_trace, u64(len(config)), name)
 	load_config_chunk(transmute([]u8)config)
 }
 
@@ -343,7 +343,7 @@ get_event_range :: proc(depth: ^Depth, idx: int) -> (int, int) {
 
 instant_count := 0
 first_chunk: bool
-init_loading_state :: proc(trace: ^Trace, size: u32, name: string) {
+init_loading_state :: proc(trace: ^Trace, size: u64, name: string) {
 	ingest_start_time = u64(get_time())
 
 	b := strings.builder_from_slice(trace.file_name_store[:])

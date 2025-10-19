@@ -29,8 +29,10 @@ os.makedirs('build', exist_ok=True)
 
 build_str = []
 if RELEASE:
+    print("Release Build")
     build_str = ['-o:speed']
 else:
+    print("Debug Build")
     build_str = ['-o:none', '-debug', '-keep-temp-files']
 
 wasm_out = f"build/{program_name}.wasm"

@@ -16,13 +16,14 @@ BinaryState :: enum {
 Parser :: struct {
 	pos: i64,
 	offset: i64,
-	total_size: u32,
+	total_size: u64,
+	early_exit: bool,
 }
 
 real_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos }
 chunk_pos :: #force_inline proc(p: ^Parser) -> i64 { return p.pos - p.offset }
 
-init_parser :: proc(total_size: u32) -> Parser {
+init_parser :: proc(total_size: u64) -> Parser {
 	p := Parser{total_size = total_size}
 	return p
 }
@@ -107,6 +108,7 @@ ms_v1_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 			get_chunk(f64(p.pos), f64(CHUNK_SIZE))
 			return
 		case .Failure:
+			fmt.printf("failed to get new event!\n")
 			push_fatal(SpallError.InvalidFile)
 		}
 
@@ -246,6 +248,13 @@ ms_v2_get_buffer_header :: proc(trace: ^Trace, chunk: []u8, hdr: ^spall.Manual_B
 
 	data_start := chunk[chunk_pos(p):]
 	tmp_hdr := (^spall.Manual_Buffer_Header)(raw_data(data_start))^
+
+	rem_file_len := i64(p.total_size) - p.offset - header_sz
+	if i64(tmp_hdr.size) > rem_file_len {
+		fmt.printf("WARNING: Truncating spall buffer due to likely file corruption, you may have lost events!\n")
+		tmp_hdr.size = u32(rem_file_len)
+		p.early_exit = true
+	}
 	if chunk_pos(p) + header_sz + i64(tmp_hdr.size) > i64(len(chunk)) {
 		return .PartialRead
 	}
@@ -344,6 +353,7 @@ ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 		#partial switch state {
 		case .PartialRead:
 			if p.pos == last_read {
+				fmt.printf("failed to get new event!\n")
 				push_fatal(SpallError.InvalidFile)
 			} else {
 				last_read = p.pos
@@ -369,7 +379,7 @@ ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 
 			#partial switch state {
 			case .PartialRead:
-				if p.pos == last_read {
+				if p.pos == last_read || p.early_exit {
 					fmt.printf("Invalid trailing data? dropping from [%d -> %d] (%d bytes)\n", p.pos, p.total_size, i64(p.total_size) - p.pos)
 					break load_loop
 				} else {
@@ -380,6 +390,7 @@ ms_v2_load_binary_chunk :: proc(trace: ^Trace, chunk: []u8) {
 				get_chunk(f64(p.pos), f64(CHUNK_SIZE))
 				return
 			case .Failure:
+				fmt.printf("failed to get next event!\n")
 				push_fatal(SpallError.InvalidFile)
 			}
 

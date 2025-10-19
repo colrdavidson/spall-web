@@ -30,19 +30,11 @@ int main() {
 	pthread_join(thread_1, NULL);
 	pthread_join(thread_2, NULL);
 
-	/*
- 		If you're using SPALL_JSON and you want to use non-Spall JSON tooling, don't forget to call spall_quit!
-		spall_quit writes the closing braces to the file. Spall can handle JSON files without the trailing ]}\n,
- 		but other tools can be fussy about it
- 	*/
 	spall_quit(&spall_ctx);
 }
 
 void *run_work(void *ptr) {
 	/*
-		Fun fact: You don't actually *need* a buffer, you can just pass NULL!
-		Passing a buffer clumps flushing overhead, so individual functions are faster and less noisy
-
 		If you notice big variance in events, you can try bumping the buffer size so you do fewer flushes
 		while your code runs, or you can shrink it if you need to save some memory
 	*/

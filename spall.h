@@ -168,6 +168,7 @@ SPALL_FN SPALL_FORCEINLINE bool spall__buffer_flush(SpallProfile *ctx, SpallBuff
 	memcpy(wb->data, &hdr, sizeof(hdr));
 
 	if (!ctx->write(ctx, wb->data, wb->head)) return false;
+	if (!ctx->flush(ctx)) return false;
     wb->head = sizeof(SpallBufferHeader);
     return true;
 }
