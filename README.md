@@ -1,5 +1,9 @@
 # spall
 
+This is archived, because I can't maintain it for the forseeable future. I may be able to come back to this eventually,
+but for now at least hopefully the community can still fork / fix things as they need.
+
+
 spall is a profiler library and a web-frontend for exploring your code and digging into potential performance problems.
 
 ![spall use](media/spall.gif)
